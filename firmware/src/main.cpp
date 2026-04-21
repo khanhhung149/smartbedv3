@@ -1,0 +1,181 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include "config.h"
+#include "nvs-config.h"
+#include "ble-provisioning.h"
+#include "mqtt-client.h"
+#include "uart-parser.h"
+
+// Device ID — hardcoded at flash time (10 ASCII chars from sleep pad protocol).
+// MQTT client_id MUST equal this value — Mosquitto ACL enforces
+// pattern write sleeppad/%c/# so a mismatch causes silent publish drops.
+static const char* DEVICE_ID = "CNU2000001";
+
+static SleepPadParser parser;
+static unsigned long  last_heartbeat_ms = 0;
+
+// --- Sleep pad UART command helpers ---
+
+// Format: [0x7D][type][len_lo][len_hi][ID 10B][content...][0x0D]
+static void send_command(uint8_t frame_type, const uint8_t* content, size_t len) {
+    Serial2.write(0x7D);
+    Serial2.write(frame_type);
+    uint16_t total = 1 + 1 + 2 + 10 + len + 1;
+    Serial2.write((uint8_t)(total & 0xFF));
+    Serial2.write((uint8_t)((total >> 8) & 0xFF));
+    Serial2.write((const uint8_t*)DEVICE_ID, 10);
+    if (len > 0) Serial2.write(content, len);
+    Serial2.write(0x0D);
+    Serial2.flush();
+}
+
+static void start_monitor_mode() {
+    Serial.println("[CMD] 0x04 — start server monitor mode");
+    uint8_t mode = 0x20;
+    send_command(0x04, &mode, 1);
+}
+
+static void send_heartbeat() {
+    send_command(0x08, nullptr, 0);
+}
+
+// --- Parser callbacks (forward declarations) ---
+
+static void on_sec_data(const SleepPadSecData& d) {
+    Serial.printf("[0x85] ts=%u status=%u hr=%u rr=%.1f sdata=%u pdata=%u\n",
+                  d.timestamp, d.status, d.heart_rate, d.resp_rate, d.sdata, d.pdata);
+    mqtt_publish_sec(d);
+}
+
+static void on_min_data(const SleepPadMinData& d) {
+    Serial.printf("[0x86] ts=%u status=%u hr=%u rr=%.1f mov=%u snore=%u\n",
+                  d.timestamp, d.status, d.heart_rate, d.resp_rate,
+                  d.movement, d.snore_count);
+    mqtt_publish_min(d);
+}
+
+static void on_idle() {
+    // 0x87 frame: device entered standby, requesting commands — restart monitor mode
+    Serial.println("[UART] 0x87 idle — restarting monitor mode");
+    start_monitor_mode();
+}
+
+// --- WiFi connect (blocking, 30 s timeout) ---
+
+static bool connect_wifi(const String& ssid, const String& pass) {
+    Serial.printf("[WiFi] Connecting to \"%s\"...\n", ssid.c_str());
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid.c_str(), pass.c_str());
+
+    const unsigned long timeout_ms = 30000;
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - start >= timeout_ms) {
+            Serial.println("[WiFi] Timeout");
+            return false;
+        }
+        delay(500);
+        Serial.print('.');
+    }
+    Serial.printf("\n[WiFi] Connected — IP: %s\n", WiFi.localIP().toString().c_str());
+    return true;
+}
+
+// --- BLE provisioning flow (blocks until provisioning complete) ---
+
+static void run_ble_provisioning() {
+    ble_init(DEVICE_ID);
+    ble_set_status("waiting");
+
+    Serial.println("[Boot] Waiting for BLE provisioning...");
+    while (!ble_provisioning_complete()) {
+        delay(100);
+    }
+    // Status already set to "connecting" by ble-provisioning.cpp on last write
+}
+
+// --- Arduino entry points ---
+
+void setup() {
+    Serial.begin(115200);
+    delay(500);
+    Serial.printf("\n[Boot] Sleep Pad ESP32 — device_id=%s\n", DEVICE_ID);
+
+    // UART2 for sleep pad hardware
+    Serial2.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+    Serial.printf("[UART] Serial2 RX=%d TX=%d @ %d baud\n",
+                  UART_RX_PIN, UART_TX_PIN, UART_BAUD);
+
+    // Wire parser callbacks before any data arrives
+    parser.onSecData = on_sec_data;
+    parser.onMinData = on_min_data;
+    parser.onIdle    = on_idle;
+
+    // NVS init — erases on corruption
+    if (!nvs_init()) {
+        Serial.println("[Boot] NVS init failed — continuing anyway");
+    }
+
+    NvsConfig cfg = nvs_load();
+
+    if (!cfg.has_wifi_creds()) {
+        // First boot or factory reset — provision via BLE
+        Serial.println("[Boot] No WiFi credentials in NVS — starting BLE provisioning");
+        run_ble_provisioning();
+
+        // Reload config written by BLE provisioning callbacks
+        cfg = nvs_load();
+    } else {
+        Serial.println("[Boot] WiFi credentials found — skipping BLE");
+    }
+
+    // Stop BLE stack to free heap before WiFi starts (ESP32 limitation)
+    ble_stop();
+
+    // Connect WiFi
+    bool wifi_ok = connect_wifi(cfg.wifi_ssid, cfg.wifi_pass);
+    if (!wifi_ok) {
+        ble_set_status("wifi_failed");
+        Serial.println("[Boot] WiFi failed — erasing credentials and restarting");
+        nvs_config_erase_all();
+        delay(2000);
+        ESP.restart();
+    }
+
+    // Setup MQTT (TCP only for POC; ws/wss deferred)
+    mqtt_setup(DEVICE_ID,
+               cfg.mqtt_host.c_str(),
+               cfg.mqtt_scheme.c_str(),
+               cfg.mqtt_user.c_str(),
+               cfg.mqtt_pass.c_str());
+
+    bool mqtt_ok = mqtt_connect();
+    if (!mqtt_ok) {
+        Serial.println("[Boot] MQTT connect failed — will retry in loop()");
+        // Non-fatal: mqtt_loop() handles reconnect; BLE client already disconnected
+    }
+
+    // Enter sleep pad monitor mode so it streams data
+    start_monitor_mode();
+
+    Serial.println("[Boot] Ready");
+}
+
+void loop() {
+    // Drain UART bytes into parser
+    while (Serial2.available()) {
+        parser.feed(static_cast<uint8_t>(Serial2.read()));
+    }
+
+    // PubSubClient state machine + auto-reconnect
+    mqtt_loop();
+
+    // 0x08 heartbeat every 60 s (device restarts WiFi stack if silent for >5 min)
+    unsigned long now = millis();
+    if (now - last_heartbeat_ms >= 60000UL) {
+        last_heartbeat_ms = now;
+        send_heartbeat();
+    }
+
+    delay(1); // yield to FreeRTOS / WiFi stack
+}
