@@ -1,0 +1,30 @@
+# Sleep Pad Platform — Production Override
+# VPS deployment via cloudflared tunnel.
+# No open ports — cloudflared connects outbound and routes:
+#   api.{DOMAIN}  → fastapi:8000     (HTTPS)
+#   mqtt.{DOMAIN} → mosquitto:9001   (WSS — MQTT over WebSocket)
+#
+# Mosquitto runs with auth enabled (passwords file mounted read-only).
+
+services:
+  mosquitto:
+    volumes:
+      - ./mosquitto/mosquitto-prod.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwords:/mosquitto/config/passwords:ro
+      - ./mosquitto/acl-prod:/mosquitto/config/acl:ro
+
+  fastapi:
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sleeppad-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARED_TUNNEL_TOKEN}
+    depends_on:
+      fastapi:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started

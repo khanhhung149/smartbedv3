@@ -1,0 +1,87 @@
+# Sleep Pad Platform — Base Docker Compose
+# Shared service definitions across dev and prod environments.
+#
+# Usage:
+#   Dev:  docker compose -f docker-compose.yml -f docker-compose.dev.yml  --env-file .env.dev  up -d
+#   Prod: docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
+
+name: sleeppad
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: sleeppad-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sleeppad-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sleeppad-mosquitto
+    restart: unless-stopped
+    volumes:
+      - mosquitto_data:/mosquitto/data
+
+  fastapi:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: sleeppad-fastapi
+    restart: unless-stopped
+    environment:
+      ENV: ${ENV}
+      API_DOMAIN: ${API_DOMAIN}
+      MQTT_DOMAIN: ${MQTT_DOMAIN}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      MQTT_DEVICE_USERNAME: ${MQTT_DEVICE_USERNAME:-}
+      MQTT_DEVICE_PASSWORD: ${MQTT_DEVICE_PASSWORD:-}
+      FCM_CREDENTIALS_PATH: /run/secrets/fcm.json
+    volumes:
+      - ${FCM_CREDENTIALS_HOST_PATH:-./secrets/fcm.json}:/run/secrets/fcm.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  mosquitto_data:

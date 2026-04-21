@@ -1,0 +1,18 @@
+# Mosquitto ACL — PRODUCTION
+#
+# Enforces topic isolation via the %c (client_id) pattern so even if the
+# shared device password leaks, a compromised client can only publish to
+# its own namespace. Every ESP32 MUST connect with client_id = device_id.
+#
+# Authenticated clients by default have NO access. Rules below grant:
+#   - Any client: publish to sleeppad/{own-client-id}/{sec|min|status}
+#   - The backend subscriber user: read all sleeppad/# topics
+
+# --- Devices (applies to every authenticated client via pattern) ---
+pattern write sleeppad/%c/sec
+pattern write sleeppad/%c/min
+pattern write sleeppad/%c/status
+
+# --- Backend subscriber (distinct username, read-only access to all topics) ---
+user sleeppad-subscriber
+topic read sleeppad/#

@@ -1,0 +1,26 @@
+# Sleep Pad Platform — Development Override
+# Local LAN access: direct port mappings, anonymous MQTT, hot-reload FastAPI.
+# No cloudflared tunnel — ESP32 and Flutter app access via LAN IP (e.g. 192.168.1.100).
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  mosquitto:
+    volumes:
+      - ./mosquitto/mosquitto-dev.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"   # TCP MQTT for ESP32 on LAN
+      - "9001:9001"   # WebSocket MQTT for browser testing
+
+  fastapi:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app                              # hot-reload source code
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
