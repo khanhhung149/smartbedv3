@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Pad - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error-container": "#ffdad6",
+                      "on-primary-fixed": "#00201e",
+                      "surface-tint": "#4fdad3",
+                      "on-primary-container": "#006661",
+                      "on-secondary": "#3e1779",
+                      "primary": "#a4fff8",
+                      "outline": "#859492",
+                      "surface-bright": "#36393f",
+                      "secondary": "#d4bbff",
+                      "on-secondary-container": "#c5a5ff",
+                      "on-tertiary-fixed-variant": "#5d4200",
+                      "on-tertiary-container": "#765500",
+                      "inverse-primary": "#006a66",
+                      "tertiary-fixed": "#ffdea5",
+                      "surface-variant": "#31353b",
+                      "on-secondary-fixed": "#260058",
+                      "inverse-surface": "#e0e2ea",
+                      "secondary-fixed": "#ebdcff",
+                      "on-error": "#690005",
+                      "on-surface-variant": "#bbc9c7",
+                      "on-secondary-fixed-variant": "#553291",
+                      "surface-container": "#1c2025",
+                      "surface-container-highest": "#31353b",
+                      "error": "#ffb4ab",
+                      "outline-variant": "#3c4948",
+                      "on-tertiary": "#412d00",
+                      "surface-container-high": "#262a30",
+                      "on-surface": "#e0e2ea",
+                      "background": "#101419",
+                      "inverse-on-surface": "#2d3136",
+                      "surface-container-lowest": "#0a0e13",
+                      "tertiary-fixed-dim": "#f2bf59",
+                      "primary-fixed": "#70f7ef",
+                      "on-background": "#e0e2ea",
+                      "tertiary-container": "#ffcb64",
+                      "surface": "#101419",
+                      "primary-fixed-dim": "#4fdad3",
+                      "surface-container-low": "#181c21",
+                      "primary-container": "#5ee7df",
+                      "on-tertiary-fixed": "#261900",
+                      "error-container": "#93000a",
+                      "tertiary": "#ffedd1",
+                      "on-primary-fixed-variant": "#00504c",
+                      "on-primary": "#003734",
+                      "surface-dim": "#101419",
+                      "secondary-fixed-dim": "#d4bbff",
+                      "secondary-container": "#553291"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {},
+              "fontFamily": {
+                      "headline": [
+                              "Inter"
+                      ],
+                      "body": [
+                              "Inter"
+                      ],
+                      "label": [
+                              "Inter"
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #101419; /* background */
+            color: #e0e2ea; /* on-background */
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background antialiased flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 py-4 bg-[#101419]/70 backdrop-blur-2xl docked full-width top-0 z-40 sticky shadow-none">
+<!-- Left Hamburger -->
+<button class="p-2 w-10 flex items-center justify-center hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[#8B96A5]">menu</span>
+</button>
+<!-- Center Title and Chip -->
+<div class="flex flex-col items-center">
+<h1 class="text-[#E6EDF3] font-bold tracking-tighter text-xl">Sleep Pad</h1>
+<button class="text-[10px] text-primary-container flex items-center gap-0.5 mt-1 font-medium bg-[#1a2e2f] px-2.5 py-0.5 rounded-full hover:bg-[#1a2e2f]/80 transition-colors border border-[#234241]">
+                Grandma's room
+                <span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</button>
+</div>
+<!-- Right Side Notification Bell -->
+<button class="relative active:scale-[0.98] transition-transform duration-200 hover:opacity-80 p-2 w-10 flex justify-end">
+<span class="material-symbols-outlined text-[#8B96A5]">notifications</span>
+<span class="absolute top-2.5 right-2.5 w-2 h-2 bg-[#ffb4ab] rounded-full border border-background"></span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto px-4 pb-32 pt-2 space-y-6">
+<!-- Status Hero Band -->
+<section class="w-full bg-surface-container-low rounded-lg p-6 relative overflow-hidden flex flex-col items-center justify-center text-center">
+<!-- Subtle background gradient -->
+<div class="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none"></div>
+<div class="z-10 flex flex-col items-center gap-3">
+<div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mb-2 shadow-[0_0_40px_rgba(164,255,248,0.1)]">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">bedtime</span>
+</div>
+<h1 class="text-3xl font-bold tracking-tight text-primary">Sleeping</h1>
+<p class="text-sm text-on-surface-variant font-medium">Device active &amp; monitoring</p>
+</div>
+</section>
+<!-- Primary Metrics (Bento Style) -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Heart Rate Card -->
+<div class="bg-surface-container rounded-lg p-6 flex flex-col justify-between relative overflow-hidden group">
+<div class="absolute -right-6 -top-6 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-2">
+<div class="p-2 bg-primary/10 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+<span class="text-sm font-medium text-on-surface-variant uppercase tracking-wider">Heart Rate</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant opacity-50">more_horiz</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-black tracking-tighter text-on-surface">62</span>
+<span class="text-lg text-on-surface-variant font-medium">bpm</span>
+</div>
+<div class="mt-4 w-full h-12 relative opacity-70">
+<!-- SVG Waveform placeholder -->
+<svg class="w-full h-full stroke-primary fill-none stroke-2" viewbox="0 0 200 40">
+<path d="M0 20 Q 10 20, 20 20 T 40 20 T 50 10 L 55 35 L 60 5 L 65 20 T 80 20 T 100 20 T 120 20 T 140 20 T 150 10 L 155 35 L 160 5 L 165 20 T 180 20 T 200 20" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</div>
+<!-- Respiration Card -->
+<div class="bg-surface-container rounded-lg p-6 flex flex-col justify-between relative overflow-hidden">
+<div class="absolute -right-6 -top-6 w-32 h-32 bg-secondary/5 rounded-full blur-3xl pointer-events-none"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex items-center gap-2">
+<div class="p-2 bg-secondary/10 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">air</span>
+</div>
+<span class="text-sm font-medium text-on-surface-variant uppercase tracking-wider">Respiration</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-black tracking-tighter text-on-surface">14</span>
+<span class="text-lg text-on-surface-variant font-medium">rpm</span>
+</div>
+<div class="mt-4 w-full h-12 relative opacity-70">
+<svg class="w-full h-full stroke-secondary fill-none stroke-2" viewbox="0 0 200 40">
+<path d="M0 20 Q 25 5, 50 20 T 100 20 T 150 20 T 200 20" stroke-linecap="round"></path>
+</svg>
+</div>
+</div>
+</section>
+<!-- Secondary Metrics Grid 2x2 -->
+<section class="grid grid-cols-2 gap-4">
+<!-- SDATA -->
+<div class="bg-surface-container-low rounded-[20px] p-5 flex flex-col gap-3">
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">S-Data</span>
+<div class="flex items-end justify-between mt-auto">
+<span class="text-2xl font-bold text-on-surface">98<span class="text-sm text-on-surface-variant font-normal ml-1">%</span></span>
+<span class="material-symbols-outlined text-outline text-sm">trending_up</span>
+</div>
+</div>
+<!-- PDATA -->
+<div class="bg-surface-container-low rounded-[20px] p-5 flex flex-col gap-3">
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">P-Data</span>
+<div class="flex items-end justify-between mt-auto">
+<span class="text-2xl font-bold text-on-surface">1.2<span class="text-sm text-on-surface-variant font-normal ml-1">v</span></span>
+<span class="material-symbols-outlined text-outline text-sm">trending_flat</span>
+</div>
+</div>
+<!-- Movement -->
+<div class="bg-surface-container-low rounded-[20px] p-5 flex flex-col gap-3">
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">Movement</span>
+<div class="flex items-end justify-between mt-auto">
+<span class="text-2xl font-bold text-on-surface">Low</span>
+</div>
+</div>
+<!-- Snores -->
+<div class="bg-surface-container-low rounded-[20px] p-5 flex flex-col gap-3">
+<span class="text-xs font-medium text-on-surface-variant uppercase tracking-wider">Snores</span>
+<div class="flex items-end justify-between mt-auto">
+<span class="text-2xl font-bold text-on-surface">0</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-[32px] bg-[#0a0e13]/70 backdrop-blur-3xl shadow-[0_-4px_40px_rgba(0,0,0,0.5)] bg-gradient-to-t from-[#0a0e13] to-[#101419]/90 border-t border-white/5">
+<div class="w-full flex justify-around items-center px-6 pb-10 pt-4 md:hidden">
+<!-- Home (Active) -->
+<button class="flex flex-col items-center justify-center text-[#5EE7DF] scale-100 active:scale-95 transition-transform duration-200 relative">
+<div class="bg-[#1a383a] rounded-[16px] px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest text-[#5EE7DF]">Home</span>
+</button>
+<!-- History -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">history</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">History</span>
+</button>
+<!-- Alerts -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1 relative">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Alerts</span>
+</button>
+<!-- Devices -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">devices</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Devices</span>
+</button>
+<!-- Settings -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Settings</span>
+</button>
+</div>
+</nav>
+</body></html>

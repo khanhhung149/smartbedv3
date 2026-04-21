@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Pad - Add Device</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "outline": "#859492",
+                    "on-primary-fixed-variant": "#00504c",
+                    "surface-container-lowest": "#0a0e13",
+                    "primary": "#a4fff8",
+                    "on-primary-fixed": "#00201e",
+                    "on-surface-variant": "#bbc9c7",
+                    "primary-container": "#5ee7df",
+                    "primary-fixed-dim": "#4fdad3",
+                    "surface": "#101419",
+                    "error-container": "#93000a",
+                    "on-primary-container": "#006661",
+                    "on-tertiary-fixed": "#261900",
+                    "surface-dim": "#101419",
+                    "error": "#ffb4ab",
+                    "on-secondary": "#3e1779",
+                    "surface-variant": "#31353b",
+                    "on-tertiary": "#412d00",
+                    "outline-variant": "#3c4948",
+                    "on-error": "#690005",
+                    "tertiary-fixed-dim": "#f2bf59",
+                    "inverse-primary": "#006a66",
+                    "inverse-surface": "#e0e2ea",
+                    "surface-container": "#1c2025",
+                    "on-secondary-fixed-variant": "#553291",
+                    "surface-container-highest": "#31353b",
+                    "secondary-fixed": "#ebdcff",
+                    "secondary-container": "#553291",
+                    "tertiary-fixed": "#ffdea5",
+                    "secondary-fixed-dim": "#d4bbff",
+                    "on-tertiary-container": "#765500",
+                    "on-secondary-fixed": "#260058",
+                    "on-primary": "#003734",
+                    "background": "#101419",
+                    "primary-fixed": "#70f7ef",
+                    "on-background": "#e0e2ea",
+                    "on-error-container": "#ffdad6",
+                    "surface-tint": "#4fdad3",
+                    "surface-container-high": "#262a30",
+                    "tertiary": "#ffedd1",
+                    "surface-bright": "#36393f",
+                    "on-secondary-container": "#c5a5ff",
+                    "on-surface": "#e0e2ea",
+                    "surface-container-low": "#181c21",
+                    "tertiary-container": "#ffcb64",
+                    "on-tertiary-fixed-variant": "#5d4200",
+                    "secondary": "#d4bbff",
+                    "inverse-on-surface": "#2d3136"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="sticky docked full-width top-0 z-50 bg-[#101419]/70 backdrop-blur-2xl no-border tonal-depth-stacking shadow-none flex flex-col w-full">
+<div class="flex justify-between items-center w-full px-6 py-4">
+<button class="text-[#5EE7DF] active:scale-[0.98] transition-transform duration-200 hover:bg-white/5 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+<div class="flex flex-col items-center justify-center">
+<h1 class="font-['Inter'] font-semibold tracking-tight text-lg text-[#E6EDF3]">Add Device</h1>
+<button class="flex items-center gap-1 text-xs text-outline mt-1 hover:text-primary transition-colors">
+<span>Grandma's room</span>
+<span class="material-symbols-outlined text-[16px]">arrow_drop_down</span>
+</button>
+</div>
+<button class="text-[#8B96A5] active:scale-[0.98] transition-transform duration-200 hover:bg-white/5 p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</div>
+<!-- Progress Bar -->
+<div class="w-full h-1 bg-surface-container-high overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-container w-1/3 animate-[pulse_2s_ease-in-out_infinite] rounded-r-full"></div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 px-6 pt-8 pb-32 flex flex-col gap-6 max-w-md mx-auto w-full">
+<div class="flex flex-col gap-4">
+<h2 class="text-sm font-medium text-outline uppercase tracking-wider pl-2">Nearby Devices</h2>
+<!-- Device Card 1 -->
+<button class="w-full bg-surface-container-low rounded-[20px] p-4 flex items-center gap-4 active:scale-[0.98] transition-transform duration-200 border border-outline-variant/15 hover:bg-surface-container/80 text-left">
+<div class="w-12 h-12 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container shrink-0">
+<span class="material-symbols-outlined">bluetooth</span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<span class="font-bold text-[#E6EDF3] tracking-tight">SleepPad-000001</span>
+<span class="text-sm text-[#8B96A5] mt-0.5 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+                        Strong signal
+                    </span>
+</div>
+<span class="material-symbols-outlined text-[#8B96A5]">chevron_right</span>
+</button>
+<!-- Device Card 2 -->
+<button class="w-full bg-surface-container-low rounded-[20px] p-4 flex items-center gap-4 active:scale-[0.98] transition-transform duration-200 border border-outline-variant/15 hover:bg-surface-container/80 text-left">
+<div class="w-12 h-12 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container shrink-0">
+<span class="material-symbols-outlined">bluetooth</span>
+</div>
+<div class="flex-1 flex flex-col justify-center">
+<span class="font-bold text-[#E6EDF3] tracking-tight">SleepPad-000002</span>
+<span class="text-sm text-[#8B96A5] mt-0.5 flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary-container"></span>
+                        Moderate signal
+                    </span>
+</div>
+<span class="material-symbols-outlined text-[#8B96A5]">chevron_right</span>
+</button>
+</div>
+<!-- Scanning Status -->
+<div class="flex flex-col items-center justify-center py-12 gap-4 opacity-70">
+<div class="w-16 h-16 rounded-full border-2 border-dashed border-outline-variant/50 flex items-center justify-center animate-[spin_4s_linear_infinite]">
+<span class="material-symbols-outlined text-outline">radar</span>
+</div>
+<p class="text-sm text-outline font-medium tracking-wide">Searching for nearby devices...</p>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-8 pt-4 bg-[#101419]/70 backdrop-blur-3xl docked full-width rounded-t-[32px] tonal-shift-via-opacity shadow-[0_-8px_40px_rgba(0,0,0,0.4)] md:hidden">
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-4 py-2 hover:text-[#E6EDF3] active:scale-90 transition-all duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-4 py-2 hover:text-[#E6EDF3] active:scale-90 transition-all duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest mt-1">History</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-4 py-2 hover:text-[#E6EDF3] active:scale-90 transition-all duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest mt-1">Alerts</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-[#5EE7DF]/10 text-[#5EE7DF] rounded-full px-4 py-2 active:scale-90 transition-all duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="devices" style="font-variation-settings: 'FILL' 1;">devices</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest mt-1">Devices</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-4 py-2 hover:text-[#E6EDF3] active:scale-90 transition-all duration-300 ease-out">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest mt-1">Settings</span>
+</button>
+</nav>
+</body></html>

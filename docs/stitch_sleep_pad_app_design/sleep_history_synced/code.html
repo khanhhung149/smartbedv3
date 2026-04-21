@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep History - Sleep Pad</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error": "#690005",
+                      "on-primary-fixed": "#00201e",
+                      "on-tertiary-fixed": "#261900",
+                      "on-surface": "#e0e2ea",
+                      "on-error-container": "#ffdad6",
+                      "surface-container-lowest": "#0a0e13",
+                      "surface": "#101419",
+                      "tertiary": "#ffedd1",
+                      "surface-container-high": "#262a30",
+                      "surface-tint": "#4fdad3",
+                      "secondary-container": "#553291",
+                      "surface-variant": "#31353b",
+                      "surface-dim": "#101419",
+                      "primary-container": "#5ee7df",
+                      "outline": "#859492",
+                      "tertiary-fixed": "#ffdea5",
+                      "error-container": "#93000a",
+                      "surface-container-low": "#181c21",
+                      "on-secondary-fixed-variant": "#553291",
+                      "surface-container": "#1c2025",
+                      "on-secondary": "#3e1779",
+                      "on-primary": "#003734",
+                      "surface-container-highest": "#31353b",
+                      "on-primary-fixed-variant": "#00504c",
+                      "secondary-fixed-dim": "#d4bbff",
+                      "on-tertiary-container": "#765500",
+                      "secondary-fixed": "#ebdcff",
+                      "outline-variant": "#3c4948",
+                      "on-secondary-fixed": "#260058",
+                      "inverse-on-surface": "#2d3136",
+                      "background": "#101419",
+                      "on-tertiary-fixed-variant": "#5d4200",
+                      "on-tertiary": "#412d00",
+                      "on-background": "#e0e2ea",
+                      "on-surface-variant": "#bbc9c7",
+                      "on-secondary-container": "#c5a5ff",
+                      "tertiary-container": "#ffcb64",
+                      "on-primary-container": "#006661",
+                      "tertiary-fixed-dim": "#f2bf59",
+                      "error": "#ffb4ab",
+                      "inverse-surface": "#e0e2ea",
+                      "primary-fixed": "#70f7ef",
+                      "surface-bright": "#36393f",
+                      "secondary": "#d4bbff",
+                      "inverse-primary": "#006a66",
+                      "primary": "#a4fff8",
+                      "primary-fixed-dim": "#4fdad3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1.25rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {},
+              "fontFamily": {
+                      "headline": [
+                              "Inter", "sans-serif"
+                      ],
+                      "body": [
+                              "Inter", "sans-serif"
+                      ],
+                      "label": [
+                              "Inter", "sans-serif"
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background antialiased pb-24 selection:bg-primary-container selection:text-on-primary-container min-h-screen flex flex-col overflow-x-hidden">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 py-4 bg-[#101419]/70 backdrop-blur-2xl top-0 z-50 fixed shadow-none">
+<!-- Left Hamburger -->
+<button class="p-2 w-10 flex items-center justify-center hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[#8B96A5]">menu</span>
+</button>
+<!-- Center Title and Chip -->
+<div class="flex flex-col items-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+<h1 class="text-[#E6EDF3] font-bold tracking-tighter text-xl">Sleep History</h1>
+<button class="text-[10px] text-primary-container flex items-center gap-0.5 mt-1 font-medium bg-[#1a2e2f] px-2.5 py-0.5 rounded-full hover:bg-[#1a2e2f]/80 transition-colors border border-[#234241]">
+                Grandma's room
+                <span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</button>
+</div>
+<!-- Right Side Notification Bell -->
+<button class="relative active:scale-[0.98] transition-transform duration-200 hover:opacity-80 p-2 w-10 flex justify-end">
+<span class="material-symbols-outlined text-[#8B96A5]">notifications</span>
+<span class="absolute top-2.5 right-2.5 w-2 h-2 bg-[#ffb4ab] rounded-full border border-background"></span>
+</button>
+</header>
+<main class="pt-24 px-4 md:px-6 max-w-3xl mx-auto space-y-6 flex-grow w-full">
+<!-- Segmented Tabs -->
+<nav class="flex border-b border-outline-variant/20 mb-6">
+<button class="flex-1 pb-3 text-center text-[#8B96A5] font-medium text-sm transition-colors hover:text-on-background">Day</button>
+<button class="flex-1 pb-3 text-center text-primary-container font-semibold text-sm border-b-2 border-primary-container transition-colors">Week</button>
+<button class="flex-1 pb-3 text-center text-[#8B96A5] font-medium text-sm transition-colors hover:text-on-background">Month</button>
+</nav>
+<!-- Summary Strip -->
+<section class="flex flex-col md:flex-row gap-3">
+<div class="flex-1 bg-surface-container-low rounded-DEFAULT p-4 border border-outline-variant/15 flex flex-col justify-between">
+<span class="text-xs text-[#8B96A5] font-medium uppercase tracking-wider mb-2 block">Avg HR</span>
+<div class="flex items-end justify-between">
+<span class="text-2xl font-bold text-on-background">68 <span class="text-sm text-[#8B96A5] font-normal">bpm</span></span>
+<span class="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full flex items-center gap-1">↑2%</span>
+</div>
+</div>
+<div class="flex-1 bg-surface-container-low rounded-DEFAULT p-4 border border-outline-variant/15 flex flex-col justify-between">
+<span class="text-xs text-[#8B96A5] font-medium uppercase tracking-wider mb-2 block">Avg RR</span>
+<div class="flex items-end justify-between">
+<span class="text-2xl font-bold text-on-background">14 <span class="text-sm text-[#8B96A5] font-normal">brpm</span></span>
+<span class="text-xs font-medium text-secondary bg-secondary/10 px-2 py-1 rounded-full flex items-center gap-1">↓1%</span>
+</div>
+</div>
+<div class="flex-1 bg-surface-container-low rounded-DEFAULT p-4 border border-outline-variant/15 flex flex-col justify-between">
+<span class="text-xs text-[#8B96A5] font-medium uppercase tracking-wider mb-2 block">Disturbances</span>
+<div class="flex items-end justify-between">
+<span class="text-2xl font-bold text-on-background">3</span>
+<span class="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full flex items-center gap-1">↓50%</span>
+</div>
+</div>
+</section>
+<!-- Chart Cards -->
+<section class="space-y-4">
+<!-- Heart Rate Chart -->
+<div class="bg-surface-container rounded-DEFAULT p-5 border border-outline-variant/15 relative overflow-hidden">
+<div class="flex justify-between items-center mb-6 z-10 relative">
+<h3 class="text-base font-semibold text-on-background">Heart rate</h3>
+</div>
+<div class="h-40 w-full relative z-10">
+<!-- Faux Y-Axis -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[10px] text-[#8B96A5] pb-6">
+<span>120</span>
+<span>80</span>
+<span>40</span>
+</div>
+<!-- Chart Area -->
+<div class="ml-6 h-[calc(100%-1.5rem)] relative">
+<!-- Grid Lines -->
+<div class="absolute top-0 w-full border-t border-outline-variant/10"></div>
+<div class="absolute top-1/2 w-full border-t border-outline-variant/10"></div>
+<div class="absolute bottom-0 w-full border-t border-outline-variant/10"></div>
+<!-- SVG Line Chart (Faux) -->
+<svg class="w-full h-full absolute inset-0" preserveaspectratio="none" viewbox="0 0 100 100">
+<!-- Gradient Def -->
+<defs>
+<lineargradient id="hrGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#5EE7DF" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#5EE7DF" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Fill -->
+<path d="M0,60 C20,40 40,70 50,50 C60,30 80,60 100,45 L100,100 L0,100 Z" fill="url(#hrGradient)"></path>
+<!-- Line -->
+<path d="M0,60 C20,40 40,70 50,50 C60,30 80,60 100,45" fill="none" stroke="#5EE7DF" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+</svg>
+<!-- Scrubber / Tooltip -->
+<div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[10px] flex flex-col items-center">
+<div class="bg-surface-container-highest px-3 py-1.5 rounded-lg text-xs font-medium text-on-background mb-2 shadow-lg whitespace-nowrap border border-outline-variant/20">
+<span class="text-primary-container">68 bpm</span> <span class="text-[#8B96A5] mx-1">·</span> Wed 3:00am
+                            </div>
+<div class="w-3 h-3 bg-surface rounded-full border-2 border-primary-container"></div>
+<div class="w-px h-16 bg-primary-container/30 mt-1"></div>
+</div>
+</div>
+<!-- X-Axis -->
+<div class="ml-6 absolute bottom-0 w-full flex justify-between text-[10px] text-[#8B96A5] pr-2">
+<span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+</div>
+</div>
+</div>
+<!-- Respiration Rate Chart -->
+<div class="bg-surface-container rounded-DEFAULT p-5 border border-outline-variant/15 relative overflow-hidden">
+<div class="flex justify-between items-center mb-6 z-10 relative">
+<h3 class="text-base font-semibold text-on-background">Respiration rate</h3>
+</div>
+<div class="h-40 w-full relative z-10">
+<!-- Faux Y-Axis -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[10px] text-[#8B96A5] pb-6">
+<span>30</span>
+<span>17</span>
+<span>5</span>
+</div>
+<!-- Chart Area -->
+<div class="ml-6 h-[calc(100%-1.5rem)] relative">
+<!-- Grid Lines -->
+<div class="absolute top-0 w-full border-t border-outline-variant/10"></div>
+<div class="absolute top-1/2 w-full border-t border-outline-variant/10"></div>
+<div class="absolute bottom-0 w-full border-t border-outline-variant/10"></div>
+<!-- SVG Line Chart (Faux) -->
+<svg class="w-full h-full absolute inset-0" preserveaspectratio="none" viewbox="0 0 100 100">
+<!-- Gradient Def -->
+<defs>
+<lineargradient id="rrGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#B490F5" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#B490F5" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Fill -->
+<path d="M0,50 C20,55 40,45 50,50 C60,55 80,45 100,50 L100,100 L0,100 Z" fill="url(#rrGradient)"></path>
+<!-- Line -->
+<path d="M0,50 C20,55 40,45 50,50 C60,55 80,45 100,50" fill="none" stroke="#B490F5" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+</svg>
+</div>
+<!-- X-Axis -->
+<div class="ml-6 absolute bottom-0 w-full flex justify-between text-[10px] text-[#8B96A5] pr-2">
+<span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+</div>
+</div>
+</div>
+<!-- Sleep Disturbances Bar Chart -->
+<div class="bg-surface-container rounded-DEFAULT p-5 border border-outline-variant/15 relative overflow-hidden">
+<div class="flex justify-between items-center mb-6 z-10 relative">
+<h3 class="text-base font-semibold text-on-background">Sleep disturbances</h3>
+<div class="flex gap-3 text-[10px] text-[#8B96A5]">
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Movement</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span>Snore</span>
+<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-coral-400" style="background-color: #FF7F50;"></span>Resp</span>
+</div>
+</div>
+<div class="h-40 w-full relative z-10">
+<!-- Faux Y-Axis -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-[10px] text-[#8B96A5] pb-6">
+<span>10</span>
+<span>5</span>
+<span>0</span>
+</div>
+<!-- Chart Area -->
+<div class="ml-6 h-[calc(100%-1.5rem)] relative flex items-end justify-between px-2">
+<!-- Grid Lines -->
+<div class="absolute top-0 left-0 w-full border-t border-outline-variant/10"></div>
+<div class="absolute top-1/2 left-0 w-full border-t border-outline-variant/10"></div>
+<div class="absolute bottom-0 left-0 w-full border-t border-outline-variant/10"></div>
+<!-- Bars -->
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[10%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[30%] bg-amber-400"></div>
+<div class="w-full h-[20%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[5%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[20%] bg-amber-400"></div>
+<div class="w-full h-[15%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[15%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[10%] bg-amber-400"></div>
+<div class="w-full h-[40%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[5%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[15%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[20%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[20%] bg-amber-400"></div>
+<div class="w-full h-[10%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[10%] bg-amber-400 rounded-t-sm"></div>
+<div class="w-full h-[10%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+<div class="w-4 h-full relative flex flex-col justify-end gap-0.5 z-10">
+<div class="w-full h-[5%] bg-[#FF7F50] rounded-t-sm"></div>
+<div class="w-full h-[5%] bg-amber-400"></div>
+<div class="w-full h-[20%] bg-emerald-400 rounded-b-sm"></div>
+</div>
+</div>
+<!-- X-Axis -->
+<div class="ml-6 absolute bottom-0 w-full flex justify-between text-[10px] text-[#8B96A5] pr-2 px-1">
+<span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-[32px] bg-[#0a0e13]/70 backdrop-blur-3xl shadow-[0_-4px_40px_rgba(0,0,0,0.5)] bg-gradient-to-t from-[#0a0e13] to-[#101419]/90 border-t border-white/5">
+<div class="w-full flex justify-around items-center px-6 pb-10 pt-4 md:hidden">
+<!-- Home (Inactive) -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">home</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Home</span>
+</button>
+<!-- History (Active) -->
+<button class="flex flex-col items-center justify-center text-[#5EE7DF] scale-100 active:scale-95 transition-transform duration-200 relative">
+<div class="bg-[#1a383a] rounded-[16px] px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">history</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest text-[#5EE7DF]">History</span>
+</button>
+<!-- Alerts -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1 relative">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Alerts</span>
+</button>
+<!-- Devices -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">devices</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Devices</span>
+</button>
+<!-- Settings -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Settings</span>
+</button>
+</div>
+</nav>
+</body></html>

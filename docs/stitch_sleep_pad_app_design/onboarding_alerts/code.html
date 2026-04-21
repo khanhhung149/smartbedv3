@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Know if something's off</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#36393f",
+                        "on-tertiary-fixed": "#261900",
+                        "surface-container": "#1c2025",
+                        "on-background": "#e0e2ea",
+                        "inverse-on-surface": "#2d3136",
+                        "tertiary-fixed-dim": "#f2bf59",
+                        "surface-dim": "#101419",
+                        "on-secondary": "#3e1779",
+                        "outline": "#859492",
+                        "on-secondary-container": "#c5a5ff",
+                        "primary-fixed-dim": "#4fdad3",
+                        "on-error": "#690005",
+                        "tertiary-container": "#ffcb64",
+                        "outline-variant": "#3c4948",
+                        "on-surface-variant": "#bbc9c7",
+                        "tertiary": "#ffedd1",
+                        "error-container": "#93000a",
+                        "secondary-container": "#553291",
+                        "on-primary-fixed-variant": "#00504c",
+                        "on-secondary-fixed": "#260058",
+                        "inverse-surface": "#e0e2ea",
+                        "tertiary-fixed": "#ffdea5",
+                        "surface-container-lowest": "#0a0e13",
+                        "on-surface": "#e0e2ea",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "secondary": "#d4bbff",
+                        "surface-container-low": "#181c21",
+                        "surface-container-high": "#262a30",
+                        "on-secondary-fixed-variant": "#553291",
+                        "on-primary-container": "#006661",
+                        "primary-container": "#5ee7df",
+                        "on-primary-fixed": "#00201e",
+                        "primary": "#a4fff8",
+                        "background": "#101419",
+                        "secondary-fixed": "#ebdcff",
+                        "on-tertiary-container": "#765500",
+                        "secondary-fixed-dim": "#d4bbff",
+                        "surface-variant": "#31353b",
+                        "on-tertiary": "#412d00",
+                        "on-primary": "#003734",
+                        "surface-container-highest": "#31353b",
+                        "on-error-container": "#ffdad6",
+                        "surface": "#101419",
+                        "surface-tint": "#4fdad3",
+                        "inverse-primary": "#006a66",
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#70f7ef"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {},
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface font-body h-screen flex flex-col justify-between items-center relative overflow-hidden">
+<!-- Top 60% Illustration Area -->
+<div class="w-full h-[530px] relative">
+<div class="absolute inset-0 bg-gradient-to-b from-transparent to-surface-container-lowest z-10"></div>
+<img alt="Elderly man in bed with health alert and notifications on multiple phones" class="w-full h-full object-cover opacity-80" data-alt="3D illustration of an elderly man lying in bed with a glowing red health sensor, connected by lines to multiple floating smartphones displaying emergency alerts" src="https://lh3.googleusercontent.com/aida/ADBb0uj5k39rjJkprivh5jQtAqHVJcVeJIQUNkjFy4lWSu80KgSSAv9eEIVpHfTjKaSTaj-0n0QFXGsVAySLr10uIxHXc8Mwmq13fv5DDcEmlcF0LsQkYDHQgYbeZz9dfCh2t4z_DdT6qOqVKKJjRC54hs3OKLwhtJyAs7mNYfsQbqgqudp6enHUczYEyg4_VF37J9tDjBzbALNL23umvmlp2kj5oAzHMvPGxa4iTdO9dp3ap9PzgvHG1ROlRBY"/>
+</div>
+<!-- Bottom 40% Content Area -->
+<div class="w-full h-[353px] flex flex-col items-center justify-end px-8 pb-12 z-20 relative">
+<!-- Text Content -->
+<div class="text-center mb-8 max-w-sm w-full space-y-4">
+<h1 class="font-headline font-bold text-[32px] leading-tight text-primary">Know if something's off</h1>
+<p class="font-body text-[16px] text-on-surface-variant font-light tracking-wide">
+                Set personalized thresholds. Get a notification the moment vitals drift outside your safe range.
+            </p>
+</div>
+<!-- Pagination Dots -->
+<div class="flex gap-2 mb-10 items-center justify-center">
+<div class="w-2 h-2 rounded-full bg-surface-variant"></div>
+<div class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_rgba(94,231,223,0.6)]"></div>
+<div class="w-2 h-2 rounded-full bg-surface-variant"></div>
+</div>
+<!-- Actions -->
+<div class="w-full max-w-sm space-y-4 flex flex-col items-center">
+<!-- Primary Button -->
+<button class="w-full py-4 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-semibold text-lg hover:scale-[0.98] transition-transform shadow-[0_4px_20px_rgba(94,231,223,0.15)] flex justify-center items-center">
+                Get started
+            </button>
+<!-- Secondary Action -->
+<button class="w-full py-4 rounded-full border border-outline/20 text-on-surface-variant font-medium text-sm hover:scale-[0.98] transition-transform bg-transparent flex justify-center items-center">
+                I already have an account
+            </button>
+</div>
+</div>
+</body></html>
