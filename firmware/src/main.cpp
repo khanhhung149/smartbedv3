@@ -6,6 +6,14 @@
 #include "mqtt-client.h"
 #include "uart-parser.h"
 
+#ifdef MOCK_SLEEPPAD
+#include "mock-sleeppad.h"
+// Mock build forwards synthetic frame bytes into the real parser so the state
+// machine is still exercised end-to-end — nothing is bypassed except the UART.
+static SleepPadParser* g_mock_parser = nullptr;
+static void mock_feed_parser(uint8_t b) { g_mock_parser->feed(b); }
+#endif
+
 // Device ID — hardcoded at flash time (10 ASCII chars from sleep pad protocol).
 // MQTT client_id MUST equal this value — Mosquitto ACL enforces
 // pattern write sleeppad/%c/# so a mismatch causes silent publish drops.
@@ -155,17 +163,30 @@ void setup() {
         // Non-fatal: mqtt_loop() handles reconnect; BLE client already disconnected
     }
 
-    // Enter sleep pad monitor mode so it streams data
+    // Enter sleep pad monitor mode so it streams data.
+    // In mock build, Serial2 is unused so this is a no-op on the wire, but
+    // leaving it in keeps the boot sequence identical to production.
     start_monitor_mode();
+
+#ifdef MOCK_SLEEPPAD
+    g_mock_parser = &parser;
+    mock_init(DEVICE_ID);
+    Serial.println("[Mock] SLEEP PAD MOCK ACTIVE — synthesizing telemetry, Serial2 bypassed");
+#endif
 
     Serial.println("[Boot] Ready");
 }
 
 void loop() {
-    // Drain UART bytes into parser
+#ifndef MOCK_SLEEPPAD
+    // Drain UART bytes into parser (production path)
     while (Serial2.available()) {
         parser.feed(static_cast<uint8_t>(Serial2.read()));
     }
+#else
+    // Mock path — generate synthetic frame bytes and feed the parser
+    mock_tick(mock_feed_parser);
+#endif
 
     // PubSubClient state machine + auto-reconnect
     mqtt_loop();
