@@ -22,6 +22,9 @@ static BLECharacteristic* s_status_char  = nullptr;
 // main task (loop/setup). Without volatile, the compiler may hoist the read
 // out of the wait loop in main.cpp, causing it to spin forever.
 static volatile bool      s_prov_done    = false;
+// Set true once onDisconnect fires AFTER initial provisioning completed —
+// main retry loop treats this as user cancel.
+static volatile bool      s_user_cancel  = false;
 
 // Tracks which of the 6 WRITE chars have been received (see comment above on volatile)
 static volatile bool s_got_ssid   = false;
@@ -77,9 +80,16 @@ class ServerCallbacks : public BLEServerCallbacks {
         Serial.println("[BLE] Client connected");
     }
     void onDisconnect(BLEServer* srv) override {
-        Serial.println("[BLE] Client disconnected — restarting advertising");
+        Serial.println("[BLE] Client disconnected");
         if (!s_prov_done) {
+            // Disconnect before provisioning completed — just re-advertise,
+            // next client may retry.
             BLEDevice::startAdvertising();
+        } else {
+            // Disconnect after initial writes — signal user cancel to main
+            // retry loop so it can erase NVS and restart cleanly.
+            s_user_cancel = true;
+            Serial.println("[BLE] Treating disconnect as user cancel");
         }
     }
 };
@@ -113,7 +123,10 @@ void ble_init(const char* device_id) {
     s_server = BLEDevice::createServer();
     s_server->setCallbacks(new ServerCallbacks());
 
-    BLEService* svc = s_server->createService(BLE_SERVICE_UUID);
+    // Handle budget: 6 WRITE chars × 2 + 1 STATUS (READ+NOTIFY+CCCD = 3) +
+    // 1 DEVICE_ID READ × 2 + 1 service decl = 18.  Default 15 silently drops
+    // the last characteristic (DeviceId), breaking Flutter provisioning.
+    BLEService* svc = s_server->createService(BLEUUID(BLE_SERVICE_UUID), 30);
 
     // 6 WRITE characteristics — each persists one NVS key.
     // MQTT user/pass may legitimately be empty (anonymous dev broker); the other
@@ -172,4 +185,22 @@ void ble_stop() {
 
 bool ble_provisioning_complete() {
     return s_prov_done;
+}
+
+void ble_reset_pending_writes() {
+    // Clear the per-char flags + the overall "all received" flag so the main
+    // retry loop waits for a fresh SSID/PASSWORD write from the app.  We keep
+    // NVS values intact — they'll be overwritten as new writes arrive.
+    s_got_ssid   = false;
+    s_got_pass   = false;
+    s_got_host   = false;
+    s_got_scheme = false;
+    s_got_user   = false;
+    s_got_mpass  = false;
+    s_prov_done  = false;
+    Serial.println("[BLE] Pending writes reset — awaiting new credentials");
+}
+
+bool ble_user_cancelled() {
+    return s_user_cancel;
 }

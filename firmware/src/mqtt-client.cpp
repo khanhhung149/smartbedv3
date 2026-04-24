@@ -1,4 +1,5 @@
 #include "mqtt-client.h"
+#include "nvs-config.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -18,6 +19,7 @@ static bool   s_scheme_ok  = false; // false → ws/wss not supported, abort
 static String s_topic_status;
 static String s_topic_sec;
 static String s_topic_min;
+static String s_topic_cmd;
 
 static unsigned long s_last_reconnect_ms = 0;
 static constexpr unsigned long RECONNECT_INTERVAL_MS = 5000;
@@ -53,6 +55,7 @@ void mqtt_setup(const char* device_id,
     s_topic_status = "sleeppad/" + s_device_id + "/status";
     s_topic_sec    = "sleeppad/" + s_device_id + "/sec";
     s_topic_min    = "sleeppad/" + s_device_id + "/min";
+    s_topic_cmd    = "sleeppad/" + s_device_id + "/cmd";
 
     String scheme_str(scheme);
     if (scheme_str != "tcp") {
@@ -80,6 +83,28 @@ void mqtt_setup(const char* device_id,
     // broker doesn't stall the main loop (and therefore UART draining) for the
     // default 15 s. With 2 s, UART buffer survives comfortably at 115200 baud.
     s_mqtt.setSocketTimeout(2);
+
+    // Subscribe handler: listen for remote factory_reset on `sleeppad/{id}/cmd`.
+    // Backend publishes with retain=true so an offline device still receives
+    // the reset on next reconnect.
+    s_mqtt.setCallback([](char* topic, uint8_t* payload, unsigned int len) {
+        String msg;
+        msg.reserve(len);
+        for (unsigned int i = 0; i < len; ++i) msg += (char)payload[i];
+        Serial.printf("[MQTT] cmd received on %s: %s\n", topic, msg.c_str());
+        if (msg == "factory_reset") {
+            Serial.println("[MQTT] factory_reset — clearing retained cmd + wiping NVS");
+            // CRITICAL: clear the retained command on the broker so the next
+            // owner who re-pairs this device_id doesn't immediately receive
+            // the old factory_reset and bounce into an infinite reset loop.
+            s_mqtt.publish(topic, (const uint8_t*)"", 0, /*retain=*/true);
+            s_mqtt.loop();          // flush outgoing queue
+            delay(200);
+            nvs_config_erase_all();
+            delay(500);
+            ESP.restart();
+        }
+    });
 }
 
 bool mqtt_connect() {
@@ -107,8 +132,11 @@ bool mqtt_connect() {
 
     if (ok) {
         Serial.println("[MQTT] Connected");
-        // Publish "online" with retain=true so broker reflects current state
         s_mqtt.publish(s_topic_status.c_str(), "online", /*retain=*/true);
+        // Subscribe to command topic.  QoS 1 so retained factory_reset is
+        // delivered even across brief reconnects.
+        s_mqtt.subscribe(s_topic_cmd.c_str(), 1);
+        Serial.printf("[MQTT] Subscribed to %s\n", s_topic_cmd.c_str());
     } else {
         Serial.printf("[MQTT] Connect failed, state=%d\n", s_mqtt.state());
     }
@@ -176,7 +204,9 @@ void mqtt_publish_min(const SleepPadMinData& d) {
     doc["snore_count"]   = d.snore_count;
     doc["resp_disorder"] = d.resp_disorder;
     doc["pthd"]          = d.pthd;
-    doc["temp"]          = d.temp;
+    // Protocol stores temp as C × 10; publish actual °C so backend Pydantic
+    // bound (le=60) accepts and the app displays readable numbers.
+    doc["temp"]          = serialized(String(d.temp / 10.0, 1));
 
     char buf[JSON_BUF_BYTES];
     size_t n;

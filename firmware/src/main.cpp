@@ -56,9 +56,9 @@ static void on_sec_data(const SleepPadSecData& d) {
 }
 
 static void on_min_data(const SleepPadMinData& d) {
-    Serial.printf("[0x86] ts=%u status=%u hr=%u rr=%.1f mov=%u snore=%u\n",
+    Serial.printf("[0x86] ts=%u status=%u hr=%u rr=%.1f mov=%u snore=%u temp=%.1fC\n",
                   d.timestamp, d.status, d.heart_rate, d.resp_rate,
-                  d.movement, d.snore_count);
+                  d.movement, d.snore_count, d.temp / 10.0);
     mqtt_publish_min(d);
 }
 
@@ -114,53 +114,94 @@ void setup() {
     Serial.printf("[UART] Serial2 RX=%d TX=%d @ %d baud\n",
                   UART_RX_PIN, UART_TX_PIN, UART_BAUD);
 
-    // Wire parser callbacks before any data arrives
     parser.onSecData = on_sec_data;
     parser.onMinData = on_min_data;
     parser.onIdle    = on_idle;
 
-    // NVS init — erases on corruption
     if (!nvs_init()) {
         Serial.println("[Boot] NVS init failed — continuing anyway");
     }
 
     NvsConfig cfg = nvs_load();
+    const bool fresh_provisioning = !cfg.has_wifi_creds();
 
-    if (!cfg.has_wifi_creds()) {
-        // First boot or factory reset — provision via BLE
-        Serial.println("[Boot] No WiFi credentials in NVS — starting BLE provisioning");
+    if (fresh_provisioning) {
+        // ── Provisioning path with in-place retry ─────────────────────────
+        // BLE stays alive for the whole attempt→fail→retry→success loop.
+        // Trigger to retry: app rewrites SSID + PASSWORD chars (plus the
+        // others — firmware waits for all 6 again via ble_reset_pending_writes).
+        // Cancel: client disconnects BLE → erase NVS + restart so next boot
+        // re-enters provisioning mode.
+        Serial.println("[Boot] No WiFi credentials — starting BLE provisioning");
         run_ble_provisioning();
 
-        // Reload config written by BLE provisioning callbacks
-        cfg = nvs_load();
+        while (true) {
+            if (ble_user_cancelled()) {
+                Serial.println("[Boot] User cancelled during provisioning");
+                nvs_config_erase_all();
+                delay(500);
+                ESP.restart();
+            }
+
+            cfg = nvs_load();
+
+            // Step 1: WiFi
+            ble_set_status("wifi_connecting");
+            if (!connect_wifi(cfg.wifi_ssid, cfg.wifi_pass)) {
+                ble_set_status("wifi_failed");
+                ble_reset_pending_writes();
+                Serial.println("[Boot] WiFi failed — awaiting new credentials from app");
+                // Block until the app rewrites creds or user cancels.
+                while (!ble_provisioning_complete() && !ble_user_cancelled()) {
+                    delay(200);
+                }
+                continue;   // retry from top (cancel caught at loop head)
+            }
+            ble_set_status("wifi_connected");
+
+            // Step 2: MQTT
+            ble_set_status("mqtt_connecting");
+            mqtt_setup(DEVICE_ID,
+                       cfg.mqtt_host.c_str(),
+                       cfg.mqtt_scheme.c_str(),
+                       cfg.mqtt_user.c_str(),
+                       cfg.mqtt_pass.c_str());
+            if (!mqtt_connect()) {
+                ble_set_status("mqtt_failed");
+                WiFi.disconnect(true);    // release STA before retry
+                ble_reset_pending_writes();
+                Serial.println("[Boot] MQTT failed — awaiting new credentials from app");
+                while (!ble_provisioning_complete() && !ble_user_cancelled()) {
+                    delay(200);
+                }
+                continue;
+            }
+
+            // Step 3: Success — notify, let client observe, then stop BLE
+            ble_set_status("connected");
+            delay(2000);
+            ble_stop();
+            break;
+        }
     } else {
+        // ── Normal boot path (creds already persisted) ────────────────────
         Serial.println("[Boot] WiFi credentials found — skipping BLE");
-    }
-
-    // Stop BLE stack to free heap before WiFi starts (ESP32 limitation)
-    ble_stop();
-
-    // Connect WiFi
-    bool wifi_ok = connect_wifi(cfg.wifi_ssid, cfg.wifi_pass);
-    if (!wifi_ok) {
-        ble_set_status("wifi_failed");
-        Serial.println("[Boot] WiFi failed — erasing credentials and restarting");
-        nvs_config_erase_all();
-        delay(2000);
-        ESP.restart();
-    }
-
-    // Setup MQTT (TCP only for POC; ws/wss deferred)
-    mqtt_setup(DEVICE_ID,
-               cfg.mqtt_host.c_str(),
-               cfg.mqtt_scheme.c_str(),
-               cfg.mqtt_user.c_str(),
-               cfg.mqtt_pass.c_str());
-
-    bool mqtt_ok = mqtt_connect();
-    if (!mqtt_ok) {
-        Serial.println("[Boot] MQTT connect failed — will retry in loop()");
-        // Non-fatal: mqtt_loop() handles reconnect; BLE client already disconnected
+        ble_stop();                    // no BLE init happened, but call is idempotent
+        if (!connect_wifi(cfg.wifi_ssid, cfg.wifi_pass)) {
+            Serial.println("[Boot] WiFi failed on normal boot — erasing + restart");
+            nvs_config_erase_all();
+            delay(1000);
+            ESP.restart();
+        }
+        mqtt_setup(DEVICE_ID,
+                   cfg.mqtt_host.c_str(),
+                   cfg.mqtt_scheme.c_str(),
+                   cfg.mqtt_user.c_str(),
+                   cfg.mqtt_pass.c_str());
+        if (!mqtt_connect()) {
+            Serial.println("[Boot] MQTT failed on normal boot — will retry in loop()");
+            // Non-fatal: mqtt_loop() handles reconnect.
+        }
     }
 
     // Enter sleep pad monitor mode so it streams data.

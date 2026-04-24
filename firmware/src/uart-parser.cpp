@@ -14,20 +14,35 @@ void SleepPadParser::feed(uint8_t byte) {
             }
             break;
 
-        case ParserState::READ_FRAME:
+        case ParserState::READ_FRAME: {
             if (_len >= MAX_BUF) {
-                // Buffer overflow — discard and reset
                 _len = 0;
                 _state = ParserState::WAIT_HEADER;
                 return;
             }
             _buf[_len++] = byte;
-            if (byte == FRAME_END) {
-                processFrame();
-                _len = 0;
-                _state = ParserState::WAIT_HEADER;
+
+            // CRITICAL: use the 2-byte length field (bytes 2-3) as the
+            // authoritative frame boundary, NOT the 0x0D tail byte.  Any
+            // content byte can legitimately equal 0x0D (e.g. sdata=13,
+            // movement=13) — terminating on it mis-parses valid frames.
+            if (_len >= 4) {
+                const uint16_t expected_total =
+                    (uint16_t)_buf[2] | ((uint16_t)_buf[3] << 8);
+                if (expected_total < 16 || expected_total > MAX_BUF) {
+                    // Bad length — resync.
+                    _len = 0;
+                    _state = ParserState::WAIT_HEADER;
+                    return;
+                }
+                if (_len == expected_total) {
+                    processFrame();
+                    _len = 0;
+                    _state = ParserState::WAIT_HEADER;
+                }
             }
             break;
+        }
 
         default:
             _state = ParserState::WAIT_HEADER;

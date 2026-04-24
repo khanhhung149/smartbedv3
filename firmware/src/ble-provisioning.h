@@ -16,12 +16,24 @@
 void ble_init(const char* device_id);
 
 // Update the Status characteristic value and notify connected client.
-// Valid values: "waiting", "connecting", "connected", "wifi_failed", "mqtt_failed"
+// Valid values per protocol:
+//   Progress:  "waiting" → "wifi_connecting" → "wifi_connected" →
+//              "mqtt_connecting" → "connected"
+//   Terminal failures (retry loop): "wifi_failed", "mqtt_failed"
 void ble_set_status(const char* status);
 
-// Stop BLE stack to free memory before WiFi+MQTT start.
+// Stop BLE stack to free memory (call after "connected" emitted + delay).
 void ble_stop();
 
 // Returns true once all 6 WRITE characteristics have been received
-// and NVS has been updated. main.cpp polls this before proceeding.
+// since the last reset (or initial boot). Polled by main retry loop.
 bool ble_provisioning_complete();
+
+// Clear the "all 6 received" flag so main can wait for a fresh re-write
+// after a wifi_failed / mqtt_failed status.  NVS values stay in place
+// until overwritten by new BLE writes.
+void ble_reset_pending_writes();
+
+// Returns true if the BLE client disconnected *after* initial provisioning —
+// used by main retry loop to treat disconnect as user cancel.
+bool ble_user_cancelled();
