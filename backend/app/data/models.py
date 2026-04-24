@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 
 class HistoryRange(str, Enum):
+    hour = "hour"      # 1-minute buckets over last hour — used by Home sparklines
     day = "day"
     week = "week"
     month = "month"
@@ -27,6 +28,8 @@ class HistoryPoint(BaseModel):
     hr: float | None
     rr: float | None
     resp_disorder: int | None
+    # Only populated for `hour` range — temp is per-minute in min_data.
+    temp: float | None = None
 
 
 class HistoryResponse(BaseModel):

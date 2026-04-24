@@ -6,6 +6,7 @@ import asyncpg
 
 # (bucket_size, interval) tuples per range
 _RANGE_PARAMS = {
+    "hour":  ("1 minute",  "1 hour"),   # Home sparkline preload (HR/RR/Temp)
     "day":   ("5 minutes", "1 day"),
     "week":  ("1 hour",    "7 days"),
     "month": ("3 hours",   "30 days"),
@@ -58,7 +59,8 @@ async def get_history(
           time_bucket('{bucket}', time) AS bucket,
           AVG(heart_rate)::real  AS hr,
           AVG(resp_rate)::real   AS rr,
-          MAX(resp_disorder)     AS resp_disorder
+          MAX(resp_disorder)     AS resp_disorder,
+          AVG(temp)::real        AS temp
         FROM min_data
         WHERE device_id = $1
           AND time > now() - interval '{interval}'

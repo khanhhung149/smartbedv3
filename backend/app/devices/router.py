@@ -11,7 +11,8 @@ from config import get_settings
 from database import get_db_pool_from_request
 from dependencies import get_current_user_id
 from devices.models import DeviceOut, DevicePair, DevicePairOut, DeviceStatus
-from devices.service import get_device_status, list_user_devices, pair_device
+from devices.service import get_device_status, list_user_devices, pair_device, remove_device
+from mqtt.publisher import publish_device_cmd
 from redis_client import get_redis_from_request
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -72,6 +73,29 @@ async def list_mine(
 ) -> list[DeviceOut]:
     rows = await list_user_devices(pool, rds, user_id)
     return [DeviceOut(**row) for row in rows]
+
+
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove(
+    device_id: str,
+    user_id: UUID = Depends(get_current_user_id),
+    pool: asyncpg.Pool = Depends(get_db_pool_from_request),
+    rds: redis.Redis = Depends(get_redis_from_request),
+) -> None:
+    """Remove a device from the owner's account.
+
+    Side effects:
+    - DB cascade deletes thresholds, alerts, and shares (FKs ON DELETE CASCADE).
+    - Publishes a retained `factory_reset` command to `sleeppad/{id}/cmd` so
+      the physical device wipes its NVS and restarts into BLE provisioning
+      mode — ready to be re-paired by any account.  Retained flag guarantees
+      offline devices also receive the reset on next reconnect.
+    """
+    deleted = await remove_device(pool, rds, user_id, device_id)
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
+    # Fire-and-forget publish; DB change is authoritative either way.
+    await publish_device_cmd(device_id, "factory_reset", retain=True)
 
 
 @router.get("/{device_id}/status", response_model=DeviceStatus)

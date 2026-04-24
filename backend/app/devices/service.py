@@ -98,3 +98,25 @@ async def _is_online(rds: redis.Redis, device_id: str) -> bool:
         return bool(await rds.exists(online_key(device_id)))
     except Exception:
         return False
+
+
+async def remove_device(
+    pool: asyncpg.Pool, rds: redis.Redis, owner_id: UUID, device_id: str
+) -> bool:
+    """Delete device row (cascade removes alerts/thresholds/shares via FK).
+    Returns True if deleted, False if not owned by caller or not found.
+    Caller is expected to publish the retained factory_reset MQTT command
+    separately so the physical device wipes its NVS."""
+    result = await pool.execute(
+        "DELETE FROM devices WHERE id = $1 AND owner_id = $2",
+        device_id,
+        owner_id,
+    )
+    deleted = result.endswith(" 1")
+    if deleted:
+        try:
+            await rds.srem(PAIRED_DEVICES_KEY, device_id)
+            await rds.delete(online_key(device_id))
+        except Exception:
+            pass
+    return deleted

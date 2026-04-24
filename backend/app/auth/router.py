@@ -9,6 +9,7 @@ from auth.models import FcmTokenUpdate, Token, UserCreate, UserLogin, UserOut
 from auth.service import create_access_token, dummy_verify, hash_password, verify_password
 from database import get_db_pool_from_request
 from dependencies import get_current_user_id
+from sharing.service import resolve_pending_invites_for_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -28,6 +29,9 @@ async def register(
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(status.HTTP_409_CONFLICT, "email already registered")
+    # Attach this new user to any cold invites that were addressed to their
+    # email before registration — they'll see them as pending after login.
+    await resolve_pending_invites_for_email(pool, row["id"], payload.email)
     return UserOut(id=row["id"], email=row["email"])
 
 

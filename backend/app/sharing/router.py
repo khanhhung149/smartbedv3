@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from alerts.service import ensure_threshold
 from database import get_db_pool_from_request
 from dependencies import get_current_user_id
-from sharing.models import ShareInvite, ShareOut, SharedDeviceOut
+from sharing.models import PendingInviteOut, ShareInvite, ShareOut, SharedDeviceOut
 from sharing.service import (
     accept_invite,
     create_invite,
     delete_share,
+    list_pending_for_me,
     list_shared_with_me,
     list_shares_for_device,
 )
@@ -47,6 +48,15 @@ async def accept(
     )
     if row:
         await ensure_threshold(pool, row["device_id"], user_id)
+
+
+@router.get("/pending", response_model=list[PendingInviteOut])
+async def pending_invites(
+    user_id: UUID = Depends(get_current_user_id),
+    pool: asyncpg.Pool = Depends(get_db_pool_from_request),
+) -> list[PendingInviteOut]:
+    rows = await list_pending_for_me(pool, user_id)
+    return [PendingInviteOut(**r) for r in rows]
 
 
 @router.get("/my-devices", response_model=list[SharedDeviceOut])

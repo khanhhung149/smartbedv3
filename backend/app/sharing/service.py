@@ -72,6 +72,51 @@ async def accept_invite(
     return row is not None
 
 
+async def list_pending_for_me(pool: asyncpg.Pool, user_id: UUID) -> list[dict]:
+    """Invites addressed to my email that I haven't accepted yet.
+
+    Matches on invited_email = my email so cold invites (created before I
+    registered) are picked up automatically after register-time resolve.
+    """
+    rows = await pool.fetch(
+        """
+        SELECT s.id AS share_id, s.device_id, d.name AS device_name,
+               ou.email AS owner_email, s.created_at
+        FROM device_shares s
+        JOIN users me ON me.id = $1
+        JOIN devices d ON d.id = s.device_id
+        JOIN users ou ON ou.id = s.owner_id
+        WHERE s.invited_email = me.email
+          AND s.accepted = FALSE
+        ORDER BY s.created_at DESC
+        """,
+        user_id,
+    )
+    return [dict(r) for r in rows]
+
+
+async def resolve_pending_invites_for_email(
+    pool: asyncpg.Pool, new_user_id: UUID, email: str
+) -> int:
+    """Hook after register: attach shared_with_id on any cold invites matching
+    this email. Returns number of invites resolved.  Does NOT auto-accept —
+    user still sees them as pending and chooses Accept/Decline."""
+    result = await pool.execute(
+        """
+        UPDATE device_shares
+        SET shared_with_id = $1
+        WHERE invited_email = $2
+          AND shared_with_id IS NULL
+          AND accepted = FALSE
+        """,
+        new_user_id, email,
+    )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
 async def list_shared_with_me(pool: asyncpg.Pool, user_id: UUID) -> list[dict]:
     rows = await pool.fetch(
         """

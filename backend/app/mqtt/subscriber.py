@@ -110,6 +110,9 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
             return
         await _insert_min(pool, now, payload)
         await _mark_online(pool, rds, device_id, now)
+        # Also forward min frames to the realtime channel so the app can show
+        # the fields only present in min (movement, snore_count, temp).
+        await rds.publish(f"realtime:{device_id}", payload.model_dump_json())
 
 
 async def _is_paired(pool: asyncpg.Pool, rds: redis.Redis, device_id: str) -> bool:

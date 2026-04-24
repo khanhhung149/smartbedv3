@@ -27,3 +27,16 @@ class SharedDeviceOut(BaseModel):
     name: str | None
     owner_email: EmailStr
     accepted_at: datetime
+
+
+class PendingInviteOut(BaseModel):
+    """An unaccepted invite addressed to the caller's email.
+
+    Included in Devices screen above "SHARED WITH ME" so the invitee sees
+    they have something to act on.
+    """
+    share_id: UUID
+    device_id: str
+    device_name: str | None
+    owner_email: EmailStr
+    created_at: datetime
