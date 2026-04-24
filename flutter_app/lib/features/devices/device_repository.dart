@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/api_client.dart';
+import 'models/device_out.dart';
 import 'models/device_pair_out.dart';
 
 class DeviceException implements Exception {
@@ -36,14 +37,24 @@ class DeviceRepository {
   }
 
   // GET /devices/mine — returns list of devices owned by current user.
-  // Each item includes an 'online' bool used to poll after provisioning.
-  Future<List<DevicePairOut>> getMyDevices() async {
+  // Uses DeviceOut (no MQTT creds) — those live only in the pairing response.
+  Future<List<DeviceOut>> getMyDevices() async {
     try {
       final res = await _client.dio.get('/devices/mine');
       final list = res.data as List<dynamic>;
       return list
-          .map((item) => DevicePairOut.fromJson(item as Map<String, dynamic>))
+          .map((item) => DeviceOut.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw DeviceException(_mapError(e));
+    }
+  }
+
+  // DELETE /devices/{id} — remove from account + triggers retained MQTT
+  // factory_reset so the physical device wipes its NVS on next reconnect.
+  Future<void> deleteDevice(String deviceId) async {
+    try {
+      await _client.dio.delete('/devices/$deviceId');
     } on DioException catch (e) {
       throw DeviceException(_mapError(e));
     }

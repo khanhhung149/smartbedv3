@@ -55,51 +55,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F14),
-      body: Stack(
+      body: Column(
         children: [
-          // Slide content fills entire screen
-          PageView(
-            controller: _controller,
-            onPageChanged: (i) => setState(() => _currentPage = i),
-            children: _slides,
+          // Slide content takes all remaining space above the fixed controls,
+          // so slide text never overlaps the CTA buttons regardless of device size.
+          Expanded(
+            child: PageView(
+              controller: _controller,
+              onPageChanged: (i) => setState(() => _currentPage = i),
+              children: _slides,
+            ),
           ),
 
-          // Overlaid bottom controls
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(32, 0, 32, 40), // px-8 pb-12
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Pagination dots
-                    _PaginationDots(
-                      count: _slides.length,
-                      currentIndex: _currentPage,
-                    ),
-                    const SizedBox(height: 32), // mb-8 / mb-10
-
-                    // Primary button
-                    PrimaryButton(
-                      label: _currentPage == _slides.length - 1
-                          ? 'Get started'
-                          : 'Get started',
-                      onPressed: _next,
-                    ),
-                    const SizedBox(height: 16), // space-y-4
-
-                    // Secondary button — varies by slide
-                    _SecondaryButton(
-                      pageIndex: _currentPage,
-                      onLogin: _goToLogin,
-                      onRegister: _goToRegister,
-                    ),
-                  ],
-                ),
+          // Bottom controls — fixed height, shared across slides.
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(32, 16, 32, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _PaginationDots(
+                    count: _slides.length,
+                    currentIndex: _currentPage,
+                  ),
+                  const SizedBox(height: 24),
+                  PrimaryButton(
+                    label: 'Get started',
+                    onPressed: _next,
+                  ),
+                  const SizedBox(height: 12),
+                  _SecondaryButton(
+                    pageIndex: _currentPage,
+                    onLogin: _goToLogin,
+                    onRegister: _goToRegister,
+                  ),
+                ],
               ),
             ),
           ),

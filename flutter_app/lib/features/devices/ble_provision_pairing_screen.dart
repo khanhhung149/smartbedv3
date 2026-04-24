@@ -69,7 +69,27 @@ class _BleProvisionPairingScreenState
       if (next is ProvisioningSuccess) {
         context.pushReplacement('/devices/add/success', extra: next);
       } else if (next is ProvisioningFailure) {
-        _showErrorAndPop(context, next.reason);
+        _showFatalErrorAndPop(context, next.reason);
+      } else if (next is ProvisioningWifiFailedRetryable) {
+        _showRetrySheet(
+          context,
+          title: 'WiFi connection failed',
+          reason:
+              "We couldn't connect to \"${next.lastSsid}\". Double-check the "
+              'network name and password. The device is still waiting — '
+              'no need to rescan.',
+          lastSsid: next.lastSsid,
+        );
+      } else if (next is ProvisioningMqttFailedRetryable) {
+        _showRetrySheet(
+          context,
+          title: 'Server unreachable',
+          reason:
+              'WiFi is connected but the server at '
+              '${next.pairOut.mqttHost} is not responding. Check your server '
+              'URL in Settings, or try different WiFi.',
+          lastSsid: next.lastSsid,
+        );
       }
     });
 
@@ -124,41 +144,204 @@ class _BleProvisionPairingScreenState
     );
   }
 
-  void _showErrorAndPop(BuildContext context, String reason) {
+  // Fatal path: BLE session lost, can't retry in place — user must restart.
+  void _showFatalErrorAndPop(BuildContext context, String reason) {
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surfaceContainerHigh,
-        title: Text(
-          'Provisioning failed',
-          style: GoogleFonts.inter(
-            color: AppColors.onSurface,
-            fontWeight: AppFontWeight.semiBold,
-          ),
-        ),
-        content: Text(
-          reason,
-          style: GoogleFonts.inter(
-            color: AppColors.onSurfaceVariant,
-            fontSize: AppTextSize.sm,
-          ),
-        ),
+        title: Text('Provisioning failed',
+            style: GoogleFonts.inter(
+                color: AppColors.onSurface,
+                fontWeight: AppFontWeight.semiBold)),
+        content: Text(reason,
+            style: GoogleFonts.inter(
+                color: AppColors.onSurfaceVariant, fontSize: AppTextSize.sm)),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               ref.read(provisioningProvider.notifier).reset();
-              context.go('/devices/add');
+              context.go('/devices');
             },
-            child: Text(
-              'Try again',
-              style: GoogleFonts.inter(color: AppColors.primary),
-            ),
+            child: Text('Back to devices',
+                style: GoogleFonts.inter(color: AppColors.primary)),
           ),
         ],
       ),
     );
   }
+
+  // Retry path: BLE still alive, user edits WiFi + retries without rescan.
+  void _showRetrySheet(
+    BuildContext context, {
+    required String title,
+    required String reason,
+    required String lastSsid,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: AppColors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _RetrySheet(
+        title: title,
+        reason: reason,
+        initialSsid: lastSsid,
+        onRetry: (ssid, password) {
+          Navigator.of(context).pop();
+          ref.read(provisioningProvider.notifier).retryWithCreds(
+                ssid: ssid,
+                password: password,
+              );
+        },
+        onCancel: () async {
+          Navigator.of(context).pop();
+          await ref.read(provisioningProvider.notifier).cancel();
+          if (context.mounted) context.go('/devices');
+        },
+      ),
+    );
+  }
+}
+
+// ── Retry bottom sheet ──────────────────────────────────────────────────────
+
+class _RetrySheet extends StatefulWidget {
+  const _RetrySheet({
+    required this.title,
+    required this.reason,
+    required this.initialSsid,
+    required this.onRetry,
+    required this.onCancel,
+  });
+
+  final String title;
+  final String reason;
+  final String initialSsid;
+  final void Function(String ssid, String password) onRetry;
+  final VoidCallback onCancel;
+
+  @override
+  State<_RetrySheet> createState() => _RetrySheetState();
+}
+
+class _RetrySheetState extends State<_RetrySheet> {
+  late final TextEditingController _ssid =
+      TextEditingController(text: widget.initialSsid);
+  final _password = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _ssid.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 24,
+        bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.title,
+              style: GoogleFonts.inter(
+                fontSize: AppTextSize.xl,
+                fontWeight: AppFontWeight.semiBold,
+                color: AppColors.onSurface,
+              )),
+          const SizedBox(height: 8),
+          Text(widget.reason,
+              style: GoogleFonts.inter(
+                fontSize: AppTextSize.sm,
+                color: AppColors.onSurfaceVariant,
+                height: 1.4,
+              )),
+          const SizedBox(height: 20),
+          TextField(
+            controller: _ssid,
+            style: GoogleFonts.inter(color: AppColors.onSurface),
+            decoration: _decoration('WiFi name'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            obscureText: _obscure,
+            style: GoogleFonts.inter(color: AppColors.onSurface),
+            decoration: _decoration('WiFi password').copyWith(
+              suffixIcon: IconButton(
+                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off,
+                    color: AppColors.onSurfaceVariant, size: 20),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onCancel,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(
+                      color: AppColors.outlineVariant.withValues(alpha: 0.4)),
+                ),
+                child: Text('Cancel',
+                    style: GoogleFonts.inter(color: AppColors.onSurface)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: FilledButton(
+                onPressed: () {
+                  final s = _ssid.text.trim();
+                  final p = _password.text;
+                  if (s.isEmpty || p.isEmpty) return;
+                  widget.onRetry(s, p);
+                },
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: AppColors.onPrimaryContainer,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text('Retry',
+                    style: GoogleFonts.inter(fontWeight: AppFontWeight.semiBold)),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _decoration(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(
+          color: AppColors.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+        filled: true,
+        fillColor: AppColors.surfaceContainer,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      );
 }
 
 // ── Sub-widgets ─────────────────────────────────────────────────────────────

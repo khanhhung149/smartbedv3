@@ -4,26 +4,28 @@ class SharedDeviceOut {
   const SharedDeviceOut({
     required this.shareId,
     required this.deviceId,
-    required this.deviceName,
+    required this.name,
     required this.ownerEmail,
-    required this.online,
-    this.lastSeen,
+    required this.acceptedAt,
   });
 
   final String shareId;
   final String deviceId;
-  final String deviceName;
+  // Nullable per backend schema.
+  final String? name;
   final String ownerEmail;
-  final bool online;
-  final String? lastSeen;
+  final String acceptedAt;
+
+  // Non-null display name — falls back to device_id when unset.
+  String get deviceName =>
+      (name != null && name!.isNotEmpty) ? name! : deviceId;
 
   factory SharedDeviceOut.fromJson(Map<String, dynamic> json) =>
       SharedDeviceOut(
         shareId: json['share_id'] as String,
         deviceId: json['device_id'] as String,
-        deviceName: json['device_name'] as String,
+        name: json['name'] as String?,
         ownerEmail: json['owner_email'] as String,
-        online: json['online'] as bool? ?? false,
-        lastSeen: json['last_seen'] as String?,
+        acceptedAt: json['accepted_at'] as String,
       );
 }

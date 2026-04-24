@@ -23,10 +23,22 @@ class HomeSecondaryMetrics extends StatelessWidget {
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.4,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 3.0,
+      // Order (user request 2026-04-24): Movement + Snores first so they sit
+      // right after the Respiration card, then S-Data + P-Data.
       children: [
+        _SecondaryTile(
+          // Protocol defines body_motion as "number of body movements per
+          // minute" (count), not an intensity level — show the raw count.
+          label: 'Movement',
+          value: data?.movement?.toString() ?? '0',
+        ),
+        _SecondaryTile(
+          label: 'Snores',
+          value: data?.snore?.toString() ?? '0',
+        ),
         _SecondaryTile(
           label: 'S-Data',
           value: data?.sdata != null
@@ -41,24 +53,10 @@ class HomeSecondaryMetrics extends StatelessWidget {
               : '--',
           trendIcon: Symbols.trending_flat,
         ),
-        _SecondaryTile(
-          label: 'Movement',
-          value: _movementLabel(data?.movement),
-        ),
-        _SecondaryTile(
-          label: 'Snores',
-          value: data?.snore?.toString() ?? '0',
-        ),
       ],
     );
   }
 
-  String _movementLabel(int? movement) {
-    if (movement == null) return '--';
-    if (movement < 20) return 'Low';
-    if (movement < 60) return 'Medium';
-    return 'High';
-  }
 }
 
 class _SecondaryTile extends StatelessWidget {
@@ -79,41 +77,35 @@ class _SecondaryTile extends StatelessWidget {
         color: AppColors.surfaceContainerLow, // #181C21
         borderRadius: BorderRadius.circular(20), // rounded-[20px]
       ),
-      padding: const EdgeInsets.all(20), // p-5
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.onSurfaceVariant,
-              letterSpacing: 1.2,
+          Expanded(
+            child: Text(
+              label.toUpperCase(),
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 1.2,
+              ),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.inter(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface,
-                  height: 1.1,
-                ),
-              ),
-              if (trendIcon != null)
-                Icon(
-                  trendIcon,
-                  size: 16,
-                  color: AppColors.outline,
-                ),
-            ],
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+              height: 1.0,
+            ),
           ),
+          if (trendIcon != null) ...[
+            const SizedBox(width: 4),
+            Icon(trendIcon, size: 14, color: AppColors.outline),
+          ],
         ],
       ),
     );

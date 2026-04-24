@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../data/providers/selected_device_provider.dart';
+import '../sharing/providers/sharing_providers.dart';
+import 'providers/devices_list_provider.dart';
 import 'providers/provisioning_provider.dart';
 
 // Screen 4 of BLE provisioning — success state with device name input.
@@ -56,7 +59,14 @@ class _BleProvisionSuccessScreenState
           );
     } finally {
       if (mounted) {
+        // Invalidate all device-related providers so Home/History/Alerts pick
+        // up the newly-paired device instead of their previously cached empty
+        // state.  selectedDeviceProvider is the critical one — its cached
+        // "no device" value is what makes those tabs show empty after pair.
         ref.read(provisioningProvider.notifier).reset();
+        ref.invalidate(devicesListProvider);
+        ref.invalidate(selectedDeviceProvider);
+        ref.invalidate(mySharedDevicesProvider);
         context.go('/home');
       }
     }

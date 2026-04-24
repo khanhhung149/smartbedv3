@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 
@@ -24,12 +23,14 @@ class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
+  // Uses Flutter's built-in Material Icons (guaranteed to render on iOS).
+  // Active tab uses the filled variant, inactive uses outlined.
   static const List<_NavItem> _items = [
-    _NavItem(label: 'HOME', icon: Symbols.home),
-    _NavItem(label: 'HISTORY', icon: Symbols.history),
-    _NavItem(label: 'ALERTS', icon: Symbols.notifications),
-    _NavItem(label: 'DEVICES', icon: Symbols.devices),
-    _NavItem(label: 'SETTINGS', icon: Symbols.settings),
+    _NavItem(label: 'HOME', iconOutlined: Icons.home_outlined, iconFilled: Icons.home),
+    _NavItem(label: 'HISTORY', iconOutlined: Icons.history_outlined, iconFilled: Icons.history),
+    _NavItem(label: 'ALERTS', iconOutlined: Icons.notifications_outlined, iconFilled: Icons.notifications),
+    _NavItem(label: 'DEVICES', iconOutlined: Icons.devices_outlined, iconFilled: Icons.devices),
+    _NavItem(label: 'SETTINGS', iconOutlined: Icons.settings_outlined, iconFilled: Icons.settings),
   ];
 
   @override
@@ -79,9 +80,14 @@ class AppBottomNav extends StatelessWidget {
 }
 
 class _NavItem {
-  const _NavItem({required this.label, required this.icon});
+  const _NavItem({
+    required this.label,
+    required this.iconOutlined,
+    required this.iconFilled,
+  });
   final String label;
-  final IconData icon;
+  final IconData iconOutlined;
+  final IconData iconFilled;
 }
 
 class _NavButton extends StatelessWidget {
@@ -107,7 +113,7 @@ class _NavButton extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Active icon gets pill background
+          // Active icon gets pill background + filled variant
           isActive
               ? Container(
                   decoration: BoxDecoration(
@@ -119,24 +125,14 @@ class _NavButton extends StatelessWidget {
                     vertical: 4,    // py-1
                   ),
                   margin: const EdgeInsets.only(bottom: 4),
-                  child: Icon(
-                    item.icon,
-                    size: 24,
-                    color: color,
-                    fill: 1, // FILL=1 when active
-                  ),
+                  child: Icon(item.iconFilled, size: 24, color: color),
                 )
               : Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 4,
-                  ).copyWith(bottom: 4 + 0), // match active pill height
-                  child: Icon(
-                    item.icon,
-                    size: 24,
-                    color: color,
-                    fill: 0,
                   ),
+                  child: Icon(item.iconOutlined, size: 24, color: color),
                 ),
           Text(
             item.label,

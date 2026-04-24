@@ -13,10 +13,10 @@ class OnboardingSleepSlide extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Illustration area — h-[530px], gradient overlay fades to #0B0F14
-        SizedBox(
-          height: 530,
-          width: double.infinity,
+        // Illustration area — fills remaining space above content block
+        // so nothing gets clipped on smaller devices.
+        Expanded(
+          flex: 5,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -59,16 +59,18 @@ class OnboardingSleepSlide extends StatelessWidget {
           ),
         ),
 
-        // Content area — rounded-t-xl bg-[#0B0F14], -mt-6
+        // Content area — fixed flex so text block always reserves space.
         Expanded(
+          flex: 2,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(32, 0, 32, 40), // px-8 pb-10
+            padding: const EdgeInsets.fromLTRB(32, 0, 32, 16),
             decoration: const BoxDecoration(
               color: Color(0xFF0B0F14),
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Text content — items-center text-center space-y-4
                 Text(

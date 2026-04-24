@@ -8,9 +8,11 @@ import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../sharing/models/pending_invite_out.dart';
 import '../sharing/models/shared_device_out.dart';
 import '../sharing/providers/sharing_providers.dart';
-import 'models/device_pair_out.dart';
+import '../sharing/sharing_repository.dart';
+import 'models/device_out.dart';
 import 'providers/devices_list_provider.dart';
 
 // Devices list screen.
@@ -24,21 +26,19 @@ class DevicesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final myDevicesAsync = ref.watch(devicesListProvider);
     final sharedAsync = ref.watch(mySharedDevicesProvider);
+    final pendingAsync = ref.watch(pendingInvitesProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(context),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 3,
-        onTap: (i) => _handleNavTap(context, i),
-      ),
       body: RefreshIndicator(
         color: AppColors.primaryContainer,
         backgroundColor: AppColors.surfaceContainer,
         onRefresh: () async {
           ref.invalidate(devicesListProvider);
           ref.invalidate(mySharedDevicesProvider);
+          ref.invalidate(pendingInvitesProvider);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -47,6 +47,29 @@ class DevicesScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 88), // clear app bar
+              // PENDING INVITES section — only renders when there are any,
+              // so users without pending invites don't see an empty section.
+              pendingAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (invites) {
+                  if (invites.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionHeader(label: 'PENDING INVITES'),
+                        const SizedBox(height: 16),
+                        ...invites.map((inv) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _PendingInviteTile(invite: inv),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+              ),
               // MY DEVICES section
               const _SectionHeader(label: 'MY DEVICES'),
               const SizedBox(height: 16),
@@ -97,44 +120,29 @@ class DevicesScreen extends ConsumerWidget {
     );
   }
 
-  void _handleNavTap(BuildContext context, int index) {
-    switch (index) {
-      case 0:
-        context.go('/home');
-      case 1:
-        context.go('/history');
-      case 2:
-        context.go('/alerts');
-      case 3:
-        break; // already here
-      case 4:
-        context.go('/settings');
-    }
-  }
 }
 
 // ── App bar ───────────────────────────────────────────────────────────────────
 
 PreferredSizeWidget _buildAppBar(BuildContext context) {
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 64 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(64),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 64,
-          // bg-slate-950/80
-          color: const Color(0xCC020617),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: SafeArea(
-            bottom: false,
+          height: totalHeight,
+          color: const Color(0xCC020617), // bg-slate-950/80
+          padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
+          child: SizedBox(
+            height: 64,
             child: Row(
+              // Keep the "+" button on the right; left side is intentionally
+              // empty (3-line menu removed per UX cleanup).
               children: [
-                IconButton(
-                  icon: const Icon(Symbols.menu,
-                      color: AppColors.primaryContainer, size: 24),
-                  onPressed: () {},
-                ),
+                const SizedBox(width: 48),
                 Expanded(
                   child: Text(
                     'Devices',
@@ -148,8 +156,8 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Symbols.add,
-                      color: AppColors.primaryContainer, size: 24),
+                  icon: const Icon(Icons.add,
+                      color: AppColors.primaryContainer, size: 28),
                   onPressed: () => context.push('/devices/add'),
                 ),
               ],
@@ -186,7 +194,7 @@ class _SectionHeader extends StatelessWidget {
 class _MyDeviceTile extends StatelessWidget {
   const _MyDeviceTile({required this.device, required this.onTap});
 
-  final DevicePairOut device;
+  final DeviceOut device;
   final VoidCallback onTap;
 
   @override
@@ -218,7 +226,7 @@ class _MyDeviceTile extends StatelessWidget {
                   color: AppColors.primaryContainer.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Symbols.bed,
+                child: const Icon(Icons.bed,
                     color: AppColors.primaryContainer, size: 24, fill: 1),
               ),
               const SizedBox(width: 16),
@@ -227,7 +235,7 @@ class _MyDeviceTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(device.name,
+                    Text(device.displayName,
                         style: GoogleFonts.inter(
                           fontSize: AppTextSize.lg,
                           fontWeight: AppFontWeight.semiBold,
@@ -279,7 +287,7 @@ class _MyDeviceTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Symbols.chevron_right,
+              const Icon(Icons.chevron_right,
                   color: AppColors.onSurfaceVariant, size: 24),
             ],
           ),
@@ -314,6 +322,145 @@ class _MyDeviceTile extends StatelessWidget {
   }
 }
 
+// ── Pending invite tile ───────────────────────────────────────────────────────
+
+class _PendingInviteTile extends ConsumerStatefulWidget {
+  const _PendingInviteTile({required this.invite});
+  final PendingInviteOut invite;
+
+  @override
+  ConsumerState<_PendingInviteTile> createState() => _PendingInviteTileState();
+}
+
+class _PendingInviteTileState extends ConsumerState<_PendingInviteTile> {
+  bool _busy = false;
+
+  Future<void> _accept() async {
+    final repo = ref.read(sharingRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await repo.acceptInvite(widget.invite.shareId);
+      ref.invalidate(pendingInvitesProvider);
+      ref.invalidate(mySharedDevicesProvider);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _decline() async {
+    final repo = ref.read(sharingRepositoryProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await repo.deleteShare(widget.invite.shareId);
+      ref.invalidate(pendingInvitesProvider);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inv = widget.invite;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: AppRadius.defaultBr,
+        border: Border.all(
+          color: AppColors.primaryContainer.withValues(alpha: 0.3),
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mail_outline,
+                  color: AppColors.primaryContainer, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    inv.deviceName,
+                    style: GoogleFonts.inter(
+                      fontSize: AppTextSize.base,
+                      fontWeight: AppFontWeight.semiBold,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Invite from ${inv.ownerEmail}',
+                    style: GoogleFonts.inter(
+                      fontSize: AppTextSize.xs,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _busy ? null : _decline,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  side: BorderSide(
+                      color: AppColors.outlineVariant.withValues(alpha: 0.4)),
+                ),
+                child: Text('Decline',
+                    style: GoogleFonts.inter(color: AppColors.onSurface)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: _busy ? null : _accept,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: AppColors.onPrimaryContainer,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                child: _busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.onPrimaryContainer),
+                      )
+                    : Text('Accept',
+                        style: GoogleFonts.inter(
+                            fontWeight: AppFontWeight.semiBold)),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Shared device tile ────────────────────────────────────────────────────────
 
 class _SharedDeviceTile extends StatelessWidget {
@@ -341,7 +488,7 @@ class _SharedDeviceTile extends StatelessWidget {
               color: AppColors.secondaryContainer.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Symbols.home,
+            child: const Icon(Icons.home,
                 color: AppColors.secondary, size: 24, fill: 1),
           ),
           const SizedBox(width: 16),
@@ -385,7 +532,7 @@ class _SharedDeviceTile extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Symbols.chevron_right,
+          const Icon(Icons.chevron_right,
               color: AppColors.onSurfaceVariant, size: 24),
         ],
       ),

@@ -2,7 +2,7 @@
 // BLE UUIDs are authoritative from docs/protocols/ble-provisioning-and-mqtt-auth.md
 abstract final class AppConstants {
   // API base URL — parameterized for easy env switching (dev LAN default)
-  static const String apiBaseUrl = 'http://192.168.1.100:8000';
+  static const String apiBaseUrl = 'http://192.168.1.15:8000';
 
   // JWT secure storage key
   static const String jwtStorageKey = 'jwt';

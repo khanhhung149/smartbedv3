@@ -5,18 +5,21 @@ class HistoryPoint {
     this.hr,
     this.rr,
     this.respDisorder,
+    this.temp,
   });
 
   final DateTime bucket;
   final double? hr;
   final double? rr;
   final int? respDisorder;
+  final double? temp;
 
   factory HistoryPoint.fromJson(Map<String, dynamic> json) => HistoryPoint(
         bucket: DateTime.parse(json['bucket'] as String),
         hr: (json['hr'] as num?)?.toDouble(),
         rr: (json['rr'] as num?)?.toDouble(),
-        respDisorder: json['resp_disorder'] as int?,
+        respDisorder: (json['resp_disorder'] as num?)?.toInt(),
+        temp: (json['temp'] as num?)?.toDouble(),
       );
 }
 

@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../data/providers/selected_device_provider.dart';
-import '../devices/models/device_pair_out.dart';
+import '../devices/models/device_out.dart';
 
 // Modal bottom sheet: lists owned devices, tap selects active device.
 // Source: home prompt spec — device-selector chip opens bottom sheet.
@@ -19,7 +19,7 @@ class DeviceSelectorSheet extends ConsumerStatefulWidget {
 }
 
 class _DeviceSelectorSheetState extends ConsumerState<DeviceSelectorSheet> {
-  List<DevicePairOut>? _devices;
+  List<DeviceOut>? _devices;
   bool _loading = true;
   String? _error;
 
@@ -135,7 +135,7 @@ class _DeviceTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final DevicePairOut device;
+  final DeviceOut device;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -162,7 +162,7 @@ class _DeviceTile extends StatelessWidget {
         ),
       ),
       title: Text(
-        device.name,
+        device.displayName,
         style: GoogleFonts.inter(
           fontSize: 14,
           fontWeight: FontWeight.w500,

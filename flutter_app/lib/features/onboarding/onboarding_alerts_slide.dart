@@ -13,10 +13,9 @@ class OnboardingAlertsSlide extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Illustration area — h-[530px]
-        SizedBox(
-          height: 530,
-          width: double.infinity,
+        // Illustration area — fills remaining space above content block.
+        Expanded(
+          flex: 5,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -54,12 +53,13 @@ class OnboardingAlertsSlide extends StatelessWidget {
           ),
         ),
 
-        // Content area — h-[353px] items-center justify-end px-8 pb-12
+        // Content area — reserved flex so text sits above shared bottom CTAs.
         Expanded(
+          flex: 2,
           child: Container(
             width: double.infinity,
             color: AppColors.surfaceContainerLowest,
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 0),
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

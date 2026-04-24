@@ -40,14 +40,26 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen>
   }
 
   Future<void> _requestBlePermissions() async {
-    // Android 12+ requires BLUETOOTH_SCAN + BLUETOOTH_CONNECT at runtime.
-    // Older Android / iOS satisfy with just location + bluetooth.
-    final perms = <Permission>[
+    // iOS: flutter_blue_plus triggers the OS native Bluetooth prompt the
+    // first time a scan starts (NSBluetoothAlwaysUsageDescription in
+    // Info.plist). permission_handler's bluetoothScan/Connect are
+    // Android-only and return denied on iOS — bypass them so the scan
+    // can start and the OS prompt fires.
+    if (Platform.isIOS) {
+      if (!mounted) return;
+      setState(() {
+        _permissionsGranted = true;
+        _permissionRequested = true;
+      });
+      return;
+    }
+
+    // Android 12+: runtime BLUETOOTH_SCAN + BLUETOOTH_CONNECT + location.
+    final results = await <Permission>[
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
-      if (Platform.isAndroid) Permission.locationWhenInUse,
-    ];
-    final results = await perms.request();
+      Permission.locationWhenInUse,
+    ].request();
     final allGranted = results.values.every((s) => s.isGranted);
     if (!mounted) return;
     setState(() {
@@ -199,38 +211,15 @@ class _TopBar extends StatelessWidget {
             color: AppColors.primaryContainer,
             onTap: onClose,
           ),
-          // Title + room subtitle
-          Column(
-            children: [
-              Text(
-                'Add Device',
-                style: GoogleFonts.inter(
-                  fontSize: AppTextSize.lg,
-                  fontWeight: AppFontWeight.semiBold,
-                  color: const Color(0xFFE6EDF3),
-                  letterSpacing: -0.3,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Grandma\'s room',
-                    style: GoogleFonts.inter(
-                      fontSize: AppTextSize.xs,
-                      color: AppColors.outline,
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  const Icon(
-                    Icons.arrow_drop_down,
-                    size: 16,
-                    color: AppColors.outline,
-                  ),
-                ],
-              ),
-            ],
+          // Title only — no subtitle needed on the scan screen.
+          Text(
+            'Add Device',
+            style: GoogleFonts.inter(
+              fontSize: AppTextSize.lg,
+              fontWeight: AppFontWeight.semiBold,
+              color: const Color(0xFFE6EDF3),
+              letterSpacing: -0.3,
+            ),
           ),
           // Notifications button (muted)
           _IconBtn(

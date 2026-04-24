@@ -1,20 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/constants.dart';
-import '../../devices/models/device_pair_out.dart';
+import '../../devices/models/device_out.dart';
 import '../../devices/device_repository.dart';
 
 // Persists + exposes the active device selection.
 // On first load reads last_device_id from secure storage; falls back to
 // first device in /devices/mine if no persisted value.
 
-class SelectedDeviceNotifier extends AsyncNotifier<DevicePairOut?> {
+class SelectedDeviceNotifier extends AsyncNotifier<DeviceOut?> {
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
   @override
-  Future<DevicePairOut?> build() async {
+  Future<DeviceOut?> build() async {
     final devices = await DeviceRepository().getMyDevices();
     if (devices.isEmpty) return null;
 
@@ -28,9 +28,9 @@ class SelectedDeviceNotifier extends AsyncNotifier<DevicePairOut?> {
   }
 
   // Devices list used by bottom sheet selector.
-  Future<List<DevicePairOut>> listDevices() => DeviceRepository().getMyDevices();
+  Future<List<DeviceOut>> listDevices() => DeviceRepository().getMyDevices();
 
-  Future<void> selectDevice(DevicePairOut device) async {
+  Future<void> selectDevice(DeviceOut device) async {
     state = AsyncData(device);
     await _storage.write(
       key: AppConstants.lastDeviceIdKey,
@@ -40,6 +40,6 @@ class SelectedDeviceNotifier extends AsyncNotifier<DevicePairOut?> {
 }
 
 final selectedDeviceProvider =
-    AsyncNotifierProvider<SelectedDeviceNotifier, DevicePairOut?>(
+    AsyncNotifierProvider<SelectedDeviceNotifier, DeviceOut?>(
   SelectedDeviceNotifier.new,
 );

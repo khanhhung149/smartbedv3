@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../shared/widgets/alert_bell_button.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/loading_overlay.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -52,7 +53,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
         return _AlertsBody(
           key: ValueKey(device.deviceId),
           deviceId: device.deviceId,
-          deviceName: device.name,
+          deviceName: device.displayName,
           selectedTab: _tab,
           onTabChanged: (i) => setState(() => _tab = i),
         );
@@ -71,11 +72,7 @@ class _NoDeviceBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: _alertsAppBar('Alerts'),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 2,
-        onTap: (i) => _handleNavTap(context, i),
-      ),
+      appBar: _alertsAppBar(context, 'Alerts'),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -143,7 +140,7 @@ class _AlertsBodyState extends ConsumerState<_AlertsBody> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         extendBodyBehindAppBar: true,
-        appBar: _alertsAppBar(widget.deviceName),
+        appBar: _alertsAppBar(context, widget.deviceName),
         body: Column(
           children: [
             // Spacer for translucent app bar
@@ -171,24 +168,19 @@ class _AlertsBodyState extends ConsumerState<_AlertsBody> {
             ),
           ],
         ),
-        // Sticky save button above bottom nav
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.selectedTab == 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-                child: _SaveButton(
-                  isDirty: isDirty,
-                  onPressed: isDirty ? () => _save(context) : null,
+        // Sticky save button — nav bar lives in MainShell
+        bottomNavigationBar: widget.selectedTab == 0
+            ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+                  child: _SaveButton(
+                    isDirty: isDirty,
+                    onPressed: isDirty ? () => _save(context) : null,
+                  ),
                 ),
-              ),
-            AppBottomNav(
-              currentIndex: 2,
-              onTap: (i) => _handleNavTap(context, i),
-            ),
-          ],
-        ),
+              )
+            : null,
       ),
     );
   }
@@ -405,25 +397,23 @@ class _SaveButton extends StatelessWidget {
 
 // ── App bar ───────────────────────────────────────────────────────────────────
 
-PreferredSizeWidget _alertsAppBar(String title) {
+PreferredSizeWidget _alertsAppBar(BuildContext context, String title) {
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 64 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(64),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 64,
+          height: totalHeight,
           color: const Color(0xB3101419),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: SafeArea(
-            bottom: false,
+          padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
+          child: SizedBox(
+            height: 64,
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Symbols.menu,
-                      color: Color(0xFF8B96A5), size: 24),
-                  onPressed: () {},
-                ),
+                const SizedBox(width: 48),
                 Expanded(
                   child: Text(
                     'Alerts',
@@ -436,11 +426,7 @@ PreferredSizeWidget _alertsAppBar(String title) {
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Symbols.notifications,
-                      color: Color(0xFF8B96A5), size: 24),
-                  onPressed: () {},
-                ),
+                const AlertBellButton(color: Color(0xFF8B96A5)),
               ],
             ),
           ),
@@ -450,19 +436,3 @@ PreferredSizeWidget _alertsAppBar(String title) {
   );
 }
 
-// ── Nav handler ───────────────────────────────────────────────────────────────
-
-void _handleNavTap(BuildContext context, int index) {
-  switch (index) {
-    case 0:
-      context.go('/home');
-    case 1:
-      context.go('/history');
-    case 2:
-      break; // already here
-    case 3:
-      context.go('/devices');
-    case 4:
-      context.go('/settings');
-  }
-}

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../core/api_client.dart';
+import 'models/pending_invite_out.dart';
 import 'models/share_out.dart';
 import 'models/shared_device_out.dart';
 
@@ -42,6 +43,19 @@ class SharingRepository {
   Future<void> acceptInvite(String shareId) async {
     try {
       await _client.dio.post('/share/$shareId/accept');
+    } on DioException catch (e) {
+      throw SharingException(_mapError(e));
+    }
+  }
+
+  // Pending invites addressed to my email (not yet accepted).
+  Future<List<PendingInviteOut>> getPendingInvites() async {
+    try {
+      final res = await _client.dio.get('/share/pending');
+      final list = res.data as List<dynamic>;
+      return list
+          .map((item) => PendingInviteOut.fromJson(item as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
       throw SharingException(_mapError(e));
     }

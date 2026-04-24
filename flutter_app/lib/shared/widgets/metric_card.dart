@@ -37,106 +37,73 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Compact layout: icon + label + value + unit on one row, sparkline below.
+    // Saves ~80px per card vs the original bento layout — lets Home fit HR,
+    // Respiration, Status, Movement + Snores all above the fold.
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainer, // #1C2025
-        borderRadius: BorderRadius.circular(16), // rounded-lg
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.all(24), // p-6
-      child: Stack(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Subtle glow: absolute -right-6 -top-6 w-32 h-32 bg-color/5 blur-3xl
-          Positioned(
-            right: -24,
-            top: -24,
-            child: Container(
-              width: 128,
-              height: 128,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: accentColor.withValues(alpha: 0.05),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Header row: icon pill + label + more_horiz (HR only via moreIcon)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      // Icon pill: p-2 bg-color/10 rounded-full
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.10),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          icon,
-                          size: 20,
-                          color: accentColor,
-                          fill: 1,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        label,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.onSurfaceVariant,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Icon(
-                    Symbols.more_horiz,
-                    size: 20,
-                    color: AppColors.onSurfaceVariant,
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 20, color: accentColor, fill: 1),
               ),
-              const SizedBox(height: 24), // mb-6
-              // Value + unit baseline row
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    value != null ? value!.round().toString() : '--',
-                    style: GoogleFonts.inter(
-                      fontSize: 60, // text-6xl
-                      fontWeight: FontWeight.w900, // font-black
-                      color: AppColors.onSurface,
-                      height: 1.0,
-                      letterSpacing: -2.0, // tracking-tighter
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    unit,
-                    style: GoogleFonts.inter(
-                      fontSize: 18, // text-lg
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.onSurfaceVariant,
+                  letterSpacing: 1.2,
+                ),
               ),
-              const SizedBox(height: 16), // mt-4
-              // Sparkline
-              Sparkline(
-                values: sparklineValues,
-                color: accentColor,
+              const Spacer(),
+              Text(
+                value != null
+                    ? (value! % 1 == 0
+                        ? value!.round().toString()
+                        : value!.toStringAsFixed(1))
+                    : '--',
+                style: GoogleFonts.inter(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                  height: 1.0,
+                  letterSpacing: -1.2,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                unit,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.onSurfaceVariant,
+                ),
               ),
             ],
           ),
+          if (sparklineValues.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 42,
+              child: Sparkline(values: sparklineValues, color: accentColor),
+            ),
+          ],
         ],
       ),
     );

@@ -7,16 +7,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../shared/widgets/alert_bell_button.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/loading_overlay.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../alerts/providers/thresholds_provider.dart' show thresholdsProvider;
+import '../data/providers/selected_device_provider.dart';
 import '../sharing/invite_family_sheet.dart';
 import '../sharing/models/share_out.dart';
 import '../sharing/providers/sharing_providers.dart';
 import '../sharing/sharing_repository.dart';
 import 'device_repository.dart';
-import 'models/device_pair_out.dart';
+import 'models/device_out.dart';
 import 'providers/devices_list_provider.dart';
 
 // Device detail screen: rename, sharing management, danger zone.
@@ -96,21 +98,17 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     );
   }
 
-  DevicePairOut _placeholder(String deviceId) => DevicePairOut(
+  DeviceOut _placeholder(String deviceId) => DeviceOut(
         deviceId: deviceId,
         name: deviceId,
         pairedAt: DateTime.now().toIso8601String(),
         online: false,
-        mqttUsername: '',
-        mqttPassword: '',
-        mqttHost: '',
-        mqttScheme: 'tcp',
       );
 
-  Future<void> _showRenameSheet(BuildContext context, DevicePairOut? device) async {
+  Future<void> _showRenameSheet(BuildContext context, DeviceOut? device) async {
     if (device == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    final controller = TextEditingController(text: device.name);
+    final controller = TextEditingController(text: device.name ?? '');
     try {
       final result = await showModalBottomSheet<String>(
         context: context,
@@ -127,7 +125,11 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
           deviceId: widget.deviceId,
           name: result,
         );
+        // Both providers hold a DeviceOut snapshot with the old name — invalidate
+        // both so Home/History title chip reflects the rename without the user
+        // having to re-open the device selector sheet.
         ref.invalidate(devicesListProvider);
+        ref.invalidate(selectedDeviceProvider);
         if (mounted) messenger.showSnackBar(_snackBar('Device renamed'));
       } catch (_) {
         if (mounted) {
@@ -173,6 +175,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
 
   Future<void> _confirmRemove(BuildContext context) async {
     final router = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => _RemoveConfirmDialog(),
@@ -180,10 +183,16 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _removing = true);
     try {
-      // Placeholder: backend DELETE /devices/{deviceId} endpoint
-      // not yet in phase-08 spec; navigate back on success
+      await DeviceRepository().deleteDevice(widget.deviceId);
       ref.invalidate(devicesListProvider);
-      if (mounted) router.go('/devices');
+      if (mounted) {
+        messenger.showSnackBar(_snackBar(
+          'Device removed. It will reset when it next comes online.',
+        ));
+        router.go('/devices');
+      }
+    } on DeviceException catch (e) {
+      if (mounted) messenger.showSnackBar(_errorSnackBar(e.message));
     } finally {
       if (mounted) setState(() => _removing = false);
     }
@@ -240,7 +249,7 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Symbols.arrow_back,
+                  icon: const Icon(Icons.arrow_back,
                       color: AppColors.primaryContainer, size: 24),
                   onPressed: () {
                     if (context.canPop()) {
@@ -262,11 +271,7 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
                     ),
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Symbols.notifications,
-                      color: AppColors.primaryContainer, size: 24),
-                  onPressed: () {},
-                ),
+                const AlertBellButton(color: AppColors.primaryContainer),
               ],
             ),
           ),
@@ -280,12 +285,12 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
 
 class _HeaderSection extends StatelessWidget {
   const _HeaderSection({required this.device, required this.onEditName});
-  final DevicePairOut? device;
+  final DeviceOut? device;
   final VoidCallback onEditName;
 
   @override
   Widget build(BuildContext context) {
-    final name = device?.name ?? '—';
+    final name = device?.displayName ?? '—';
     final id = device?.deviceId ?? '—';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -303,7 +308,7 @@ class _HeaderSection extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: const Icon(Symbols.edit,
+            icon: const Icon(Icons.edit,
                 color: AppColors.onSurfaceVariant, size: 20),
             onPressed: onEditName,
           ),
@@ -329,7 +334,7 @@ class _HeaderSection extends StatelessWidget {
                 ),
               );
             },
-            child: const Icon(Symbols.content_copy,
+            child: const Icon(Icons.content_copy,
                 color: AppColors.onSurfaceVariant, size: 16),
           ),
         ]),
@@ -338,11 +343,21 @@ class _HeaderSection extends StatelessWidget {
   }
 }
 
+// Backend returns last_seen as UTC ISO-8601; display in local tz DD/MM/YYYY HH:mm:ss.
+String _formatLastSeen(String? iso) {
+  if (iso == null || iso.isEmpty) return 'Unknown';
+  final dt = DateTime.tryParse(iso)?.toLocal();
+  if (dt == null) return iso;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+      '${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+}
+
 // ── Status card ───────────────────────────────────────────────────────────────
 
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.device});
-  final DevicePairOut? device;
+  final DeviceOut? device;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +392,7 @@ class _StatusCard extends StatelessWidget {
           ]),
           const SizedBox(height: 4),
           Text(
-            lastSeen != null ? 'Last seen: $lastSeen' : 'Last seen: Unknown',
+            'Last seen: ${_formatLastSeen(lastSeen)}',
             style: GoogleFonts.inter(
               fontSize: AppTextSize.sm,
               color: AppColors.onSurfaceVariant,
@@ -445,7 +460,7 @@ class _ThresholdsSection extends StatelessWidget {
                 color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Symbols.vital_signs,
+              child: const Icon(Icons.monitor_heart_outlined,
                   color: AppColors.primaryContainer, size: 22),
             ),
             const SizedBox(width: 16),
@@ -559,7 +574,7 @@ class _ShareRow extends StatelessWidget {
             color: AppColors.surfaceContainerHigh,
             shape: BoxShape.circle,
           ),
-          child: const Icon(Symbols.person,
+          child: const Icon(Icons.person,
               color: AppColors.onSurfaceVariant, size: 20),
         ),
         const SizedBox(width: 12),
@@ -622,7 +637,7 @@ class _DangerZone extends StatelessWidget {
           height: 52,
           child: OutlinedButton.icon(
             onPressed: onRemove,
-            icon: const Icon(Symbols.delete_forever,
+            icon: const Icon(Icons.delete_forever,
                 color: AppColors.error, size: 20),
             label: Text('Remove device',
                 style: GoogleFonts.inter(

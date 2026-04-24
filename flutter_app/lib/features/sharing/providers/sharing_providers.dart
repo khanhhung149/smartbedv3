@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../sharing_repository.dart';
+import '../models/pending_invite_out.dart';
 import '../models/share_out.dart';
 import '../models/shared_device_out.dart';
 
@@ -13,6 +14,13 @@ final mySharedDevicesProvider =
     FutureProvider<List<SharedDeviceOut>>((ref) async {
   final repo = ref.read(sharingRepositoryProvider);
   return repo.getMySharedDevices();
+});
+
+// Pending invites for the current user's email — need Accept/Decline.
+final pendingInvitesProvider =
+    FutureProvider<List<PendingInviteOut>>((ref) async {
+  final repo = ref.read(sharingRepositoryProvider);
+  return repo.getPendingInvites();
 });
 
 // All shares for a specific device (owner only) — used in device_detail

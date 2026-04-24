@@ -14,13 +14,10 @@ import 'features/devices/ble_provision_success_screen.dart';
 import 'features/devices/devices_screen.dart';
 import 'features/devices/device_detail_screen.dart';
 import 'features/devices/providers/provisioning_provider.dart';
-import 'features/home/home_screen.dart';
-import 'features/history/history_screen.dart';
-import 'features/alerts/alerts_screen.dart';
 import 'features/alerts/alert_detail_screen.dart';
 import 'features/alerts/models/alert_out.dart';
-import 'features/settings/settings_screen.dart';
 import 'features/sharing/sharing_repository.dart';
+import 'shared/widgets/main_shell.dart';
 import 'core/app_colors.dart';
 
 // GoRouter factory. Reads initial JWT to decide first route.
@@ -49,18 +46,18 @@ GoRouter _buildRouter(String? initialToken) {
         path: '/register',
         builder: (_, __) => const RegisterScreen(),
       ),
+      // ── Main tab routes — all 5 share MainShell with sliding content ──
       GoRoute(
         path: '/home',
-        builder: (_, __) => const HomeScreen(),
+        builder: (_, __) => const MainShell(initialIndex: 0),
       ),
       GoRoute(
         path: '/history',
-        builder: (_, __) => const HistoryScreen(),
+        builder: (_, __) => const MainShell(initialIndex: 1),
       ),
-      // ── Alerts routes ────────────────────────────────────────────────────
       GoRoute(
         path: '/alerts',
-        builder: (_, __) => const AlertsScreen(),
+        builder: (_, __) => const MainShell(initialIndex: 2),
       ),
       GoRoute(
         path: '/alerts/:deviceId/detail',
@@ -82,18 +79,14 @@ GoRouter _buildRouter(String? initialToken) {
         },
       ),
       // ── Devices routes ───────────────────────────────────────────────────
+      // IMPORTANT: concrete paths (`/devices/add`, `/devices/add/*`) MUST be
+      // registered BEFORE the parameterized `/devices/:deviceId` — otherwise
+      // GoRouter matches `/devices/add` as deviceId="add" and opens DeviceDetail
+      // instead of the BLE scan screen.
       GoRoute(
         path: '/devices',
-        builder: (_, __) => const DevicesScreen(),
+        builder: (_, __) => const MainShell(initialIndex: 3),
       ),
-      GoRoute(
-        path: '/devices/:deviceId',
-        builder: (context, state) {
-          final deviceId = state.pathParameters['deviceId']!;
-          return DeviceDetailScreen(deviceId: deviceId);
-        },
-      ),
-      // ── BLE provisioning flow (auth-protected) ───────────────────────────
       GoRoute(
         path: '/devices/add',
         builder: (_, __) => const BleScanScreen(),
@@ -123,6 +116,13 @@ GoRouter _buildRouter(String? initialToken) {
           return BleProvisionSuccessScreen(successState: success);
         },
       ),
+      GoRoute(
+        path: '/devices/:deviceId',
+        builder: (context, state) {
+          final deviceId = state.pathParameters['deviceId']!;
+          return DeviceDetailScreen(deviceId: deviceId);
+        },
+      ),
       // ── Share accept deep link ───────────────────────────────────────────
       // Renders a loading screen that actually calls acceptInvite, then
       // navigates to /devices. Auth guard in the top-level redirect ensures
@@ -136,7 +136,7 @@ GoRouter _buildRouter(String? initialToken) {
       // ── Settings ─────────────────────────────────────────────────────────
       GoRoute(
         path: '/settings',
-        builder: (_, __) => const SettingsScreen(),
+        builder: (_, __) => const MainShell(initialIndex: 4),
       ),
       // Redirect bare root to onboarding
       GoRoute(

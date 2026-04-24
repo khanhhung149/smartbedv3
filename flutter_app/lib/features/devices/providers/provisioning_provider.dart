@@ -75,6 +75,30 @@ class ProvisioningFailure extends ProvisioningState {
   final String reason;
 }
 
+// Retryable WiFi failure — BLE session still open, user can edit creds + retry.
+class ProvisioningWifiFailedRetryable extends ProvisioningState {
+  const ProvisioningWifiFailedRetryable({
+    required this.lastSsid,
+    required this.deviceId,
+    required this.pairOut,
+  });
+  final String lastSsid;
+  final String deviceId;
+  final DevicePairOut pairOut;
+}
+
+// Retryable MQTT failure — same shape; distinct so UI can show proper message.
+class ProvisioningMqttFailedRetryable extends ProvisioningState {
+  const ProvisioningMqttFailedRetryable({
+    required this.lastSsid,
+    required this.deviceId,
+    required this.pairOut,
+  });
+  final String lastSsid;
+  final String deviceId;
+  final DevicePairOut pairOut;
+}
+
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 class ProvisioningNotifier extends Notifier<ProvisioningState> {
@@ -84,7 +108,28 @@ class ProvisioningNotifier extends Notifier<ProvisioningState> {
   BleService get _ble => ref.read(bleServiceProvider);
   DeviceRepository get _repo => DeviceRepository();
 
-  void reset() => state = const ProvisioningIdle();
+  // Cached across retries so writeProvisioningChars can reuse values the user
+  // isn't editing (server host, MQTT creds).
+  BluetoothDevice? _activeDevice;
+  String? _activeDeviceId;
+  DevicePairOut? _activePairOut;
+
+  void reset() {
+    _activeDevice = null;
+    _activeDeviceId = null;
+    _activePairOut = null;
+    state = const ProvisioningIdle();
+  }
+
+  // User cancels from error UI — closes BLE session and resets to idle.
+  // Firmware treats BLE disconnect as cancel → erases NVS → restarts into
+  // fresh BLE advertising mode.
+  Future<void> cancel() async {
+    try {
+      await _ble.closeProvisioningSession();
+    } catch (_) {}
+    reset();
+  }
 
   void selectDevice(BluetoothDevice device) {
     state = ProvisioningSelected(device);
@@ -97,86 +142,116 @@ class ProvisioningNotifier extends Notifier<ProvisioningState> {
     required BluetoothDevice device,
     required String ssid,
     required String wifiPassword,
-    // Device name: default "New Device" — user can rename in success screen.
-    // Re-calling pair with final name works because backend upserts on device_id.
     String deviceName = 'New Device',
   }) async {
     try {
-      // Step 1: Read DeviceId from BLE
+      // ONE BLE connection for the whole flow — avoids iOS reconnect flakiness
+      // (the peripheral takes 1-2s to release state after disconnect; a quick
+      // re-connect can drop silently before writes land).
       state = ProvisioningFetchingDeviceId(device);
-      final deviceId = await _ble.readDeviceId(device);
+      await _ble.openProvisioningSession(device);
+      final deviceId = await _ble.readDeviceIdFromSession();
 
-      // Step 2: POST /devices/pair — get MQTT credentials
       final pairOut = await _repo.pairDevice(
         deviceId: deviceId,
         name: deviceName,
       );
-      state = ProvisioningPairedWithBackend(
-        device: device,
-        deviceId: deviceId,
-        pairOut: pairOut,
-      );
 
-      // Step 3: BLE write all 6 characteristics + wait for Status notify
-      final payload = ProvisionPayload(
-        ssid: ssid,
-        password: wifiPassword,
-        serverHost: pairOut.mqttHost,
-        mqttScheme: pairOut.mqttScheme,
-        mqttUser: pairOut.mqttUsername,
-        mqttPassword: pairOut.mqttPassword,
-      );
+      _activeDevice = device;
+      _activeDeviceId = deviceId;
+      _activePairOut = pairOut;
 
-      state = ProvisioningConnectingWifi(
-        deviceId: deviceId,
-        pairOut: pairOut,
+      await _writeAndAwait(ssid: ssid, password: wifiPassword);
+    } on DioException catch (e, st) {
+      // ignore: avoid_print
+      print('[provisioning] DioException: ${e.message} ${e.response?.statusCode}\n$st');
+      await _ble.closeProvisioningSession();
+      state = ProvisioningFailure(
+        'Server error: ${e.response?.statusCode ?? "no response"}. ${e.message ?? ""}',
       );
-
-      final bleStatus = await _ble.provision(
-        device,
-        payload,
-        onStatusUpdate: (status) {
-          if (status == 'connecting') {
-            state = ProvisioningConnectingMqtt(
-              deviceId: deviceId,
-              pairOut: pairOut,
-            );
-          }
-        },
-      );
-
-      if (bleStatus == 'wifi_failed') {
-        state = const ProvisioningFailure(
-          'Could not connect to WiFi. Check your network name and password.',
-        );
-        return;
-      }
-      if (bleStatus == 'mqtt_failed') {
-        state = const ProvisioningFailure(
-          'Connected to WiFi but could not reach the server. Try again.',
-        );
-        return;
-      }
-
-      // Step 4: Poll /devices/mine until device online=true (max 30s)
-      final onlineConfirmed = await _pollUntilOnline(deviceId);
-      if (!onlineConfirmed) {
-        // Device connected to broker but poll timed out — treat as success
-        // because BLE status was "connected". Backend LWT may arrive shortly.
-      }
-
-      state = ProvisioningSuccess(deviceId: deviceId, pairOut: pairOut);
-    } on DioException catch (_) {
-      // Dio errors can leak URL/headers via toString. Surface a generic message.
-      state = const ProvisioningFailure(
-        'Could not reach the server. Check your connection and try again.',
-      );
-    } catch (_) {
-      // BLE / other failures — generic safe message.
-      state = const ProvisioningFailure(
-        'Pairing failed unexpectedly. Please try again.',
-      );
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('[provisioning] error: $e\n$st');
+      await _ble.closeProvisioningSession();
+      state = ProvisioningFailure('Pairing failed: $e');
     }
+  }
+
+  // User edited creds on the failure UI and tapped Retry.  BLE stays connected.
+  Future<void> retryWithCreds({
+    required String ssid,
+    required String password,
+  }) async {
+    if (_activeDevice == null || _activePairOut == null) {
+      state = const ProvisioningFailure('Session expired. Please start over.');
+      return;
+    }
+    try {
+      await _writeAndAwait(ssid: ssid, password: password);
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('[provisioning] retry error: $e\n$st');
+      await _ble.closeProvisioningSession();
+      state = ProvisioningFailure('Retry failed: $e');
+    }
+  }
+
+  Future<void> _writeAndAwait({
+    required String ssid,
+    required String password,
+  }) async {
+    final deviceId = _activeDeviceId!;
+    final pairOut = _activePairOut!;
+
+    state = ProvisioningConnectingWifi(deviceId: deviceId, pairOut: pairOut);
+
+    await _ble.writeProvisioningChars(ProvisionPayload(
+      ssid: ssid,
+      password: password,
+      serverHost: pairOut.mqttHost,
+      mqttScheme: pairOut.mqttScheme,
+      mqttUser: pairOut.mqttUsername,
+      mqttPassword: pairOut.mqttPassword,
+    ));
+
+    final bleStatus = await _ble.awaitProvisioningStatus(
+      onUpdate: (status) {
+        switch (status) {
+          case 'wifi_connected':
+          case 'mqtt_connecting':
+            state = ProvisioningConnectingMqtt(deviceId: deviceId, pairOut: pairOut);
+          case 'wifi_connecting':
+            state = ProvisioningConnectingWifi(deviceId: deviceId, pairOut: pairOut);
+        }
+      },
+    );
+
+    if (bleStatus == 'wifi_failed') {
+      state = ProvisioningWifiFailedRetryable(
+        lastSsid: ssid,
+        deviceId: deviceId,
+        pairOut: pairOut,
+      );
+      return;
+    }
+    if (bleStatus == 'mqtt_failed') {
+      state = ProvisioningMqttFailedRetryable(
+        lastSsid: ssid,
+        deviceId: deviceId,
+        pairOut: pairOut,
+      );
+      return;
+    }
+
+    // bleStatus == 'connected' — close session, finalize
+    await _ble.closeProvisioningSession();
+
+    final onlineConfirmed = await _pollUntilOnline(deviceId);
+    if (!onlineConfirmed) {
+      // BLE reported success — treat as success even if Redis TTL hasn't
+      // flipped yet. Backend LWT usually arrives within a few seconds.
+    }
+    state = ProvisioningSuccess(deviceId: deviceId, pairOut: pairOut);
   }
 
   // Rename device after provisioning (called from success screen).

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
+import '../../shared/widgets/alert_bell_button.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../data/providers/history_provider.dart';
 import '../data/providers/selected_device_provider.dart';
@@ -69,7 +70,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(_openDeviceSheet, deviceAsync.valueOrNull?.name),
+      appBar: _buildAppBar(context, _openDeviceSheet, deviceAsync.valueOrNull?.displayName),
       body: Column(
         children: [
           // Spacer below fixed app bar (~72px) + tab bar (~48px)
@@ -109,10 +110,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 1, // History active
-        onTap: (i) => _handleNavTap(context, i),
       ),
     );
   }
@@ -261,28 +258,28 @@ class _HistoryTabView extends ConsumerWidget {
 // ── App bar ──────────────────────────────────────────────────────────────────
 
 PreferredSizeWidget _buildAppBar(
+  BuildContext context,
   VoidCallback onDeviceTap,
   String? deviceName,
 ) {
+  // Account for status bar / Dynamic Island so the 72px toolbar row isn't
+  // squeezed to overflow.
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 72 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(72),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 72,
+          height: totalHeight,
           color: const Color(0xB3101419), // #101419/70
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: SafeArea(
-            bottom: false,
+          padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
+          child: SizedBox(
+            height: 72,
             child: Row(
               children: [
-                // Left: menu icon
-                IconButton(
-                  icon: const Icon(Symbols.menu,
-                      color: Color(0xFF8B96A5), size: 24),
-                  onPressed: () {},
-                ),
+                const SizedBox(width: 48),
                 // Center: title + device chip (absolutely centered)
                 Expanded(
                   child: Column(
@@ -335,33 +332,7 @@ PreferredSizeWidget _buildAppBar(
                     ],
                   ),
                 ),
-                // Right: notifications dot
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Symbols.notifications,
-                          color: Color(0xFF8B96A5), size: 24),
-                      onPressed: () {},
-                    ),
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.error,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.background,
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                const AlertBellButton(color: Color(0xFF8B96A5)),
               ],
             ),
           ),
@@ -371,19 +342,3 @@ PreferredSizeWidget _buildAppBar(
   );
 }
 
-// ── Nav tap handler ──────────────────────────────────────────────────────────
-
-void _handleNavTap(BuildContext context, int index) {
-  switch (index) {
-    case 0:
-      context.go('/home');
-    case 1:
-      break; // already on History
-    case 2:
-      context.go('/alerts');
-    case 3:
-      context.go('/devices');
-    case 4:
-      context.go('/settings');
-  }
-}

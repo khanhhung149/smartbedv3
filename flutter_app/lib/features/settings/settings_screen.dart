@@ -9,6 +9,7 @@ import '../../core/app_theme.dart';
 import '../../core/constants.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/services/fcm_service.dart';
+import '../../shared/widgets/alert_bell_button.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 
 // Settings screen.
@@ -58,11 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 4,
-        onTap: (i) => _handleNavTap(context, i),
-      ),
+      appBar: _buildAppBar(context),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 88, 24, 32),
         child: Column(
@@ -178,32 +175,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _handleNavTap(BuildContext context, int index) {
-    switch (index) {
-      case 0:
-        context.go('/home');
-      case 1:
-        context.go('/history');
-      case 2:
-        context.go('/alerts');
-      case 3:
-        context.go('/devices');
-      case 4:
-        break; // already here
-    }
-  }
 }
 
 // ── App bar ───────────────────────────────────────────────────────────────────
 
-PreferredSizeWidget _buildAppBar() {
+PreferredSizeWidget _buildAppBar(BuildContext context) {
+  // Include the top safe-area so the 64px toolbar isn't squeezed by the
+  // status bar / Dynamic Island on iPhones.
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 64 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(64),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 64,
+          height: totalHeight,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -214,16 +201,16 @@ PreferredSizeWidget _buildAppBar() {
               ],
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: SafeArea(
-            bottom: false,
+          padding: EdgeInsets.only(
+            top: topInset,
+            left: 8,
+            right: 8,
+          ),
+          child: SizedBox(
+            height: 64,
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Symbols.menu,
-                      color: AppColors.primaryContainer, size: 24),
-                  onPressed: () {},
-                ),
+                const SizedBox(width: 48),
                 Expanded(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -240,11 +227,7 @@ PreferredSizeWidget _buildAppBar() {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Symbols.notifications,
-                      color: AppColors.primaryContainer, size: 24),
-                  onPressed: () {},
-                ),
+                const AlertBellButton(color: AppColors.primaryContainer),
               ],
             ),
           ),

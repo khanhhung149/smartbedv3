@@ -1,5 +1,8 @@
-// RealtimeData: maps the sec_data row streamed via WS /ws/{device_id}?token=...
-// All fields are nullable — sensor may emit partial frames.
+// RealtimeData: merged view of a sec or min frame streamed via WS.
+// Field names match the backend payload exactly (see backend/app/mqtt/parser.py
+// SecDataPayload / MinDataPayload) — using different names breaks parsing.
+// All optional fields are nullable because min frames carry movement/snore
+// while sec frames do not.
 class RealtimeData {
   const RealtimeData({
     required this.deviceId,
@@ -12,35 +15,36 @@ class RealtimeData {
     this.snore,
     this.respDisorder,
     this.statusCode,
+    this.temp,
   });
 
   final String deviceId;
-  final String ts;
+  // Device timestamp (seconds since boot) — int per protocol.
+  final int ts;
   final double? hr;
   final double? rr;
-  // Raw signal amplitude (percentage displayed as-is)
   final double? sdata;
-  // Piezo voltage reading
   final double? pdata;
-  // Movement intensity (0–100)
   final int? movement;
-  // Snore event count in this second
   final int? snore;
-  // Respiration disorder flag count
   final int? respDisorder;
-  // ESP32 status code 0x01–0x08
   final int? statusCode;
+  // Body temperature in °C (only present on min frames).
+  final double? temp;
 
   factory RealtimeData.fromJson(Map<String, dynamic> json) => RealtimeData(
         deviceId: json['device_id'] as String? ?? '',
-        ts: json['ts'] as String? ?? '',
-        hr: (json['hr'] as num?)?.toDouble(),
-        rr: (json['rr'] as num?)?.toDouble(),
+        ts: (json['ts'] as num?)?.toInt() ?? 0,
+        // Backend → Flutter field mapping.  Do NOT rename — the producer side
+        // uses the protocol names (heart_rate, resp_rate, status, snore_count).
+        hr: (json['heart_rate'] as num?)?.toDouble(),
+        rr: (json['resp_rate'] as num?)?.toDouble(),
         sdata: (json['sdata'] as num?)?.toDouble(),
         pdata: (json['pdata'] as num?)?.toDouble(),
-        movement: json['movement'] as int?,
-        snore: json['snore'] as int?,
-        respDisorder: json['resp_disorder'] as int?,
-        statusCode: json['status_code'] as int?,
+        movement: (json['movement'] as num?)?.toInt(),
+        snore: (json['snore_count'] as num?)?.toInt(),
+        respDisorder: (json['resp_disorder'] as num?)?.toInt(),
+        statusCode: (json['status'] as num?)?.toInt(),
+        temp: (json['temp'] as num?)?.toDouble(),
       );
 }

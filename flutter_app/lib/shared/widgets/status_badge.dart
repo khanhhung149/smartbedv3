@@ -69,21 +69,22 @@ const _defaultStatus = StatusConfig(
   icon: Symbols.sensors_off,
 );
 
-// Hero status section matching the design's status band:
-//   - bg surface-container-low (#181C21), rounded-lg, p-6
-//   - gradient overlay from-primary/10 to-transparent
-//   - w-16 h-16 rounded-full icon container with glow shadow
-//   - 30sp bold tracking-tight label in status color
-//   - 14sp subtitle in on-surface-variant
+enum DeviceLinkState { connecting, connected, disconnected }
+
+// Compact status band: single row with icon + status label on the left and
+// a pulsing connection dot on the right.
+//   - connecting → blue, pulsing
+//   - connected  → green, steady
+//   - disconnected → red, steady
 class StatusHero extends StatelessWidget {
   const StatusHero({
     super.key,
     this.statusCode,
-    this.subtitle = 'Device active & monitoring',
+    this.connection = DeviceLinkState.connecting,
   });
 
   final int? statusCode;
-  final String subtitle;
+  final DeviceLinkState connection;
 
   @override
   Widget build(BuildContext context) {
@@ -94,76 +95,90 @@ class StatusHero extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow, // #181C21
-        borderRadius: BorderRadius.circular(16), // rounded-lg
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.all(24), // p-6
-      child: Stack(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+      child: Row(
         children: [
-          // Gradient overlay: from-primary/10 to-transparent
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.primary.withValues(alpha: 0.10),
-                    Colors.transparent,
-                  ],
-                ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: cfg.color.withValues(alpha: 0.20),
+            ),
+            child: Icon(cfg.icon, size: 24, color: cfg.color, fill: 1),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              cfg.label,
+              style: GoogleFonts.inter(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: cfg.color,
+                letterSpacing: -0.3,
               ),
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon circle with subtle glow
-              Container(
-                width: 64,  // w-16
-                height: 64, // h-16
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: cfg.color.withValues(alpha: 0.20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: cfg.color.withValues(alpha: 0.10),
-                      blurRadius: 40,
-                      spreadRadius: 0,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  cfg.icon,
-                  size: 32, // text-3xl ≈ 30sp
-                  color: cfg.color,
-                  fill: 1,
-                ),
-              ),
-              const SizedBox(height: 12), // gap-3
-              Text(
-                cfg.label,
-                style: GoogleFonts.inter(
-                  fontSize: 30, // text-3xl
-                  fontWeight: FontWeight.w700,
-                  color: cfg.color,
-                  letterSpacing: -0.5, // tracking-tight
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.onSurfaceVariant,
-                ),
+          // Connection dot (pulsing when connecting)
+          _ConnectionDot(connection: connection),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectionDot extends StatefulWidget {
+  const _ConnectionDot({required this.connection});
+  final DeviceLinkState connection;
+
+  @override
+  State<_ConnectionDot> createState() => _ConnectionDotState();
+}
+
+class _ConnectionDotState extends State<_ConnectionDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Color get _dotColor => switch (widget.connection) {
+        DeviceLinkState.connected => const Color(0xFF34D399),    // green
+        DeviceLinkState.connecting => const Color(0xFF60A5FA),   // blue
+        DeviceLinkState.disconnected => const Color(0xFFF06262), // red
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final animates = widget.connection == DeviceLinkState.connecting;
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final opacity = animates ? 0.4 + _ctrl.value * 0.6 : 1.0;
+        return Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _dotColor.withValues(alpha: opacity),
+            boxShadow: [
+              BoxShadow(
+                color: _dotColor.withValues(alpha: animates ? opacity * 0.5 : 0.35),
+                blurRadius: 8,
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
+import '../../shared/widgets/alert_bell_button.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/metric_card.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../data/models/realtime_data.dart';
+import '../data/providers/history_provider.dart';
 import '../data/providers/realtime_provider.dart';
 import '../data/providers/selected_device_provider.dart';
 import 'device_selector_sheet.dart';
@@ -68,7 +70,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // across devices.
         return _HomeContent(
           key: ValueKey(device.deviceId),
-          deviceName: device.name,
+          deviceName: device.displayName,
           deviceId: device.deviceId,
           onDeviceTap: _openDeviceSheet,
         );
@@ -149,8 +151,49 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
   // with a new ValueKey(deviceId).
   final List<double> _hrHistory = [];
   final List<double> _rrHistory = [];
+  final List<double> _tempHistory = [];
+  // All three sparklines share a 60-point / 1-minute-bucketed window.  The
+  // WS stream (per-second) appends live points on top of the preload.
   static const int _sparklineMax = 60;
+  static const int _tempSparklineMax = 60;
   RealtimeData? _latest;
+
+  @override
+  void initState() {
+    super.initState();
+    // Preload last 1 hour from DB so sparklines (+ temp value) aren't empty
+    // for the 60s it takes the first min frame to arrive.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final history = await ref
+            .read(historyProvider((deviceId: widget.deviceId, range: 'hour'))
+                .future);
+        if (!mounted) return;
+        setState(() {
+          for (final p in history.points) {
+            if (p.hr != null) _hrHistory.add(p.hr!);
+            if (p.rr != null) _rrHistory.add(p.rr!);
+            if (p.temp != null) _tempHistory.add(p.temp!);
+          }
+          // Pin temp to the last value so the card shows a number immediately
+          // (WS min frame won't arrive for up to 60s).
+          final lastTemp = history.points
+              .where((p) => p.temp != null)
+              .map((p) => p.temp!)
+              .lastOrNull;
+          if (lastTemp != null) {
+            _latest = RealtimeData(
+              deviceId: widget.deviceId,
+              ts: 0,
+              temp: lastTemp,
+            );
+          }
+        });
+      } catch (_) {
+        // Preload failure is non-fatal — WS stream will fill buffers over time.
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +206,21 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
         next.whenData((data) {
           if (!mounted) return;
           setState(() {
-            _latest = data;
+            // Merge so fields present only on min frames (movement, snore,
+            // temp) survive the interleaved sec frames that don't carry them.
+            _latest = RealtimeData(
+              deviceId: data.deviceId,
+              ts: data.ts,
+              hr: data.hr ?? _latest?.hr,
+              rr: data.rr ?? _latest?.rr,
+              sdata: data.sdata ?? _latest?.sdata,
+              pdata: data.pdata ?? _latest?.pdata,
+              movement: data.movement ?? _latest?.movement,
+              snore: data.snore ?? _latest?.snore,
+              respDisorder: data.respDisorder ?? _latest?.respDisorder,
+              statusCode: data.statusCode ?? _latest?.statusCode,
+              temp: data.temp ?? _latest?.temp,
+            );
             if (data.hr != null) {
               _hrHistory.add(data.hr!);
               if (_hrHistory.length > _sparklineMax) _hrHistory.removeAt(0);
@@ -172,103 +229,77 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
               _rrHistory.add(data.rr!);
               if (_rrHistory.length > _sparklineMax) _rrHistory.removeAt(0);
             }
+            if (data.temp != null) {
+              _tempHistory.add(data.temp!);
+              if (_tempHistory.length > _tempSparklineMax) {
+                _tempHistory.removeAt(0);
+              }
+            }
           });
         });
       },
     );
     final streamAsync = ref.watch(realtimeProvider(widget.deviceId));
 
-    final isConnected = streamAsync is! AsyncError;
+    final connection = switch (streamAsync) {
+      AsyncError() => DeviceLinkState.disconnected,
+      AsyncData() when _latest != null => DeviceLinkState.connected,
+      _ => DeviceLinkState.connecting,
+    };
 
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(widget.deviceName, widget.onDeviceTap),
+      appBar: _buildAppBar(context, widget.deviceName, widget.onDeviceTap),
       body: Column(
         children: [
-          // Offline banner
           if (streamAsync is AsyncError)
             _OfflineBanner(message: 'Reconnecting to ${widget.deviceName}…'),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top padding to clear sticky app bar (approx 80px)
-                  const SizedBox(height: 80),
-                  // Status hero band
+                  SizedBox(height: 72 + MediaQuery.of(context).padding.top + 4),
                   StatusHero(
                     statusCode: _latest?.statusCode,
-                    subtitle: isConnected
-                        ? 'Device active & monitoring'
-                        : 'Signal lost — reconnecting',
+                    connection: connection,
                   ),
-                  const SizedBox(height: 24),
-                  // Primary metric cards (bento 2-col on wide, stacked on narrow)
-                  LayoutBuilder(builder: (context, constraints) {
-                    if (constraints.maxWidth >= 480) {
-                      return Row(
-                        children: [
-                          Expanded(
-                            child: MetricCard(
-                              label: 'HEART RATE',
-                              value: _latest?.hr,
-                              unit: 'bpm',
-                              icon: Symbols.favorite,
-                              accentColor: AppColors.primaryContainer, // #5EE7DF
-                              sparklineValues: List.of(_hrHistory),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: MetricCard(
-                              label: 'RESPIRATION',
-                              value: _latest?.rr,
-                              unit: 'rpm',
-                              icon: Symbols.air,
-                              accentColor: AppColors.secondary, // #D4BBFF
-                              sparklineValues: List.of(_rrHistory),
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-                    // Narrow: stack vertically
-                    return Column(
-                      children: [
-                        MetricCard(
-                          label: 'HEART RATE',
-                          value: _latest?.hr,
-                          unit: 'bpm',
-                          icon: Symbols.favorite,
-                          accentColor: AppColors.primaryContainer,
-                          sparklineValues: List.of(_hrHistory),
-                        ),
-                        const SizedBox(height: 16),
-                        MetricCard(
-                          label: 'RESPIRATION',
-                          value: _latest?.rr,
-                          unit: 'rpm',
-                          icon: Symbols.air,
-                          accentColor: AppColors.secondary,
-                          sparklineValues: List.of(_rrHistory),
-                        ),
-                      ],
-                    );
-                  }),
-                  const SizedBox(height: 24),
-                  // Secondary 2×2 grid
+                  const SizedBox(height: 10),
+                  MetricCard(
+                    label: 'HEART RATE',
+                    value: _latest?.hr,
+                    unit: 'bpm',
+                    icon: Symbols.favorite,
+                    accentColor: AppColors.primaryContainer,
+                    sparklineValues: List.of(_hrHistory),
+                  ),
+                  const SizedBox(height: 10),
+                  MetricCard(
+                    label: 'RESPIRATION',
+                    value: _latest?.rr,
+                    unit: 'rpm',
+                    icon: Symbols.air,
+                    accentColor: AppColors.secondary,
+                    sparklineValues: List.of(_rrHistory),
+                  ),
+                  const SizedBox(height: 10),
+                  MetricCard(
+                    label: 'TEMPERATURE',
+                    value: _latest?.temp,
+                    unit: '°C',
+                    icon: Symbols.thermostat,
+                    accentColor: const Color(0xFFFFB470),
+                    sparklineValues: List.of(_tempHistory),
+                  ),
+                  const SizedBox(height: 10),
                   HomeSecondaryMetrics(data: _latest),
                 ],
               ),
             ),
           ),
         ],
-      ),
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: 0, // Home active
-        onTap: (i) => _handleNavTap(context, i),
       ),
     );
   }
@@ -277,28 +308,30 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
 // ── App bar ──────────────────────────────────────────────────────────────────
 
 PreferredSizeWidget _buildAppBar(
+  BuildContext context,
   String deviceName,
   VoidCallback onDeviceTap,
 ) {
+  // Add the status-bar inset so the 72px toolbar isn't squeezed by the notch.
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 72 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(72),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 72,
+          height: totalHeight,
           color: const Color(0xB3101419), // #101419/70
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: SafeArea(
-            bottom: false,
+          padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
+          child: SizedBox(
+            height: 72,
             child: Row(
               children: [
-                // Left: menu icon
-                IconButton(
-                  icon: const Icon(Symbols.menu,
-                      color: Color(0xFF8B96A5), size: 24),
-                  onPressed: () {},
-                ),
+                // Left: reserved spacer (menu removed — shell's nav already
+                // covers discovery; keeping width matches bell button size
+                // so title stays centered).
+                const SizedBox(width: 48),
                 // Center: title + device chip
                 Expanded(
                   child: Column(
@@ -351,33 +384,9 @@ PreferredSizeWidget _buildAppBar(
                     ],
                   ),
                 ),
-                // Right: notifications with dot
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Symbols.notifications,
-                          color: Color(0xFF8B96A5), size: 24),
-                      onPressed: () {},
-                    ),
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.error, // #ffb4ab
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.background,
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // Right: shared bell — dot only when unread alerts exist,
+                // tap navigates to /alerts.
+                const AlertBellButton(color: Color(0xFF8B96A5)),
               ],
             ),
           ),
@@ -412,19 +421,3 @@ class _OfflineBanner extends StatelessWidget {
   }
 }
 
-// ── Nav tap handler ──────────────────────────────────────────────────────────
-
-void _handleNavTap(BuildContext context, int index) {
-  switch (index) {
-    case 0:
-      break; // already on Home
-    case 1:
-      context.go('/history');
-    case 2:
-      context.go('/alerts');
-    case 3:
-      context.go('/devices');
-    case 4:
-      context.go('/settings');
-  }
-}
