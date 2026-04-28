@@ -7,6 +7,8 @@
 **Date:** 2026-04-29
 **Branch:** main @ `0acd92a`
 
+**Multi-machine sync bundle:** see `docs/sync/README.md` for full import instructions on a new machine (auto-memory, env config, secrets). This file = session narrative; sync bundle = mechanical restore steps.
+
 ---
 
 ## Session Summary (2026-04-22 → 2026-04-29)

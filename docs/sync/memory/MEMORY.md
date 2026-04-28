@@ -1,0 +1,4 @@
+- [Michael - IoT/Embedded dev](user_michael.md) — Vietnamese speaker, ESP32/ESPHome experience, prefers practical POC approach
+- [Sleep Pad Full Platform](project_sleep_pad_poc.md) — Backend + ESP32 firmware + Flutter app, 8 phases completed 2026-04-21
+- [Stitch → Flutter pixel-perfect workflow](feedback_stitch_to_flutter_workflow.md) — HTML is ground truth, Tailwind→Flutter 1:1, pick canonical shared widgets from first screen
+- [Michael delegates heavy work to background agents](feedback_subagent_delegation.md) — Dispatch phase-scale work async so user can work in parallel
