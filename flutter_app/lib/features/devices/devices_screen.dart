@@ -3,16 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
-import '../../shared/widgets/app_bottom_nav.dart';
-import '../../shared/widgets/primary_button.dart';
-import '../sharing/models/pending_invite_out.dart';
-import '../sharing/models/shared_device_out.dart';
 import '../sharing/providers/sharing_providers.dart';
-import '../sharing/sharing_repository.dart';
-import 'models/device_out.dart';
+import 'devices_list_widgets.dart';
+import 'devices_my_section.dart';
+import 'devices_pending_invites_section.dart';
+import 'devices_shared_section.dart';
 import 'providers/devices_list_provider.dart';
 
 // Devices list screen.
@@ -47,8 +44,7 @@ class DevicesScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 88), // clear app bar
-              // PENDING INVITES section — only renders when there are any,
-              // so users without pending invites don't see an empty section.
+              // PENDING INVITES — only renders when there are pending invites.
               pendingAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
@@ -59,25 +55,25 @@ class DevicesScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionHeader(label: 'PENDING INVITES'),
+                        const DevicesSectionHeader(label: 'PENDING INVITES'),
                         const SizedBox(height: 16),
                         ...invites.map((inv) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: _PendingInviteTile(invite: inv),
+                              child: PendingInviteTile(invite: inv),
                             )),
                       ],
                     ),
                   );
                 },
               ),
-              // MY DEVICES section
-              const _SectionHeader(label: 'MY DEVICES'),
+              // MY DEVICES
+              const DevicesSectionHeader(label: 'MY DEVICES'),
               const SizedBox(height: 16),
               myDevicesAsync.when(
-                loading: () => const _LoadingRow(),
-                error: (e, _) => _ErrorRow(message: e.toString()),
+                loading: () => const DevicesLoadingRow(),
+                error: (e, _) => DevicesErrorRow(message: e.toString()),
                 data: (devices) => devices.isEmpty
-                    ? _EmptyHint(
+                    ? DevicesEmptyHint(
                         message: 'No devices paired yet.',
                         onAction: () => context.push('/devices/add'),
                         actionLabel: 'Add device',
@@ -86,7 +82,7 @@ class DevicesScreen extends ConsumerWidget {
                         children: devices
                             .map((d) => Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
-                                  child: _MyDeviceTile(
+                                  child: MyDeviceTile(
                                     device: d,
                                     onTap: () =>
                                         context.push('/devices/${d.deviceId}'),
@@ -96,19 +92,20 @@ class DevicesScreen extends ConsumerWidget {
                       ),
               ),
               const SizedBox(height: 32),
-              // SHARED WITH ME section
-              const _SectionHeader(label: 'SHARED WITH ME'),
+              // SHARED WITH ME
+              const DevicesSectionHeader(label: 'SHARED WITH ME'),
               const SizedBox(height: 16),
               sharedAsync.when(
-                loading: () => const _LoadingRow(),
-                error: (e, _) => _ErrorRow(message: e.toString()),
+                loading: () => const DevicesLoadingRow(),
+                error: (e, _) => DevicesErrorRow(message: e.toString()),
                 data: (shared) => shared.isEmpty
-                    ? const _EmptyHint(message: 'No devices shared with you.')
+                    ? const DevicesEmptyHint(
+                        message: 'No devices shared with you.')
                     : Column(
                         children: shared
                             .map((s) => Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
-                                  child: _SharedDeviceTile(device: s),
+                                  child: SharedDeviceTile(device: s),
                                 ))
                             .toList(),
                       ),
@@ -119,7 +116,6 @@ class DevicesScreen extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 // ── App bar ───────────────────────────────────────────────────────────────────
@@ -134,13 +130,11 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           height: totalHeight,
-          color: const Color(0xCC020617), // bg-slate-950/80
+          color: const Color(0xCC020617),
           padding: EdgeInsets.only(top: topInset, left: 8, right: 8),
           child: SizedBox(
             height: 64,
             child: Row(
-              // Keep the "+" button on the right; left side is intentionally
-              // empty (3-line menu removed per UX cleanup).
               children: [
                 const SizedBox(width: 48),
                 Expanded(
@@ -167,428 +161,4 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
       ),
     ),
   );
-}
-
-// ── Section header ────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: GoogleFonts.inter(
-        fontSize: AppTextSize.sm,
-        fontWeight: AppFontWeight.semiBold,
-        color: AppColors.secondary,
-        letterSpacing: 1.5,
-      ),
-    );
-  }
-}
-
-// ── My device tile ────────────────────────────────────────────────────────────
-
-class _MyDeviceTile extends StatelessWidget {
-  const _MyDeviceTile({required this.device, required this.onTap});
-
-  final DeviceOut device;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: AppRadius.defaultBr,
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainer,
-            borderRadius: AppRadius.defaultBr,
-            boxShadow: const [
-              BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 24,
-                  offset: Offset(0, 4))
-            ],
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Row(
-            children: [
-              // Icon
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryContainer.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.bed,
-                    color: AppColors.primaryContainer, size: 24, fill: 1),
-              ),
-              const SizedBox(width: 16),
-              // Name + status
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(device.displayName,
-                        style: GoogleFonts.inter(
-                          fontSize: AppTextSize.lg,
-                          fontWeight: AppFontWeight.semiBold,
-                          color: AppColors.onSurface,
-                        )),
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      Text(
-                        'Paired ${_formatPairedDate(device.pairedAt)}',
-                        style: GoogleFonts.inter(
-                          fontSize: AppTextSize.xs,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                          width: 4,
-                          height: 4,
-                          decoration: const BoxDecoration(
-                              color: AppColors.outlineVariant,
-                              shape: BoxShape.circle)),
-                      const SizedBox(width: 8),
-                      if (device.online) ...[
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          device.lastSeen != null
-                              ? 'Active ${_relativeTime(device.lastSeen!)}'
-                              : 'Online',
-                          style: GoogleFonts.inter(
-                            fontSize: AppTextSize.xs,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ] else
-                        Text('Offline',
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.xs,
-                              color: AppColors.onSurfaceVariant,
-                            )),
-                    ]),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right,
-                  color: AppColors.onSurfaceVariant, size: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatPairedDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      const months = [
-        'Jan','Feb','Mar','Apr','May','Jun',
-        'Jul','Aug','Sep','Oct','Nov','Dec'
-      ];
-      return '${months[dt.month - 1]} ${dt.day}';
-    } catch (_) {
-      return iso;
-    }
-  }
-
-  String _relativeTime(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 2) return 'just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-      return '${diff.inHours}h ago';
-    } catch (_) {
-      return '';
-    }
-  }
-}
-
-// ── Pending invite tile ───────────────────────────────────────────────────────
-
-class _PendingInviteTile extends ConsumerStatefulWidget {
-  const _PendingInviteTile({required this.invite});
-  final PendingInviteOut invite;
-
-  @override
-  ConsumerState<_PendingInviteTile> createState() => _PendingInviteTileState();
-}
-
-class _PendingInviteTileState extends ConsumerState<_PendingInviteTile> {
-  bool _busy = false;
-
-  Future<void> _accept() async {
-    final repo = ref.read(sharingRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _busy = true);
-    try {
-      await repo.acceptInvite(widget.invite.shareId);
-      ref.invalidate(pendingInvitesProvider);
-      ref.invalidate(mySharedDevicesProvider);
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _decline() async {
-    final repo = ref.read(sharingRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _busy = true);
-    try {
-      await repo.deleteShare(widget.invite.shareId);
-      ref.invalidate(pendingInvitesProvider);
-    } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final inv = widget.invite;
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: AppRadius.defaultBr,
-        border: Border.all(
-          color: AppColors.primaryContainer.withValues(alpha: 0.3),
-        ),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.mail_outline,
-                  color: AppColors.primaryContainer, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    inv.deviceName,
-                    style: GoogleFonts.inter(
-                      fontSize: AppTextSize.base,
-                      fontWeight: AppFontWeight.semiBold,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Invite from ${inv.ownerEmail}',
-                    style: GoogleFonts.inter(
-                      fontSize: AppTextSize.xs,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ]),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _busy ? null : _decline,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  side: BorderSide(
-                      color: AppColors.outlineVariant.withValues(alpha: 0.4)),
-                ),
-                child: Text('Decline',
-                    style: GoogleFonts.inter(color: AppColors.onSurface)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton(
-                onPressed: _busy ? null : _accept,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primaryContainer,
-                  foregroundColor: AppColors.onPrimaryContainer,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-                child: _busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.onPrimaryContainer),
-                      )
-                    : Text('Accept',
-                        style: GoogleFonts.inter(
-                            fontWeight: AppFontWeight.semiBold)),
-              ),
-            ),
-          ]),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Shared device tile ────────────────────────────────────────────────────────
-
-class _SharedDeviceTile extends StatelessWidget {
-  const _SharedDeviceTile({required this.device});
-  final SharedDeviceOut device;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: AppRadius.defaultBr,
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x33000000), blurRadius: 24, offset: Offset(0, 4))
-        ],
-      ),
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.secondaryContainer.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.home,
-                color: AppColors.secondary, size: 24, fill: 1),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Text(device.deviceName,
-                      style: GoogleFonts.inter(
-                        fontSize: AppTextSize.lg,
-                        fontWeight: AppFontWeight.semiBold,
-                        color: AppColors.onSurface,
-                      )),
-                  const SizedBox(width: 8),
-                  // "view only" chip
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(
-                          color: AppColors.outlineVariant.withValues(alpha: 0.3)),
-                    ),
-                    child: Text('view only',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: AppFontWeight.bold,
-                          color: AppColors.onSurfaceVariant,
-                          letterSpacing: 0.8,
-                        )),
-                  ),
-                ]),
-                const SizedBox(height: 4),
-                Text('Shared by ${device.ownerEmail}',
-                    style: GoogleFonts.inter(
-                      fontSize: AppTextSize.xs,
-                      color: AppColors.onSurfaceVariant,
-                    )),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right,
-              color: AppColors.onSurfaceVariant, size: 24),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Utility widgets ───────────────────────────────────────────────────────────
-
-class _LoadingRow extends StatelessWidget {
-  const _LoadingRow();
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(
-              color: AppColors.primaryContainer, strokeWidth: 2),
-        ),
-      );
-}
-
-class _ErrorRow extends StatelessWidget {
-  const _ErrorRow({required this.message});
-  final String message;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Text(message,
-            style: GoogleFonts.inter(
-                color: AppColors.error, fontSize: AppTextSize.sm)),
-      );
-}
-
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.message, this.onAction, this.actionLabel});
-  final String message;
-  final VoidCallback? onAction;
-  final String? actionLabel;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(message,
-                style: GoogleFonts.inter(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: AppTextSize.sm)),
-          ),
-          if (onAction != null && actionLabel != null) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: PrimaryButton(label: actionLabel!, onPressed: onAction),
-            ),
-          ],
-        ],
-      );
 }

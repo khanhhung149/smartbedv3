@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/alert_out.dart';
-import 'thresholds_provider.dart';
+import 'alerts_repository_provider.dart';
 
 // Fetches alert history for a specific device, newest-first.
 final alertHistoryProvider =

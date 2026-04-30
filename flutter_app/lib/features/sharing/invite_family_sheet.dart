@@ -6,7 +6,8 @@ import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/stitch_text_field.dart';
 import 'providers/sharing_providers.dart';
-import 'sharing_repository.dart';
+import 'providers/sharing_repository_provider.dart';
+import 'sharing_repository_impl.dart' show SharingException;
 
 // Invite-by-email modal bottom sheet.
 // Source: invite_family_modal/code.html

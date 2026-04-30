@@ -8,7 +8,8 @@ import '../../core/app_theme.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
-import 'auth_repository.dart';
+import 'auth_repository_impl.dart' show AuthException;
+import 'providers/auth_repository_provider.dart';
 
 // Register screen matching register/code.html:
 // - bg-surface-container-lowest, centered max-w-[360px]
@@ -64,10 +65,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     setState(() => _loading = true);
     try {
-      await AuthRepository().register(email, pass);
+      final authRepo = ref.read(authRepositoryProvider);
+      await authRepo.register(email, pass);
       if (!mounted) return;
       // Auto-login after successful registration
-      final token = await AuthRepository().login(email, pass);
+      final token = await authRepo.login(email, pass);
       if (!mounted) return;
       ref.read(authProvider.notifier).setToken(token);
       context.go('/home');

@@ -8,7 +8,8 @@ import '../../core/app_theme.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
-import 'auth_repository.dart';
+import 'auth_repository_impl.dart' show AuthException;
+import 'providers/auth_repository_provider.dart';
 
 // Login screen matching login/code.html:
 // - bg-background, centered max-w-sm column
@@ -58,7 +59,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _loading = true);
     try {
-      final token = await AuthRepository().login(email, pass);
+      final token = await ref.read(authRepositoryProvider).login(email, pass);
       if (!mounted) return;
       ref.read(authProvider.notifier).setToken(token);
       context.go('/home');
