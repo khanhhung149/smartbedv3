@@ -1,16 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'app.dart';
-import 'shared/services/fcm_service.dart';
+// Default entry point — delegates to the dev flavor entry point.
+// Keeps existing IDE run configurations working without changes.
+// For production builds use: flutter build apk -t lib/main/main_prod.dart
+import 'main/main_dev.dart' as entry;
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // FCM: no-op in dev (no google-services.json); logs warning and continues.
-  // In production: add Firebase credentials + deps to enable push.
-  await FcmService.initialize();
-  runApp(
-    const ProviderScope(
-      child: SleepPadApp(),
-    ),
-  );
-}
+void main() => entry.main();

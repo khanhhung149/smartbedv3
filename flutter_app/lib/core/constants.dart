@@ -1,9 +1,8 @@
-// App-wide constants: API base URL and BLE UUIDs.
+// App-wide constants: storage keys, BLE UUIDs, FCM channel.
+// API/WS URLs have moved to AppEnv (lib/core/config/app_env.dart) — use
+// appEnvProvider to read them in providers and services.
 // BLE UUIDs are authoritative from docs/protocols/ble-provisioning-and-mqtt-auth.md
 abstract final class AppConstants {
-  // API base URL — parameterized for easy env switching (dev LAN default)
-  static const String apiBaseUrl = 'http://192.168.1.15:8000';
-
   // JWT secure storage key
   static const String jwtStorageKey = 'jwt';
 
@@ -28,11 +27,4 @@ abstract final class AppConstants {
 
   // Secure storage key for persisting last selected device id
   static const String lastDeviceIdKey = 'last_device_id';
-
-  // WebSocket base URL — derived from apiBaseUrl by swapping http(s) scheme.
-  static String get wsBaseUrl {
-    return apiBaseUrl
-        .replaceFirst('https://', 'wss://')
-        .replaceFirst('http://', 'ws://');
-  }
 }

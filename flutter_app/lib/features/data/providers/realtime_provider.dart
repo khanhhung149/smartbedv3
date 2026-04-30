@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../../../core/constants.dart';
+import '../../../shared/providers/app_env_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../models/realtime_data.dart';
 
@@ -50,7 +50,7 @@ final realtimeProvider =
     WebSocketChannel? channel;
     try {
       final uri = Uri.parse(
-        '${AppConstants.wsBaseUrl}/ws/$deviceId?token=$token',
+        '${ref.read(appEnvProvider).wsBaseUrl}/ws/$deviceId?token=$token',
       );
       channel = WebSocketChannel.connect(uri);
       activeChannel = channel;

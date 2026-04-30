@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../core/constants.dart';
 import '../../devices/models/device_out.dart';
-import '../../devices/device_repository.dart';
+import '../../devices/providers/device_repository_provider.dart';
 
 // Persists + exposes the active device selection.
 // On first load reads last_device_id from secure storage; falls back to
@@ -15,7 +15,7 @@ class SelectedDeviceNotifier extends AsyncNotifier<DeviceOut?> {
 
   @override
   Future<DeviceOut?> build() async {
-    final devices = await DeviceRepository().getMyDevices();
+    final devices = await ref.read(deviceRepositoryProvider).getMyDevices();
     if (devices.isEmpty) return null;
 
     final lastId = await _storage.read(key: AppConstants.lastDeviceIdKey);
@@ -28,7 +28,8 @@ class SelectedDeviceNotifier extends AsyncNotifier<DeviceOut?> {
   }
 
   // Devices list used by bottom sheet selector.
-  Future<List<DeviceOut>> listDevices() => DeviceRepository().getMyDevices();
+  Future<List<DeviceOut>> listDevices() =>
+      ref.read(deviceRepositoryProvider).getMyDevices();
 
   Future<void> selectDevice(DeviceOut device) async {
     state = AsyncData(device);

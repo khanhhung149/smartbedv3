@@ -1,14 +1,15 @@
 import 'package:dio/dio.dart';
 import 'auth_storage.dart';
-import 'constants.dart';
 
 // Dio HTTP client with JWT Bearer interceptor.
 // All requests to protected endpoints automatically include Authorization header.
+// baseUrl is injected by apiClientProvider (see lib/shared/providers/api_client_provider.dart)
+// so the correct flavor URL is used without hardcoding.
 class ApiClient {
-  ApiClient({AuthStorage? storage})
+  ApiClient({required String baseUrl, AuthStorage? storage})
       : _storage = storage ?? AuthStorage() {
     _dio = Dio(BaseOptions(
-      baseUrl: AppConstants.apiBaseUrl,
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
       headers: {'Content-Type': 'application/json'},

@@ -1,13 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../sharing_repository.dart';
 import '../models/pending_invite_out.dart';
 import '../models/share_out.dart';
 import '../models/shared_device_out.dart';
-
-// Repository singleton
-final sharingRepositoryProvider = Provider<SharingRepository>(
-  (_) => SharingRepository(),
-);
+import 'sharing_repository_provider.dart';
 
 // Devices shared with the current user (viewed as a guest)
 final mySharedDevicesProvider =

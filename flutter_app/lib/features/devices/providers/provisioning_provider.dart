@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ble_service.dart';
 import '../device_repository.dart';
 import '../models/device_pair_out.dart';
+import 'device_repository_provider.dart';
 import '../models/provision_payload.dart';
 import 'ble_scan_provider.dart';
 
@@ -106,7 +107,7 @@ class ProvisioningNotifier extends Notifier<ProvisioningState> {
   ProvisioningState build() => const ProvisioningIdle();
 
   BleService get _ble => ref.read(bleServiceProvider);
-  DeviceRepository get _repo => DeviceRepository();
+  DeviceRepository get _repo => ref.read(deviceRepositoryProvider);
 
   // Cached across retries so writeProvisioningChars can reuse values the user
   // isn't editing (server host, MQTT creds).

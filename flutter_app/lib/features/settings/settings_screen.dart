@@ -6,11 +6,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
-import '../../core/constants.dart';
+import '../../shared/providers/app_env_provider.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/services/fcm_service.dart';
 import '../../shared/widgets/alert_bell_button.dart';
-import '../../shared/widgets/app_bottom_nav.dart';
+
 
 // Settings screen.
 // Source: settings_synced/code.html
@@ -26,7 +26,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushEnabled = true;
   bool _quietHours = false;
   int _themeIndex = 2; // 0=System, 1=Light, 2=Dark (default Dark per spec)
-  String _serverUrl = AppConstants.apiBaseUrl;
+  String _serverUrl = '';
   bool _loggingOut = false;
 
   @override
@@ -36,15 +36,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadPersistedSettings() async {
-    // Server URL could be stored in secure storage in production.
-    // For POC, we read the compile-time constant.
-    setState(() => _serverUrl = AppConstants.apiBaseUrl);
+    // Read the flavor-injected API URL from the provider.
+    // In-memory only for this POC; persistence deferred to a future task.
+    final env = ref.read(appEnvProvider);
+    setState(() => _serverUrl = env.apiBaseUrl);
   }
 
   Future<void> _logout() async {
     setState(() => _loggingOut = true);
     try {
-      await FcmService.clearToken();
+      await FcmService.clearToken(ref.read(appEnvProvider));
       final storage = ref.read(authStorageProvider);
       await storage.deleteToken();
       ref.read(authProvider.notifier).clearToken();

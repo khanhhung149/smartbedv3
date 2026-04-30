@@ -11,12 +11,11 @@ import 'features/devices/ble_scan_screen.dart';
 import 'features/devices/ble_provision_wifi_screen.dart';
 import 'features/devices/ble_provision_pairing_screen.dart';
 import 'features/devices/ble_provision_success_screen.dart';
-import 'features/devices/devices_screen.dart';
 import 'features/devices/device_detail_screen.dart';
 import 'features/devices/providers/provisioning_provider.dart';
 import 'features/alerts/alert_detail_screen.dart';
 import 'features/alerts/models/alert_out.dart';
-import 'features/sharing/sharing_repository.dart';
+import 'features/sharing/providers/sharing_repository_provider.dart';
 import 'shared/widgets/main_shell.dart';
 import 'core/app_colors.dart';
 
@@ -202,7 +201,7 @@ class _ShareAcceptHandlerState extends ConsumerState<_ShareAcceptHandler> {
   }
 
   Future<void> _accept() async {
-    final repo = SharingRepository();
+    final repo = ref.read(sharingRepositoryProvider);
     try {
       await repo.acceptInvite(widget.shareId);
       if (!mounted) return;
