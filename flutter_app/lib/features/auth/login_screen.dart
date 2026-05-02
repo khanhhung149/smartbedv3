@@ -194,7 +194,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 48, 0, 32),
               child: TextButton(
-                onPressed: () {}, // forgot password — future impl
+                onPressed: () => context.go('/forgot-password'),
                 child: Text(
                   'Forgot password?',
                   style: GoogleFonts.inter(

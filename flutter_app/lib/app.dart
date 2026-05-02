@@ -7,6 +7,9 @@ import 'shared/providers/auth_provider.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/register_screen.dart';
+import 'features/auth/verify_email_screen.dart';
+import 'features/auth/forgot_password_screen.dart';
+import 'features/auth/reset_password_screen.dart';
 import 'features/devices/ble_scan_screen.dart';
 import 'features/devices/ble_provision_wifi_screen.dart';
 import 'features/devices/ble_provision_pairing_screen.dart';
@@ -26,7 +29,14 @@ GoRouter _buildRouter(String? initialToken) {
     initialLocation: initialToken != null ? '/home' : '/onboarding',
     redirect: (context, state) {
       // Public routes — no auth required
-      final publicPaths = {'/onboarding', '/login', '/register'};
+      final publicPaths = {
+        '/onboarding',
+        '/login',
+        '/register',
+        '/verify-email',
+        '/forgot-password',
+        '/reset-password',
+      };
       if (publicPaths.contains(state.matchedLocation)) return null;
       // Protected: require JWT (checked synchronously from provider state;
       // storage-backed value is resolved before router is built in App widget)
@@ -44,6 +54,22 @@ GoRouter _buildRouter(String? initialToken) {
       GoRoute(
         path: '/register',
         builder: (_, __) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (context, state) => VerifyEmailScreen(
+          email: state.extra as String? ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, __) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          email: state.extra as String? ?? '',
+        ),
       ),
       // ── Main tab routes — all 5 share MainShell with sliding content ──
       GoRoute(

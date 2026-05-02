@@ -17,8 +17,8 @@ sealed class AppEnv {
 final class DevEnv extends AppEnv {
   const DevEnv()
       : super(
-          apiBaseUrl: 'http://192.168.1.15:8000',
-          wsBaseUrl: 'ws://192.168.1.15:8000',
+          apiBaseUrl: 'http://localhost:8000',
+          wsBaseUrl: 'ws://localhost:8000',
           isDev: true,
         );
 }

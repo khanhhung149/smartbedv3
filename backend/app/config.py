@@ -28,6 +28,10 @@ class Settings(BaseSettings):
 
     fcm_credentials_path: str = ""
 
+    mailgun_api_key: str = ""
+    mailgun_domain: str = ""
+    email_from: str = "SleepPad <noreply@sleeppad.io>"
+
 
 @lru_cache
 def get_settings() -> Settings:

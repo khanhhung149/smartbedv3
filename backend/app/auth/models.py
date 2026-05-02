@@ -27,3 +27,22 @@ class Token(BaseModel):
 
 class FcmTokenUpdate(BaseModel):
     fcm_token: str = Field(min_length=1, max_length=4096)
+
+
+class OtpVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r'^\d{6}$')
+
+
+class ResendOtpRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r'^\d{6}$')
+    password: str = Field(min_length=8, max_length=128)

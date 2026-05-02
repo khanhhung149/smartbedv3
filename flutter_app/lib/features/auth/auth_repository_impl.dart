@@ -57,15 +57,66 @@ class AuthRepositoryImpl implements AuthRepository {
     await _storage.deleteToken();
   }
 
+  @override
+  Future<String> verifyEmail(String email, String otp) async {
+    try {
+      final res = await _client.dio.post(
+        '/auth/verify-email',
+        data: {'email': email, 'otp': otp},
+      );
+      final token = res.data['access_token'] as String;
+      await _storage.writeToken(token);
+      return token;
+    } on DioException catch (e) {
+      throw AuthException(_mapDioError(e, isRegister: false));
+    }
+  }
+
+  @override
+  Future<void> resendOtp(String email) async {
+    try {
+      await _client.dio.post('/auth/resend-otp', data: {'email': email});
+    } on DioException catch (e) {
+      throw AuthException(_mapDioError(e, isRegister: false));
+    }
+  }
+
+  @override
+  Future<void> forgotPassword(String email) async {
+    try {
+      await _client.dio.post('/auth/forgot-password', data: {'email': email});
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError) {
+        throw const AuthException("Couldn't reach server. Check your connection.");
+      }
+      // Backend always returns 204 regardless of whether email exists; ignore other errors.
+    }
+  }
+
+  @override
+  Future<void> resetPassword(String email, String otp, String password) async {
+    try {
+      await _client.dio.post(
+        '/auth/reset-password',
+        data: {'email': email, 'otp': otp, 'password': password},
+      );
+    } on DioException catch (e) {
+      throw AuthException(_mapDioError(e, isRegister: false));
+    }
+  }
+
   String _mapDioError(DioException e, {required bool isRegister}) {
     final status = e.response?.statusCode;
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.unknown) {
       return "Couldn't reach server. Check your connection.";
     }
+    if (status == 400) return 'Invalid or expired code.';
     if (status == 401) return 'Invalid credentials.';
+    if (status == 403) return 'Please verify your email first.';
     if (status == 409 && isRegister) return 'Email already registered.';
     if (status == 422) return 'Invalid input. Check your details.';
+    if (status == 429) return 'Too many attempts. Try again later.';
     return 'Something went wrong (${status ?? 'unknown'}). Try again.';
   }
 }
