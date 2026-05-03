@@ -721,6 +721,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'They\'ll get an email invite. When they accept, they\'ll see the same realtime data and alerts you do.'**
   String get inviteFamilyDescription;
+
+  /// No description provided for @addDeviceToGetStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a Sleep Tech device to get started.'**
+  String get addDeviceToGetStarted;
+
+  /// No description provided for @reconnectingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to {deviceName}…'**
+  String reconnectingTo(String deviceName);
+
+  /// No description provided for @heartRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Heart Rate'**
+  String get heartRate;
+
+  /// No description provided for @respiration.
+  ///
+  /// In en, this message translates to:
+  /// **'Respiration'**
+  String get respiration;
+
+  /// No description provided for @temperature.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature'**
+  String get temperature;
+
+  /// No description provided for @movement.
+  ///
+  /// In en, this message translates to:
+  /// **'Movement'**
+  String get movement;
+
+  /// No description provided for @snores.
+  ///
+  /// In en, this message translates to:
+  /// **'Snores'**
+  String get snores;
+
+  /// No description provided for @sData.
+  ///
+  /// In en, this message translates to:
+  /// **'S-Data'**
+  String get sData;
+
+  /// No description provided for @pData.
+  ///
+  /// In en, this message translates to:
+  /// **'P-Data'**
+  String get pData;
+
+  /// No description provided for @nearbyDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'NEARBY DEVICES'**
+  String get nearbyDevices;
+
+  /// No description provided for @searchingForDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for nearby devices...'**
+  String get searchingForDevices;
+
+  /// No description provided for @bluetoothPermissionNeeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission needed'**
+  String get bluetoothPermissionNeeded;
+
+  /// No description provided for @bluetoothPermissionDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep Tech needs Bluetooth to find your device. Grant permission to continue.'**
+  String get bluetoothPermissionDescription;
+
+  /// No description provided for @openSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get openSettings;
+
+  /// No description provided for @strongSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'Strong signal'**
+  String get strongSignal;
+
+  /// No description provided for @moderateSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'Moderate signal'**
+  String get moderateSignal;
+
+  /// No description provided for @weakSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'Weak signal'**
+  String get weakSignal;
 }
 
 class _AppLocalizationsDelegate

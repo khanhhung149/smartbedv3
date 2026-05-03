@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../data/models/realtime_data.dart';
 import '../data/providers/history_provider.dart';
@@ -134,7 +135,7 @@ class _HomeContentState extends ConsumerState<HomeContent> {
         children: [
           if (streamAsync is AsyncError)
             HomeOfflineBanner(
-                message: 'Reconnecting to ${widget.deviceName}…'),
+                message: AppLocalizations.of(context)!.reconnectingTo(widget.deviceName)),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 90),

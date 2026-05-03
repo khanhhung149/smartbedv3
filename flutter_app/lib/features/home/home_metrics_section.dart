@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/widgets/metric_card.dart';
 import '../data/models/realtime_data.dart';
 import 'home_secondary_metrics.dart';
@@ -23,10 +24,11 @@ class HomeMetricsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       children: [
         MetricCard(
-          label: 'HEART RATE',
+          label: l10n.heartRate.toUpperCase(),
           value: latest?.hr,
           unit: 'bpm',
           icon: Symbols.favorite,
@@ -35,7 +37,7 @@ class HomeMetricsSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         MetricCard(
-          label: 'RESPIRATION',
+          label: l10n.respiration.toUpperCase(),
           value: latest?.rr,
           unit: 'rpm',
           icon: Symbols.air,
@@ -44,7 +46,7 @@ class HomeMetricsSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         MetricCard(
-          label: 'TEMPERATURE',
+          label: l10n.temperature.toUpperCase(),
           value: latest?.temp,
           unit: '°C',
           icon: Symbols.thermostat,

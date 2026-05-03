@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 import '../data/models/realtime_data.dart';
 
 // 2×2 grid of secondary metric tiles: S-Data, P-Data, Movement, Snores.
@@ -32,22 +33,22 @@ class HomeSecondaryMetrics extends StatelessWidget {
         _SecondaryTile(
           // Protocol defines body_motion as "number of body movements per
           // minute" (count), not an intensity level — show the raw count.
-          label: 'Movement',
+          label: AppLocalizations.of(context)!.movement,
           value: data?.movement?.toString() ?? '0',
         ),
         _SecondaryTile(
-          label: 'Snores',
+          label: AppLocalizations.of(context)!.snores,
           value: data?.snore?.toString() ?? '0',
         ),
         _SecondaryTile(
-          label: 'S-Data',
+          label: AppLocalizations.of(context)!.sData,
           value: data?.sdata != null
               ? '${data!.sdata!.toStringAsFixed(0)}%'
               : '--',
           trendIcon: Symbols.trending_up,
         ),
         _SecondaryTile(
-          label: 'P-Data',
+          label: AppLocalizations.of(context)!.pData,
           value: data?.pdata != null
               ? '${data!.pdata!.toStringAsFixed(1)}v'
               : '--',

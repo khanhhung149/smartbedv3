@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
+import '../../l10n/app_localizations.dart';
 
 // Scaffold shown when no device is paired — empty state with "Add Device" CTA.
 class HomeNoDeviceView extends StatelessWidget {
@@ -20,7 +21,7 @@ class HomeNoDeviceView extends StatelessWidget {
                 size: 48, color: AppColors.onSurfaceVariant),
             const SizedBox(height: 16),
             Text(
-              'No device paired',
+              AppLocalizations.of(context)!.noDevicePaired,
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -29,7 +30,7 @@ class HomeNoDeviceView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Add a Sleep Tech device to get started.',
+              AppLocalizations.of(context)!.addDeviceToGetStarted,
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: AppColors.onSurfaceVariant,
@@ -42,7 +43,7 @@ class HomeNoDeviceView extends StatelessWidget {
                 backgroundColor: AppColors.primaryContainer,
                 foregroundColor: AppColors.onPrimaryContainer,
               ),
-              child: Text('Add Device', style: GoogleFonts.inter()),
+              child: Text(AppLocalizations.of(context)!.addDevice, style: GoogleFonts.inter()),
             ),
           ],
         ),

@@ -164,5 +164,30 @@
   "networkNameRequired": "Network name is required",
   "somethingWentWrong": "Something went wrong. Try again.",
   "inviteFamily": "Invite family",
-  "inviteFamilyDescription": "They'll get an email invite. When they accept, they'll see the same realtime data and alerts you do."
+  "inviteFamilyDescription": "They'll get an email invite. When they accept, they'll see the same realtime data and alerts you do.",
+
+  "addDeviceToGetStarted": "Add a Sleep Tech device to get started.",
+  "reconnectingTo": "Reconnecting to {deviceName}…",
+  "@reconnectingTo": {
+    "placeholders": {
+      "deviceName": { "type": "String" }
+    }
+  },
+
+  "heartRate": "Heart Rate",
+  "respiration": "Respiration",
+  "temperature": "Temperature",
+  "movement": "Movement",
+  "snores": "Snores",
+  "sData": "S-Data",
+  "pData": "P-Data",
+
+  "nearbyDevices": "NEARBY DEVICES",
+  "searchingForDevices": "Searching for nearby devices...",
+  "bluetoothPermissionNeeded": "Bluetooth permission needed",
+  "bluetoothPermissionDescription": "Sleep Tech needs Bluetooth to find your device. Grant permission to continue.",
+  "openSettings": "Open settings",
+  "strongSignal": "Strong signal",
+  "moderateSignal": "Moderate signal",
+  "weakSignal": "Weak signal"
 }

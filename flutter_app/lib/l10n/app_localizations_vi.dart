@@ -344,4 +344,58 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get inviteFamilyDescription =>
       'Họ sẽ nhận được lời mời qua email. Khi chấp nhận, họ sẽ thấy dữ liệu và cảnh báo theo thời gian thực giống bạn.';
+
+  @override
+  String get addDeviceToGetStarted => 'Thêm thiết bị Sleep Tech để bắt đầu.';
+
+  @override
+  String reconnectingTo(String deviceName) {
+    return 'Đang kết nối lại với $deviceName…';
+  }
+
+  @override
+  String get heartRate => 'Nhịp tim';
+
+  @override
+  String get respiration => 'Hô hấp';
+
+  @override
+  String get temperature => 'Nhiệt độ';
+
+  @override
+  String get movement => 'Cử động';
+
+  @override
+  String get snores => 'Tiếng ngáy';
+
+  @override
+  String get sData => 'S-Data';
+
+  @override
+  String get pData => 'P-Data';
+
+  @override
+  String get nearbyDevices => 'THIẾT BỊ GẦN ĐÂY';
+
+  @override
+  String get searchingForDevices => 'Đang tìm thiết bị lân cận...';
+
+  @override
+  String get bluetoothPermissionNeeded => 'Cần quyền Bluetooth';
+
+  @override
+  String get bluetoothPermissionDescription =>
+      'Sleep Tech cần Bluetooth để tìm thiết bị của bạn. Cấp quyền để tiếp tục.';
+
+  @override
+  String get openSettings => 'Mở cài đặt';
+
+  @override
+  String get strongSignal => 'Tín hiệu mạnh';
+
+  @override
+  String get moderateSignal => 'Tín hiệu vừa';
+
+  @override
+  String get weakSignal => 'Tín hiệu yếu';
 }

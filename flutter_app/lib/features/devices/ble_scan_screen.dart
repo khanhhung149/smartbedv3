@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import 'providers/ble_scan_provider.dart';
 
 // Screen 1 of BLE provisioning flow — scans for nearby SleepPad-* devices.
@@ -80,10 +81,10 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen>
     context.push('/devices/add/wifi', extra: result.device);
   }
 
-  String _signalLabel(int rssi) {
-    if (rssi >= -60) return 'Strong signal';
-    if (rssi >= -75) return 'Moderate signal';
-    return 'Weak signal';
+  String _signalLabel(int rssi, AppLocalizations l10n) {
+    if (rssi >= -60) return l10n.strongSignal;
+    if (rssi >= -75) return l10n.moderateSignal;
+    return l10n.weakSignal;
   }
 
   Color _signalColor(int rssi) {
@@ -108,6 +109,7 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen>
       });
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final isScanning = ref.watch(bleIsScanningProvider).valueOrNull ?? false;
 
     final showPermissionDeniedBanner =
@@ -131,7 +133,7 @@ class _BleScanScreenState extends ConsumerState<BleScanScreen>
                       isScanning: isScanning,
                       radarController: _radarController,
                       onDeviceTapped: _onDeviceTapped,
-                      signalLabel: _signalLabel,
+                      signalLabel: (rssi) => _signalLabel(rssi, l10n),
                       signalColor: _signalColor,
                     ),
             ),
@@ -161,7 +163,7 @@ class _PermissionDeniedBanner extends StatelessWidget {
               size: 56, color: AppColors.outline),
           const SizedBox(height: 16),
           Text(
-            'Bluetooth permission needed',
+            AppLocalizations.of(context)!.bluetoothPermissionNeeded,
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 18,
@@ -171,8 +173,7 @@ class _PermissionDeniedBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Sleep Tech needs Bluetooth to find your device. Grant '
-            'permission to continue.',
+            AppLocalizations.of(context)!.bluetoothPermissionDescription,
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 14,
@@ -180,10 +181,10 @@ class _PermissionDeniedBanner extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          TextButton(onPressed: onRetry, child: const Text('Try again')),
+          TextButton(onPressed: onRetry, child: Text(AppLocalizations.of(context)!.retry)),
           TextButton(
             onPressed: onOpenSettings,
-            child: const Text('Open settings'),
+            child: Text(AppLocalizations.of(context)!.openSettings),
           ),
         ],
       ),
@@ -213,7 +214,7 @@ class _TopBar extends StatelessWidget {
           ),
           // Title only — no subtitle needed on the scan screen.
           Text(
-            'Add Device',
+            AppLocalizations.of(context)!.addDevice,
             style: GoogleFonts.inter(
               fontSize: AppTextSize.lg,
               fontWeight: AppFontWeight.semiBold,
@@ -293,7 +294,7 @@ class _Body extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 8, bottom: 16),
               child: Text(
-                'NEARBY DEVICES',
+                AppLocalizations.of(context)!.nearbyDevices,
                 style: GoogleFonts.inter(
                   fontSize: AppTextSize.xs,
                   fontWeight: AppFontWeight.medium,
@@ -455,7 +456,7 @@ class _ScanningStatus extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Searching for nearby devices...',
+              AppLocalizations.of(context)!.searchingForDevices,
               style: GoogleFonts.inter(
                 fontSize: AppTextSize.sm,
                 fontWeight: AppFontWeight.medium,

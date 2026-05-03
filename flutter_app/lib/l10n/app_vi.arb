@@ -164,5 +164,30 @@
   "networkNameRequired": "Tên mạng là bắt buộc",
   "somethingWentWrong": "Đã xảy ra lỗi. Vui lòng thử lại.",
   "inviteFamily": "Mời thành viên gia đình",
-  "inviteFamilyDescription": "Họ sẽ nhận được lời mời qua email. Khi chấp nhận, họ sẽ thấy dữ liệu và cảnh báo theo thời gian thực giống bạn."
+  "inviteFamilyDescription": "Họ sẽ nhận được lời mời qua email. Khi chấp nhận, họ sẽ thấy dữ liệu và cảnh báo theo thời gian thực giống bạn.",
+
+  "addDeviceToGetStarted": "Thêm thiết bị Sleep Tech để bắt đầu.",
+  "reconnectingTo": "Đang kết nối lại với {deviceName}…",
+  "@reconnectingTo": {
+    "placeholders": {
+      "deviceName": { "type": "String" }
+    }
+  },
+
+  "heartRate": "Nhịp tim",
+  "respiration": "Hô hấp",
+  "temperature": "Nhiệt độ",
+  "movement": "Cử động",
+  "snores": "Tiếng ngáy",
+  "sData": "S-Data",
+  "pData": "P-Data",
+
+  "nearbyDevices": "THIẾT BỊ GẦN ĐÂY",
+  "searchingForDevices": "Đang tìm thiết bị lân cận...",
+  "bluetoothPermissionNeeded": "Cần quyền Bluetooth",
+  "bluetoothPermissionDescription": "Sleep Tech cần Bluetooth để tìm thiết bị của bạn. Cấp quyền để tiếp tục.",
+  "openSettings": "Mở cài đặt",
+  "strongSignal": "Tín hiệu mạnh",
+  "moderateSignal": "Tín hiệu vừa",
+  "weakSignal": "Tín hiệu yếu"
 }

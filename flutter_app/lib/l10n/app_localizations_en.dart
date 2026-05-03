@@ -343,4 +343,58 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get inviteFamilyDescription =>
       'They\'ll get an email invite. When they accept, they\'ll see the same realtime data and alerts you do.';
+
+  @override
+  String get addDeviceToGetStarted => 'Add a Sleep Tech device to get started.';
+
+  @override
+  String reconnectingTo(String deviceName) {
+    return 'Reconnecting to $deviceName…';
+  }
+
+  @override
+  String get heartRate => 'Heart Rate';
+
+  @override
+  String get respiration => 'Respiration';
+
+  @override
+  String get temperature => 'Temperature';
+
+  @override
+  String get movement => 'Movement';
+
+  @override
+  String get snores => 'Snores';
+
+  @override
+  String get sData => 'S-Data';
+
+  @override
+  String get pData => 'P-Data';
+
+  @override
+  String get nearbyDevices => 'NEARBY DEVICES';
+
+  @override
+  String get searchingForDevices => 'Searching for nearby devices...';
+
+  @override
+  String get bluetoothPermissionNeeded => 'Bluetooth permission needed';
+
+  @override
+  String get bluetoothPermissionDescription =>
+      'Sleep Tech needs Bluetooth to find your device. Grant permission to continue.';
+
+  @override
+  String get openSettings => 'Open settings';
+
+  @override
+  String get strongSignal => 'Strong signal';
+
+  @override
+  String get moderateSignal => 'Moderate signal';
+
+  @override
+  String get weakSignal => 'Weak signal';
 }
