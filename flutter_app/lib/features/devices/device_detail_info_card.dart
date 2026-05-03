@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import 'models/device_out.dart';
+import '../../l10n/app_localizations.dart';
 
 // Header section — device name with edit button + copyable device ID.
 
@@ -56,10 +57,10 @@ class DeviceDetailInfoCard extends StatelessWidget {
             onTap: () {
               Clipboard.setData(ClipboardData(text: id));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Device ID copied'),
+                SnackBar(
+                  content: Text(AppLocalizations.of(context)!.deviceIdCopied),
                   behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 1),
+                  duration: const Duration(seconds: 1),
                 ),
               );
             },
@@ -112,7 +113,7 @@ class DeviceDetailStatusCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              online ? 'Online' : 'Offline',
+              online ? AppLocalizations.of(context)!.online : AppLocalizations.of(context)!.offline,
               style: GoogleFonts.inter(
                 fontWeight: AppFontWeight.medium,
                 color: online ? AppColors.primary : AppColors.onSurfaceVariant,

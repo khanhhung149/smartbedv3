@@ -6,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../sharing/models/pending_invite_out.dart';
 import '../sharing/providers/sharing_providers.dart';
 import '../sharing/providers/sharing_repository_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 // PENDING INVITES section tile — accept/decline an incoming device share invite.
 // Uses Riverpod ref to call repo and invalidate providers after action.
@@ -95,7 +96,7 @@ class _PendingInviteTileState extends ConsumerState<PendingInviteTile> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Invite from ${inv.ownerEmail}',
+                    AppLocalizations.of(context)!.inviteFrom(inv.ownerEmail),
                     style: GoogleFonts.inter(
                       fontSize: AppTextSize.xs,
                       color: AppColors.onSurfaceVariant,
@@ -115,7 +116,7 @@ class _PendingInviteTileState extends ConsumerState<PendingInviteTile> {
                   side: BorderSide(
                       color: AppColors.outlineVariant.withValues(alpha: 0.4)),
                 ),
-                child: Text('Decline',
+                child: Text(AppLocalizations.of(context)!.decline,
                     style: GoogleFonts.inter(color: AppColors.onSurface)),
               ),
             ),
@@ -136,7 +137,7 @@ class _PendingInviteTileState extends ConsumerState<PendingInviteTile> {
                             strokeWidth: 2,
                             color: AppColors.onPrimaryContainer),
                       )
-                    : Text('Accept',
+                    : Text(AppLocalizations.of(context)!.accept,
                         style: GoogleFonts.inter(
                             fontWeight: AppFontWeight.semiBold)),
               ),

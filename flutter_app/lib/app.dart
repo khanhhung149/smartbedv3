@@ -3,7 +3,9 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/app_theme.dart';
+import 'l10n/app_localizations.dart';
 import 'shared/providers/auth_provider.dart';
+import 'shared/providers/locale_provider.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/register_screen.dart';
@@ -177,12 +179,17 @@ GoRouter _buildRouter(String? initialToken) {
 class SleepPadApp extends ConsumerWidget {
   const SleepPadApp({super.key});
 
+  static const _l10nDelegates = AppLocalizations.localizationsDelegates;
+  static const _supportedLocales = AppLocalizations.supportedLocales;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authAsync = ref.watch(initialAuthProvider);
 
     return authAsync.when(
       loading: () => const MaterialApp(
+        localizationsDelegates: _l10nDelegates,
+        supportedLocales: _supportedLocales,
         home: Scaffold(
           backgroundColor: Color(0xFF101419),
           body: SizedBox.shrink(),
@@ -190,17 +197,55 @@ class SleepPadApp extends ConsumerWidget {
       ),
       error: (_, __) => MaterialApp(
         theme: AppTheme.dark,
+        localizationsDelegates: _l10nDelegates,
+        supportedLocales: _supportedLocales,
         home: const LoginScreen(),
       ),
-      data: (token) {
-        final router = _buildRouter(token);
-        return MaterialApp.router(
-          title: 'Sleep Pad',
-          theme: AppTheme.dark,
-          routerConfig: router,
-          debugShowCheckedModeBanner: false,
-        );
-      },
+      // Delegate to a StatefulWidget so the router instance is stable across
+      // locale changes — only recreated when the auth token changes.
+      data: (token) => _RouterApp(token: token),
+    );
+  }
+}
+
+// Keeps the GoRouter alive across locale changes so the navigation stack is
+// preserved when the user switches language in Settings.
+class _RouterApp extends ConsumerStatefulWidget {
+  const _RouterApp({required this.token});
+  final String? token;
+
+  @override
+  ConsumerState<_RouterApp> createState() => _RouterAppState();
+}
+
+class _RouterAppState extends ConsumerState<_RouterApp> {
+  late GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = _buildRouter(widget.token);
+  }
+
+  @override
+  void didUpdateWidget(_RouterApp old) {
+    super.didUpdateWidget(old);
+    if (old.token != widget.token) {
+      _router = _buildRouter(widget.token);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale = ref.watch(localeProvider);
+    return MaterialApp.router(
+      title: 'Sleep Pad',
+      theme: AppTheme.dark,
+      routerConfig: _router,
+      debugShowCheckedModeBanner: false,
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     );
   }
 }

@@ -10,6 +10,7 @@ import '../data/providers/selected_device_provider.dart';
 import '../home/device_selector_sheet.dart';
 import 'history_chart_panel.dart';
 import 'history_summary_strip.dart';
+import '../../l10n/app_localizations.dart';
 
 // History screen: segmented Day/Week/Month tabs with fl_chart cards.
 // Source: sleep_history_synced/code.html
@@ -85,7 +86,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
               ),
               error: (e, _) => Center(
                 child: Text(
-                  'Failed to load device: $e',
+                  AppLocalizations.of(context)!.failedToLoadDevice(e.toString()),
                   style: GoogleFonts.inter(color: AppColors.error),
                 ),
               ),
@@ -93,7 +94,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                 if (device == null) {
                   return Center(
                     child: Text(
-                      'No device selected.',
+                      AppLocalizations.of(context)!.noDeviceSelected,
                       style: GoogleFonts.inter(
                         color: AppColors.onSurfaceVariant,
                       ),
@@ -187,7 +188,7 @@ class _HistoryTabView extends ConsumerWidget {
                   size: 40, color: AppColors.onSurfaceVariant),
               const SizedBox(height: 12),
               Text(
-                'Could not load history',
+                AppLocalizations.of(context)!.couldNotLoadHistory,
                 style: GoogleFonts.inter(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -217,7 +218,7 @@ class _HistoryTabView extends ConsumerWidget {
                     size: 40, color: AppColors.onSurfaceVariant),
                 const SizedBox(height: 12),
                 Text(
-                  'Not enough data yet',
+                  AppLocalizations.of(context)!.notEnoughData,
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -226,7 +227,7 @@ class _HistoryTabView extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Sleep data will appear here once your device has been monitoring.',
+                  AppLocalizations.of(context)!.sleepDataWillAppear,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 12,
@@ -284,7 +285,7 @@ PreferredSizeWidget _buildAppBar(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Sleep History',
+                        AppLocalizations.of(context)!.sleepHistory,
                         style: GoogleFonts.inter(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
@@ -310,7 +311,7 @@ PreferredSizeWidget _buildAppBar(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                deviceName ?? 'No device',
+                                deviceName ?? AppLocalizations.of(context)!.noDevice,
                                 style: GoogleFonts.inter(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,

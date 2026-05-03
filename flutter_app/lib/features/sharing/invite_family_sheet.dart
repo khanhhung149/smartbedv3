@@ -8,6 +8,7 @@ import '../../shared/widgets/stitch_text_field.dart';
 import 'providers/sharing_providers.dart';
 import 'providers/sharing_repository_provider.dart';
 import 'sharing_repository_impl.dart' show SharingException;
+import '../../l10n/app_localizations.dart';
 
 // Invite-by-email modal bottom sheet.
 // Source: invite_family_modal/code.html
@@ -34,10 +35,10 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
     super.dispose();
   }
 
-  Future<void> _send() async {
+  Future<void> _send(AppLocalizations l10n) async {
     final email = _emailController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
-      setState(() => _error = 'Enter a valid email address.');
+      setState(() => _error = l10n.enterValidEmail);
       return;
     }
     setState(() {
@@ -61,16 +62,18 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
         _sending = false;
         _error = e.message;
       });
-    } catch (e) {
+    } catch (_) {
+      if (!mounted) return;
       setState(() {
         _sending = false;
-        _error = 'Something went wrong. Try again.';
+        _error = l10n.somethingWentWrong;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       // rounded-t-[24px], surface-container color (#1A222D ≈ surfaceContainerLow)
       decoration: const BoxDecoration(
@@ -103,7 +106,7 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
             ),
             // Title
             Text(
-              'Invite family',
+              l10n.inviteFamily,
               style: GoogleFonts.inter(
                 fontSize: 22,
                 fontWeight: AppFontWeight.semiBold,
@@ -113,7 +116,7 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
             const SizedBox(height: 12),
             // Body explanation
             Text(
-              "They'll get an email invite. When they accept, they'll see the same realtime data and alerts you do.",
+              l10n.inviteFamilyDescription,
               style: GoogleFonts.inter(
                 fontSize: AppTextSize.base,
                 color: AppColors.onSurfaceVariant,
@@ -127,7 +130,7 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
               placeholder: 'mom@example.com',
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
+              onSubmitted: (_) => _send(l10n),
               errorText: _error,
             ),
             const SizedBox(height: 32),
@@ -135,7 +138,7 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
             _SendButton(
               sending: _sending,
               success: _success,
-              onPressed: _send,
+              onPressed: () => _send(l10n),
             ),
             const SizedBox(height: 12),
             // Cancel button
@@ -145,7 +148,7 @@ class _InviteFamilySheetState extends ConsumerState<InviteFamilySheet> {
               child: TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
                 child: Text(
-                  'Cancel',
+                  AppLocalizations.of(context)!.cancel,
                   style: GoogleFonts.inter(
                     fontSize: AppTextSize.base,
                     fontWeight: AppFontWeight.medium,
@@ -221,7 +224,7 @@ class _SendButton extends StatelessWidget {
                         ),
                       )
                     : Text(
-                        'Send invite',
+                        AppLocalizations.of(context)!.sendInvite,
                         key: const ValueKey('label'),
                         style: GoogleFonts.inter(
                           fontSize: AppTextSize.lg,

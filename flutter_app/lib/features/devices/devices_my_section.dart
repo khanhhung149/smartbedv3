@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import 'models/device_out.dart';
 
 // MY DEVICES section — section header + owned device tile.
@@ -79,7 +81,9 @@ class MyDeviceTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(children: [
                       Text(
-                        'Paired ${_formatPairedDate(device.pairedAt)}',
+                        AppLocalizations.of(context)!.pairedOn(
+                          _formatPairedDate(device.pairedAt, Localizations.localeOf(context).languageCode),
+                        ),
                         style: GoogleFonts.inter(
                           fontSize: AppTextSize.xs,
                           color: AppColors.onSurfaceVariant,
@@ -105,15 +109,16 @@ class MyDeviceTile extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           device.lastSeen != null
-                              ? 'Active ${_relativeTime(device.lastSeen!)}'
-                              : 'Online',
+                              ? AppLocalizations.of(context)!.activeAgo(
+                                  _relativeTime(device.lastSeen!, AppLocalizations.of(context)!))
+                              : AppLocalizations.of(context)!.online,
                           style: GoogleFonts.inter(
                             fontSize: AppTextSize.xs,
                             color: AppColors.primary,
                           ),
                         ),
                       ] else
-                        Text('Offline',
+                        Text(AppLocalizations.of(context)!.offline,
                             style: GoogleFonts.inter(
                               fontSize: AppTextSize.xs,
                               color: AppColors.onSurfaceVariant,
@@ -131,26 +136,22 @@ class MyDeviceTile extends StatelessWidget {
     );
   }
 
-  String _formatPairedDate(String iso) {
+  String _formatPairedDate(String iso, String languageCode) {
     try {
       final dt = DateTime.parse(iso);
-      const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-      ];
-      return '${months[dt.month - 1]} ${dt.day}';
+      return DateFormat.MMMd(languageCode).format(dt);
     } catch (_) {
       return iso;
     }
   }
 
-  String _relativeTime(String iso) {
+  String _relativeTime(String iso, AppLocalizations l10n) {
     try {
       final dt = DateTime.parse(iso);
       final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 2) return 'just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-      return '${diff.inHours}h ago';
+      if (diff.inMinutes < 2) return l10n.justNow;
+      if (diff.inMinutes < 60) return l10n.minutesAgo(diff.inMinutes);
+      return l10n.hoursAgo(diff.inHours);
     } catch (_) {
       return '';
     }

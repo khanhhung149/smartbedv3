@@ -10,6 +10,7 @@ import 'ble_pairing_dialogs.dart';
 import 'ble_pairing_progress_checklist.dart';
 import 'ble_pairing_ring_animation.dart';
 import 'providers/provisioning_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 // Screen 3 of BLE provisioning — pairing progress with 4-step checklist
 // and a sweeping ring animation while the state machine runs.
@@ -107,7 +108,7 @@ class _BleProvisionPairingScreenState
                     BlePairingRing(controller: _ringController),
                     const SizedBox(height: 48),
                     Text(
-                      'Pairing with your device...',
+                      AppLocalizations.of(context)!.pairingWithDevice,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: AppTextSize.xl4,
@@ -121,7 +122,7 @@ class _BleProvisionPairingScreenState
                     BlePairingProgressChecklist(state: state),
                     const SizedBox(height: 32),
                     Text(
-                      'This usually takes 10–30 seconds',
+                      AppLocalizations.of(context)!.pairingDuration,
                       style: GoogleFonts.inter(
                         fontSize: AppTextSize.sm,
                         color: AppColors.outline,

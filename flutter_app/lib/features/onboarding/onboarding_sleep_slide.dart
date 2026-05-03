@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 
 // Slide 1 — onboarding_sleep_monitoring/code.html
 // Layout: full-bleed illustration top 530px, gradient fade to bg,
@@ -74,7 +75,7 @@ class OnboardingSleepSlide extends StatelessWidget {
               children: [
                 // Text content — items-center text-center space-y-4
                 Text(
-                  'Monitor sleep,\nwithout wearables',
+                  AppLocalizations.of(context)!.monitorSleepTagline,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 32,

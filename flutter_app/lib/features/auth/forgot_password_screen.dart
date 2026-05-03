@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
 import 'auth_repository_impl.dart' show AuthException;
@@ -34,8 +35,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   Future<void> _submit() async {
     final email = _emailCtrl.text.trim();
+    final l10n = AppLocalizations.of(context)!;
     if (!_isValidEmail(email)) {
-      setState(() => _errorMsg = 'Enter a valid email address.');
+      setState(() => _errorMsg = l10n.enterValidEmail);
       return;
     }
     setState(() {
@@ -96,57 +98,65 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         ),
                         const SizedBox(height: 64),
 
-                        Padding(
-                          padding: const EdgeInsets.only(left: 2),
-                          child: Text(
-                            'Forgot password',
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.xl3,
-                              fontWeight: AppFontWeight.medium,
-                              color: AppColors.onSurface,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 2),
-                          child: Text(
-                            "Enter your email and we'll send a reset code",
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.sm,
-                              color: AppColors.secondary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 40),
+                        Builder(builder: (ctx) {
+                          final l10n = AppLocalizations.of(ctx)!;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 2),
+                                child: Text(
+                                  l10n.forgotPasswordTitle,
+                                  style: GoogleFonts.inter(
+                                    fontSize: AppTextSize.xl3,
+                                    fontWeight: AppFontWeight.medium,
+                                    color: AppColors.onSurface,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 2),
+                                child: Text(
+                                  l10n.forgotPasswordSubtitle,
+                                  style: GoogleFonts.inter(
+                                    fontSize: AppTextSize.sm,
+                                    color: AppColors.secondary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 40),
 
-                        StitchTextField(
-                          controller: _emailCtrl,
-                          placeholder: 'Email address',
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _submit(),
-                        ),
+                              StitchTextField(
+                                controller: _emailCtrl,
+                                placeholder: l10n.emailAddress,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _submit(),
+                              ),
 
-                        if (_errorMsg != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            _errorMsg!,
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.sm,
-                              color: AppColors.error,
-                            ),
-                          ),
-                        ],
+                              if (_errorMsg != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _errorMsg!,
+                                  style: GoogleFonts.inter(
+                                    fontSize: AppTextSize.sm,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                              ],
 
-                        const SizedBox(height: 36),
+                              const SizedBox(height: 36),
 
-                        PrimaryButton(
-                          label: 'Send reset code',
-                          onPressed: _submit,
-                          isLoading: _loading,
-                        ),
+                              PrimaryButton(
+                                label: l10n.sendResetCode,
+                                onPressed: _submit,
+                                isLoading: _loading,
+                              ),
+                            ],
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -158,13 +168,13 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               padding: const EdgeInsets.fromLTRB(0, 48, 0, 32),
               child: TextButton(
                 onPressed: () => context.go('/login'),
-                child: Text(
-                  'Back to sign in',
+                child: Builder(builder: (ctx) => Text(
+                  AppLocalizations.of(ctx)!.backToSignIn,
                   style: GoogleFonts.inter(
                     fontSize: AppTextSize.sm,
                     color: AppColors.outline,
                   ),
-                ),
+                )),
               ),
             ),
           ],

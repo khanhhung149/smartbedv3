@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../l10n/app_localizations.dart';
 
 // Screen 2 of BLE provisioning — user enters WiFi SSID + password.
 // Matches ble_provisioning_wifi/code.html: wifi icon hero, glass inputs, CTA.
@@ -53,17 +54,17 @@ class _BleProvisionWifiScreenState
     super.dispose();
   }
 
-  bool _validate() {
+  bool _validate(String networkNameRequired) {
     setState(() {
       _ssidError =
-          _ssidController.text.trim().isEmpty ? 'Network name is required' : null;
+          _ssidController.text.trim().isEmpty ? networkNameRequired : null;
       _passwordError = null; // password may be empty (open networks)
     });
     return _ssidError == null;
   }
 
-  void _onContinue() {
-    if (!_validate()) return;
+  void _onContinue(AppLocalizations l10n) {
+    if (!_validate(l10n.networkNameRequired)) return;
     context.push(
       '/devices/add/pairing',
       extra: {
@@ -94,7 +95,7 @@ class _BleProvisionWifiScreenState
                     const SizedBox(height: 40),
                     // Title + subtitle
                     Text(
-                      'Give your Sleep Pad WiFi',
+                      AppLocalizations.of(context)!.giveWifi,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: AppTextSize.xl3,
@@ -105,7 +106,7 @@ class _BleProvisionWifiScreenState
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Your Sleep Pad will use this network to send data to the cloud.',
+                      AppLocalizations.of(context)!.wifiDescription,
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: AppTextSize.sm,
@@ -117,7 +118,7 @@ class _BleProvisionWifiScreenState
                     // SSID input
                     _GlassInput(
                       controller: _ssidController,
-                      hint: 'Network Name (SSID)',
+                      hint: AppLocalizations.of(context)!.networkName,
                       prefixIcon: Icons.router_outlined,
                       errorText: _ssidError,
                       onChanged: (_) {
@@ -130,7 +131,7 @@ class _BleProvisionWifiScreenState
                     // Password input
                     _GlassInput(
                       controller: _passwordController,
-                      hint: 'Password',
+                      hint: AppLocalizations.of(context)!.password,
                       prefixIcon: Icons.lock_outline,
                       obscureText: _obscurePassword,
                       showToggle: true,
@@ -139,7 +140,10 @@ class _BleProvisionWifiScreenState
                       errorText: _passwordError,
                     ),
                     const SizedBox(height: 64),
-                    PrimaryButton(label: 'Continue', onPressed: _onContinue),
+                    PrimaryButton(
+                      label: AppLocalizations.of(context)!.continueCta,
+                      onPressed: () => _onContinue(AppLocalizations.of(context)!),
+                    ),
                   ],
                 ),
               ),
@@ -178,7 +182,7 @@ class _AppBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Setup Sleep Pad',
+                  AppLocalizations.of(context)!.setupSleepPad,
                   style: GoogleFonts.inter(
                     fontSize: AppTextSize.lg,
                     fontWeight: AppFontWeight.bold,

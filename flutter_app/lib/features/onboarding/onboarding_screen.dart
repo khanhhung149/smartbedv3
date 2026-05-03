@@ -7,6 +7,7 @@ import '../../shared/widgets/primary_button.dart';
 import 'onboarding_sleep_slide.dart';
 import 'onboarding_alerts_slide.dart';
 import 'onboarding_sharing_slide.dart';
+import '../../l10n/app_localizations.dart';
 
 // Onboarding container — 3-slide PageView.
 // Bottom area hosts pagination dots + CTA buttons (shared across slides).
@@ -81,7 +82,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   const SizedBox(height: 24),
                   PrimaryButton(
-                    label: 'Get started',
+                    label: AppLocalizations.of(context)!.getStarted,
                     onPressed: _next,
                   ),
                   const SizedBox(height: 12),
@@ -202,7 +203,7 @@ class _SecondaryButton extends StatelessWidget {
       return TextButton(
         onPressed: onLogin,
         child: Text(
-          'I already have an account',
+          AppLocalizations.of(context)!.iAlreadyHaveAccount,
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: AppFontWeight.medium,
@@ -229,7 +230,7 @@ class _SecondaryButton extends StatelessWidget {
           backgroundColor: Colors.transparent,
         ),
         child: Text(
-          'I already have an account',
+          AppLocalizations.of(context)!.iAlreadyHaveAccount,
           style: GoogleFonts.inter(
             fontSize: AppTextSize.sm,
             fontWeight: AppFontWeight.medium,

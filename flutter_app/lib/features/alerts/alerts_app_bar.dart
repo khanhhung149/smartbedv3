@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/alert_bell_button.dart';
+import '../../l10n/app_localizations.dart';
 
 // Translucent blur app bar shared by AlertsScreen (no-device) and AlertsBody.
 
@@ -25,7 +26,7 @@ PreferredSizeWidget buildAlertsAppBar(BuildContext context) {
                 const SizedBox(width: 48),
                 Expanded(
                   child: Text(
-                    'Alerts',
+                    AppLocalizations.of(context)!.alerts,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: AppTextSize.lg,

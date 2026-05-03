@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../sharing/providers/sharing_providers.dart';
 import 'devices_list_widgets.dart';
 import 'devices_my_section.dart';
@@ -55,7 +56,7 @@ class DevicesScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const DevicesSectionHeader(label: 'PENDING INVITES'),
+                        DevicesSectionHeader(label: AppLocalizations.of(context)!.pendingInvites),
                         const SizedBox(height: 16),
                         ...invites.map((inv) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -67,16 +68,18 @@ class DevicesScreen extends ConsumerWidget {
                 },
               ),
               // MY DEVICES
-              const DevicesSectionHeader(label: 'MY DEVICES'),
+              DevicesSectionHeader(label: AppLocalizations.of(context)!.devices.toUpperCase()),
               const SizedBox(height: 16),
               myDevicesAsync.when(
                 loading: () => const DevicesLoadingRow(),
                 error: (e, _) => DevicesErrorRow(message: e.toString()),
-                data: (devices) => devices.isEmpty
+                data: (devices) {
+                  final l10n = AppLocalizations.of(context)!;
+                  return devices.isEmpty
                     ? DevicesEmptyHint(
-                        message: 'No devices paired yet.',
+                        message: l10n.noDevicesPaired,
                         onAction: () => context.push('/devices/add'),
-                        actionLabel: 'Add device',
+                        actionLabel: l10n.addDevice,
                       )
                     : Column(
                         children: devices
@@ -89,7 +92,8 @@ class DevicesScreen extends ConsumerWidget {
                                   ),
                                 ))
                             .toList(),
-                      ),
+                      );
+                },
               ),
               const SizedBox(height: 32),
               // SHARED WITH ME
@@ -99,8 +103,8 @@ class DevicesScreen extends ConsumerWidget {
                 loading: () => const DevicesLoadingRow(),
                 error: (e, _) => DevicesErrorRow(message: e.toString()),
                 data: (shared) => shared.isEmpty
-                    ? const DevicesEmptyHint(
-                        message: 'No devices shared with you.')
+                    ? DevicesEmptyHint(
+                        message: AppLocalizations.of(context)!.noDevicesShared)
                     : Column(
                         children: shared
                             .map((s) => Padding(
@@ -139,7 +143,7 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
                 const SizedBox(width: 48),
                 Expanded(
                   child: Text(
-                    'Devices',
+                    AppLocalizations.of(context)!.devices,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: AppTextSize.lg,

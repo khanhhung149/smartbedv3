@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
 import 'auth_repository_impl.dart' show AuthException;
@@ -49,16 +50,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final pass = _passCtrl.text;
     final confirm = _confirmCtrl.text;
 
+    final l10n = AppLocalizations.of(context)!;
     if (!_isValidEmail(email)) {
-      setState(() => _errorMsg = 'Enter a valid email address.');
+      setState(() => _errorMsg = l10n.enterValidEmail);
       return;
     }
     if (pass.length < 8) {
-      setState(() => _errorMsg = 'Password must be at least 8 characters.');
+      setState(() => _errorMsg = l10n.passwordTooShort);
       return;
     }
     if (pass != confirm) {
-      setState(() => _errorMsg = 'Passwords do not match.');
+      setState(() => _errorMsg = l10n.passwordsDoNotMatch);
       return;
     }
 
@@ -111,92 +113,98 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Create your account',
-                    style: GoogleFonts.inter(
-                      fontSize: AppTextSize.xl2, // text-2xl = 24sp
-                      fontWeight: AppFontWeight.semiBold,
-                      color: AppColors.onSurface,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 48), // gap-12
-
-                  // Form fields — gap-5
-                  StitchTextField(
-                    controller: _emailCtrl,
-                    placeholder: 'Email address',
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 20),
-                  StitchTextField(
-                    controller: _passCtrl,
-                    placeholder: 'Password',
-                    obscureText: true,
-                    showToggle: true,
-                    textInputAction: TextInputAction.next,
-                  ),
-                  const SizedBox(height: 20),
-                  StitchTextField(
-                    controller: _confirmCtrl,
-                    placeholder: 'Confirm password',
-                    obscureText: true,
-                    showToggle: true,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _submit(),
-                  ),
-
-                  // Inline error
-                  if (_errorMsg != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMsg!,
+                  Builder(builder: (ctx) {
+                    final l10n = AppLocalizations.of(ctx)!;
+                    return Text(
+                      l10n.createYourAccount,
                       style: GoogleFonts.inter(
-                        fontSize: AppTextSize.sm,
-                        color: AppColors.error,
+                        fontSize: AppTextSize.xl2,
+                        fontWeight: AppFontWeight.semiBold,
+                        color: AppColors.onSurface,
+                        letterSpacing: -0.5,
                       ),
-                    ),
-                  ],
+                    );
+                  }),
 
-                  const SizedBox(height: 24), // h-2 spacer + extra
+                  const SizedBox(height: 48),
 
-                  // Create account button
-                  PrimaryButton(
-                    label: 'Create account',
-                    onPressed: _submit,
-                    isLoading: _loading,
-                  ),
-
-                  const SizedBox(height: 48), // gap-12
-
-                  // Footer link
-                  RichText(
-                    text: TextSpan(
-                      style: GoogleFonts.inter(
-                        fontSize: AppTextSize.sm,
-                        fontWeight: AppFontWeight.medium,
-                        color: AppColors.onSurfaceVariant,
-                      ),
+                  Builder(builder: (ctx) {
+                    final l10n = AppLocalizations.of(ctx)!;
+                    return Column(
                       children: [
-                        const TextSpan(text: 'Already have an account? '),
-                        WidgetSpan(
-                          child: GestureDetector(
-                            onTap: () => context.go('/login'),
-                            child: Text(
-                              'Log in',
-                              style: GoogleFonts.inter(
-                                fontSize: AppTextSize.sm,
-                                fontWeight: AppFontWeight.medium,
-                                color: AppColors.primaryContainer,
-                              ),
+                        StitchTextField(
+                          controller: _emailCtrl,
+                          placeholder: l10n.emailAddress,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 20),
+                        StitchTextField(
+                          controller: _passCtrl,
+                          placeholder: l10n.password,
+                          obscureText: true,
+                          showToggle: true,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: 20),
+                        StitchTextField(
+                          controller: _confirmCtrl,
+                          placeholder: l10n.confirmPassword,
+                          obscureText: true,
+                          showToggle: true,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submit(),
+                        ),
+
+                        if (_errorMsg != null) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            _errorMsg!,
+                            style: GoogleFonts.inter(
+                              fontSize: AppTextSize.sm,
+                              color: AppColors.error,
                             ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 24),
+
+                        PrimaryButton(
+                          label: l10n.createAccount,
+                          onPressed: _submit,
+                          isLoading: _loading,
+                        ),
+
+                        const SizedBox(height: 48),
+
+                        RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.inter(
+                              fontSize: AppTextSize.sm,
+                              fontWeight: AppFontWeight.medium,
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                            children: [
+                              TextSpan(text: l10n.alreadyHaveAccount),
+                              WidgetSpan(
+                                child: GestureDetector(
+                                  onTap: () => context.go('/login'),
+                                  child: Text(
+                                    l10n.logIn,
+                                    style: GoogleFonts.inter(
+                                      fontSize: AppTextSize.sm,
+                                      fontWeight: AppFontWeight.medium,
+                                      color: AppColors.primaryContainer,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ),
-                  ),
+                    );
+                  }),
                 ],
               ),
             ),

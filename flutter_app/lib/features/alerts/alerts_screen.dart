@@ -8,6 +8,7 @@ import '../../core/app_theme.dart';
 import '../data/providers/selected_device_provider.dart';
 import 'alerts_app_bar.dart';
 import 'alerts_body.dart';
+import '../../l10n/app_localizations.dart';
 
 // Alerts screen: device guard → two tabs (Thresholds | History).
 // Source: alerts_settings/code.html + alerts_history_dark_mode_fix/code.html
@@ -72,7 +73,7 @@ class _NoDeviceBody extends StatelessWidget {
             const Icon(Symbols.notifications_off,
                 size: 48, color: AppColors.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('No device paired',
+            Text(AppLocalizations.of(context)!.noDevicePaired,
                 style: GoogleFonts.inter(
                     fontSize: AppTextSize.base,
                     fontWeight: AppFontWeight.semiBold,
@@ -84,7 +85,7 @@ class _NoDeviceBody extends StatelessWidget {
                 backgroundColor: AppColors.primaryContainer,
                 foregroundColor: AppColors.onPrimaryContainer,
               ),
-              child: Text('Add Device', style: GoogleFonts.inter()),
+              child: Text(AppLocalizations.of(context)!.addDevice, style: GoogleFonts.inter()),
             ),
           ],
         ),

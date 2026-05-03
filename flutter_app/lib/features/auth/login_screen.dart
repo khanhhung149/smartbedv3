@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
@@ -48,12 +49,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
 
+    final l10n = AppLocalizations.of(context)!;
     if (!_isValidEmail(email)) {
-      setState(() => _errorMsg = 'Enter a valid email address.');
+      setState(() => _errorMsg = l10n.enterValidEmail);
       return;
     }
     if (pass.length < 8) {
-      setState(() => _errorMsg = 'Password must be at least 8 characters.');
+      setState(() => _errorMsg = l10n.passwordTooShort);
       return;
     }
 
@@ -73,6 +75,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -81,13 +84,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24), // p-6
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 384), // max-w-sm
+                    constraints: const BoxConstraints(maxWidth: 384),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Branding — centered, mb-16 mt-8
                         const SizedBox(height: 32),
                         Center(
                           child: Row(
@@ -99,54 +101,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: AppColors.primary,
                                 fill: 1,
                               ),
-                              const SizedBox(width: 8), // gap-2
+                              const SizedBox(width: 8),
                               Text(
                                 'Sleep Pad',
                                 style: GoogleFonts.inter(
                                   fontSize: 28,
                                   fontWeight: AppFontWeight.bold,
                                   color: AppColors.primary,
-                                  letterSpacing: -0.5, // tracking-tight
+                                  letterSpacing: -0.5,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 64), // mb-16
+                        const SizedBox(height: 64),
 
-                        // Greeting — pl-2 mb-10
                         Padding(
                           padding: const EdgeInsets.only(left: 2),
                           child: Text(
-                            'Welcome back',
+                            l10n.welcomeBack,
                             style: GoogleFonts.inter(
-                              fontSize: AppTextSize.xl3, // text-3xl = 30sp
+                              fontSize: AppTextSize.xl3,
                               fontWeight: AppFontWeight.medium,
                               color: AppColors.onSurface,
                               letterSpacing: -0.5,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 40), // mb-10
+                        const SizedBox(height: 40),
 
-                        // Form fields — gap-5
                         StitchTextField(
                           controller: _emailCtrl,
-                          placeholder: 'Email address',
+                          placeholder: l10n.emailAddress,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                         ),
-                        const SizedBox(height: 20), // gap-5
+                        const SizedBox(height: 20),
                         StitchTextField(
                           controller: _passCtrl,
-                          placeholder: 'Password',
+                          placeholder: l10n.password,
                           obscureText: true,
                           showToggle: true,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _submit(),
                         ),
 
-                        // Inline error
                         if (_errorMsg != null) ...[
                           const SizedBox(height: 12),
                           Text(
@@ -158,23 +157,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ],
 
-                        const SizedBox(height: 36), // mt-4 + spacing
+                        const SizedBox(height: 36),
 
-                        // Sign in button
                         PrimaryButton(
-                          label: 'Sign in',
+                          label: l10n.signIn,
                           onPressed: _submit,
                           isLoading: _loading,
                         ),
 
-                        const SizedBox(height: 32), // mt-8
+                        const SizedBox(height: 32),
 
-                        // Secondary: sign up link
                         Center(
                           child: TextButton(
                             onPressed: () => context.go('/register'),
                             child: Text(
-                              'New here? Sign up',
+                              l10n.newHereSignUp,
                               style: GoogleFonts.inter(
                                 fontSize: AppTextSize.sm,
                                 fontWeight: AppFontWeight.medium,
@@ -190,13 +187,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
 
-            // Footer — mt-auto pb-8 pt-12
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 48, 0, 32),
               child: TextButton(
                 onPressed: () => context.go('/forgot-password'),
                 child: Text(
-                  'Forgot password?',
+                  l10n.forgotPassword,
                   style: GoogleFonts.inter(
                     fontSize: AppTextSize.sm,
                     color: AppColors.outline,

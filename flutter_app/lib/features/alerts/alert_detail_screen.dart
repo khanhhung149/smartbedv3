@@ -8,6 +8,7 @@ import '../../core/app_theme.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/primary_button.dart';
 import 'models/alert_out.dart';
+import '../../l10n/app_localizations.dart';
 
 // Alert detail screen — accessed via push-notification deep link or history row tap.
 // Source: alert_detail/code.html
@@ -132,7 +133,7 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
                 ),
                 Expanded(
                   child: Text(
-                    'Alert Detail',
+                    AppLocalizations.of(context)!.alertDetail,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: AppTextSize.lg,

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../l10n/app_localizations.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/widgets/primary_button.dart';
 import 'auth_repository_impl.dart' show AuthException;
@@ -69,7 +70,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Future<void> _submit() async {
     final otp = _otpKey.currentState?.value ?? '';
     if (otp.length < 6) {
-      setState(() => _errorMsg = 'Enter the 6-digit code.');
+      setState(() => _errorMsg = AppLocalizations.of(context)!.enterSixDigitCode);
       return;
     }
     setState(() {
@@ -98,6 +99,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: AppColors.onSurface),
+                onPressed: () => context.go('/register'),
+              ),
+            ),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -131,24 +139,29 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                         ),
                         const SizedBox(height: 64),
 
-                        Text(
-                          'Check your email',
-                          style: GoogleFonts.inter(
-                            fontSize: AppTextSize.xl3,
-                            fontWeight: AppFontWeight.medium,
-                            color: AppColors.onSurface,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'We sent a 6-digit code to\n${widget.email}',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: AppTextSize.sm,
-                            color: AppColors.secondary,
-                          ),
-                        ),
+                        Builder(builder: (ctx) {
+                          final l10n = AppLocalizations.of(ctx)!;
+                          return Column(children: [
+                            Text(
+                              l10n.checkYourEmail,
+                              style: GoogleFonts.inter(
+                                fontSize: AppTextSize.xl3,
+                                fontWeight: AppFontWeight.medium,
+                                color: AppColors.onSurface,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              l10n.verifyEmailSubtitle(widget.email),
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: AppTextSize.sm,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ]);
+                        }),
                         const SizedBox(height: 40),
 
                         OtpInputField(
@@ -169,33 +182,38 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
 
                         const SizedBox(height: 36),
 
-                        PrimaryButton(
-                          label: 'Verify',
-                          onPressed: _submit,
-                          isLoading: _loading,
-                        ),
+                        Builder(builder: (ctx) {
+                          final l10n = AppLocalizations.of(ctx)!;
+                          return Column(children: [
+                            PrimaryButton(
+                              label: l10n.verify,
+                              onPressed: _submit,
+                              isLoading: _loading,
+                            ),
 
-                        const SizedBox(height: 24),
+                            const SizedBox(height: 24),
 
-                        _remaining > 0
-                            ? Text(
-                                'Resend in ${_remaining}s',
-                                style: GoogleFonts.inter(
-                                  fontSize: AppTextSize.sm,
-                                  color: AppColors.outline,
-                                ),
-                              )
-                            : TextButton(
-                                onPressed: _resend,
-                                child: Text(
-                                  'Resend code',
-                                  style: GoogleFonts.inter(
-                                    fontSize: AppTextSize.sm,
-                                    fontWeight: AppFontWeight.medium,
-                                    color: AppColors.secondary,
+                            _remaining > 0
+                                ? Text(
+                                    l10n.resendIn(_remaining),
+                                    style: GoogleFonts.inter(
+                                      fontSize: AppTextSize.sm,
+                                      color: AppColors.outline,
+                                    ),
+                                  )
+                                : TextButton(
+                                    onPressed: _resend,
+                                    child: Text(
+                                      l10n.resendCode,
+                                      style: GoogleFonts.inter(
+                                        fontSize: AppTextSize.sm,
+                                        fontWeight: AppFontWeight.medium,
+                                        color: AppColors.secondary,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
+                          ]);
+                        }),
                       ],
                     ),
                   ),

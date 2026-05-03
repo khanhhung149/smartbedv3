@@ -8,6 +8,7 @@ import '../data/providers/selected_device_provider.dart';
 import '../sharing/providers/sharing_providers.dart';
 import 'providers/devices_list_provider.dart';
 import 'providers/provisioning_provider.dart';
+import '../../l10n/app_localizations.dart';
 
 // Screen 4 of BLE provisioning — success state with device name input.
 // Matches ble_provisioning_success/code.html:
@@ -109,7 +110,7 @@ class _BleProvisionSuccessScreenState
                         const SizedBox(height: 48),
                         // Typography block
                         Text(
-                          'Sleep Pad is ready',
+                          AppLocalizations.of(context)!.sleepPadReady,
                           style: GoogleFonts.inter(
                             fontSize: AppTextSize.xl4,
                             fontWeight: AppFontWeight.bold,
@@ -172,7 +173,7 @@ class _AppBar extends StatelessWidget {
             ),
           ),
           Text(
-            'Setup Sleep Pad',
+            AppLocalizations.of(context)!.setupSleepPad,
             style: GoogleFonts.inter(
               fontSize: AppTextSize.lg,
               fontWeight: AppFontWeight.bold,
@@ -503,7 +504,7 @@ class _BottomCta extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'Save and go home',
+                        AppLocalizations.of(context)!.saveAndGoHome,
                         style: GoogleFonts.inter(
                           fontSize: AppTextSize.lg,
                           fontWeight: AppFontWeight.semiBold,

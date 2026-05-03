@@ -1,0 +1,168 @@
+{
+  "@@locale": "vi",
+
+  "appName": "Sleep Pad",
+
+  "signIn": "Đăng nhập",
+  "signUp": "Đăng ký",
+  "logIn": "Đăng nhập",
+  "logOut": "Đăng xuất",
+  "createAccount": "Tạo tài khoản",
+  "getStarted": "Bắt đầu",
+  "continueCta": "Tiếp tục",
+  "save": "Lưu",
+  "saveChanges": "Lưu thay đổi",
+  "cancel": "Hủy",
+  "retry": "Thử lại",
+  "accept": "Chấp nhận",
+  "decline": "Từ chối",
+  "send": "Gửi",
+
+  "welcomeBack": "Chào mừng trở lại",
+  "createYourAccount": "Tạo tài khoản của bạn",
+  "newHereSignUp": "Chưa có tài khoản? Đăng ký",
+  "alreadyHaveAccount": "Đã có tài khoản? ",
+  "forgotPassword": "Quên mật khẩu?",
+  "forgotPasswordTitle": "Quên mật khẩu",
+  "forgotPasswordSubtitle": "Nhập email và chúng tôi sẽ gửi mã đặt lại",
+  "sendResetCode": "Gửi mã đặt lại",
+  "backToSignIn": "Quay lại đăng nhập",
+
+  "emailAddress": "Địa chỉ email",
+  "password": "Mật khẩu",
+  "newPassword": "Mật khẩu mới",
+  "confirmPassword": "Xác nhận mật khẩu",
+
+  "checkYourEmail": "Kiểm tra email của bạn",
+  "verifyEmailSubtitle": "Chúng tôi đã gửi mã 6 chữ số đến\n{email}",
+  "@verifyEmailSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+  "verify": "Xác minh",
+  "resendCode": "Gửi lại mã",
+  "resendIn": "Gửi lại sau {seconds}s",
+  "@resendIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+
+  "resetPassword": "Đặt lại mật khẩu",
+  "resetPasswordSubtitle": "Nhập mã đã gửi đến {email}",
+  "@resetPasswordSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "enterValidEmail": "Nhập địa chỉ email hợp lệ.",
+  "passwordTooShort": "Mật khẩu phải có ít nhất 8 ký tự.",
+  "passwordsDoNotMatch": "Mật khẩu không khớp.",
+  "enterSixDigitCode": "Nhập mã 6 chữ số.",
+
+  "settings": "Cài đặt",
+  "account": "Tài khoản",
+  "notifications": "Thông báo",
+  "appearance": "Giao diện",
+  "deviceConnection": "Kết nối thiết bị",
+  "about": "Về ứng dụng",
+  "changePassword": "Đổi mật khẩu",
+  "enablePushNotifications": "Bật thông báo đẩy",
+  "quietHours": "Giờ yên tĩnh",
+  "quietHoursValue": "10pm — 7am",
+  "appVersion": "Phiên bản ứng dụng",
+  "termsOfService": "Điều khoản dịch vụ",
+  "privacyPolicy": "Chính sách bảo mật",
+  "supportEmail": "Email hỗ trợ",
+  "serverUrl": "URL máy chủ",
+  "advanced": "Nâng cao",
+  "savedWifiCredentials": "Thông tin WiFi đã lưu",
+  "invalidUrlFormat": "Định dạng URL không hợp lệ",
+  "language": "Ngôn ngữ",
+
+  "devices": "Thiết bị",
+  "deviceDetails": "Chi tiết thiết bị",
+  "noDevicesPaired": "Chưa có thiết bị nào được ghép.",
+  "addDevice": "Thêm thiết bị",
+  "noDeviceSelected": "Chưa chọn thiết bị.",
+  "deviceIdCopied": "Đã sao chép ID thiết bị",
+  "failedToLoadDevice": "Không thể tải thiết bị: {error}",
+  "@failedToLoadDevice": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "pairedOn": "Đã ghép {date}",
+  "@pairedOn": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "activeAgo": "Hoạt động {time}",
+  "@activeAgo": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "online": "Trực tuyến",
+  "offline": "Ngoại tuyến",
+  "deviceNameHint": "Tên thiết bị",
+  "noDevice": "Không có thiết bị",
+
+  "setupSleepPad": "Cài đặt Sleep Pad",
+  "sleepPadReady": "Sleep Pad đã sẵn sàng",
+  "monitorSleepTagline": "Theo dõi giấc ngủ,\nkhông cần đeo thiết bị",
+  "giveWifi": "Kết nối WiFi cho Sleep Pad",
+  "wifiDescription": "Sleep Pad sẽ dùng mạng này để gửi dữ liệu lên đám mây.",
+  "networkName": "Tên mạng (SSID)",
+  "saveAndGoHome": "Lưu và về trang chủ",
+  "pairingWithDevice": "Đang ghép đôi thiết bị...",
+  "pairingDuration": "Thường mất 10–30 giây",
+
+  "sharingTitle": "Chia sẻ sự an tâm",
+  "sharingSubtitle": "Mời thành viên gia đình qua email. Họ xem cùng dữ liệu giấc ngủ theo thời gian thực.",
+  "sendInvite": "Gửi lời mời",
+  "pendingInvites": "LỜI MỜI CHỜ XỬ LÝ",
+  "noDevicesShared": "Chưa có thiết bị nào được chia sẻ với bạn.",
+  "inviteFrom": "Lời mời từ {email}",
+  "@inviteFrom": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "alerts": "Cảnh báo",
+  "alertDetail": "Chi tiết cảnh báo",
+  "knowIfSomethingOff": "Biết ngay khi có bất thường",
+  "alertsSubtitle": "Đặt ngưỡng cá nhân. Nhận thông báo ngay khi có thay đổi.",
+  "activeNotificationsEnabled": "Thông báo đang bật",
+
+  "sleepHistory": "Lịch sử giấc ngủ",
+  "couldNotLoadHistory": "Không thể tải lịch sử",
+  "notEnoughData": "Chưa đủ dữ liệu",
+  "sleepDataWillAppear": "Dữ liệu giấc ngủ sẽ xuất hiện sau khi thiết bị theo dõi.",
+
+  "noDevicePaired": "Chưa có thiết bị được ghép nối",
+  "iAlreadyHaveAccount": "Tôi đã có tài khoản",
+
+  "justNow": "vừa xong",
+  "minutesAgo": "{minutes} phút trước",
+  "@minutesAgo": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "hoursAgo": "{hours}h trước",
+  "@hoursAgo": {
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
+  },
+
+  "networkNameRequired": "Tên mạng là bắt buộc",
+  "somethingWentWrong": "Đã xảy ra lỗi. Vui lòng thử lại.",
+  "inviteFamily": "Mời thành viên gia đình",
+  "inviteFamilyDescription": "Họ sẽ nhận được lời mời qua email. Khi chấp nhận, họ sẽ thấy dữ liệu và cảnh báo theo thời gian thực giống bạn."
+}

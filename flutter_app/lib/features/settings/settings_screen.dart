@@ -10,6 +10,8 @@ import '../../shared/providers/app_env_provider.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/services/fcm_service.dart';
 import '../../shared/widgets/alert_bell_button.dart';
+import '../../l10n/app_localizations.dart';
+import '../../shared/providers/locale_provider.dart';
 
 
 // Settings screen.
@@ -57,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
@@ -67,33 +70,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Section 1: Account
-            const _SectionLabel(label: 'Account'),
+            _SectionLabel(label: l10n.account),
             _GroupCard(children: [
               _InfoRow(
                 leading: _Avatar(),
-                title: 'Account',
+                title: l10n.account,
                 subtitle: 'user@example.com',
               ),
               _DividerRow(),
               _TappableRow(
-                label: 'Change password',
+                label: l10n.changePassword,
                 onTap: () {},
               ),
             ]),
             const SizedBox(height: 32),
 
             // Section 2: Notifications
-            const _SectionLabel(label: 'Notifications'),
+            _SectionLabel(label: l10n.notifications),
             _GroupCard(children: [
               _ToggleRow(
-                label: 'Enable push notifications',
+                label: l10n.enablePushNotifications,
                 value: _pushEnabled,
                 onChanged: (v) => setState(() => _pushEnabled = v),
               ),
               _DividerRow(),
               _ToggleRow(
-                label: 'Quiet hours',
-                subtitle: '10pm — 7am',
+                label: l10n.quietHours,
+                subtitle: l10n.quietHoursValue,
                 value: _quietHours,
                 onChanged: (v) => setState(() => _quietHours = v),
               ),
@@ -101,7 +104,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 32),
 
             // Section 3: Appearance
-            const _SectionLabel(label: 'Appearance'),
+            _SectionLabel(label: l10n.appearance),
             _GroupCard(children: [
               Padding(
                 padding: const EdgeInsets.all(20),
@@ -110,11 +113,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onChanged: (i) => setState(() => _themeIndex = i),
                 ),
               ),
+              _DividerRow(),
+              _TappableRow(
+                label: l10n.language,
+                onTap: () => _showLanguagePicker(context),
+              ),
             ]),
             const SizedBox(height: 32),
 
             // Section 4: Device Connection
-            const _SectionLabel(label: 'Device Connection'),
+            _SectionLabel(label: l10n.deviceConnection),
             _GroupCard(children: [
               _ServerUrlRow(
                 url: _serverUrl,
@@ -124,16 +132,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 32),
 
             // Section 5: About
-            const _SectionLabel(label: 'About'),
+            _SectionLabel(label: l10n.about),
             _GroupCard(children: [
-              const _LabelValueRow(label: 'App version', value: 'v1.0.0'),
+              _LabelValueRow(label: l10n.appVersion, value: 'v1.0.0'),
               _DividerRow(),
-              _TappableRow(label: 'Terms of Service', onTap: () {}),
+              _TappableRow(label: l10n.termsOfService, onTap: () {}),
               _DividerRow(),
-              _TappableRow(label: 'Privacy Policy', onTap: () {}),
+              _TappableRow(label: l10n.privacyPolicy, onTap: () {}),
               _DividerRow(),
               _TappableRow(
-                label: 'Support Email',
+                label: l10n.supportEmail,
                 trailingIcon: Symbols.mail,
                 onTap: () {},
               ),
@@ -152,9 +160,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _showLanguagePicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LanguagePickerSheet(
+        currentLocale: ref.read(localeProvider),
+        onSelect: (locale) => ref.read(localeProvider.notifier).setLocale(locale),
+      ),
+    );
+  }
+
   Future<void> _editServerUrl(BuildContext context) async {
     final controller = TextEditingController(text: _serverUrl);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context)!;
     try {
       final result = await showDialog<String>(
         context: context,
@@ -165,7 +185,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final uri = Uri.tryParse(result);
       if (uri == null || !uri.hasScheme) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Invalid URL format')),
+          SnackBar(content: Text(l10n.invalidUrlFormat)),
         );
         return;
       }
@@ -217,7 +237,7 @@ PreferredSizeWidget _buildAppBar(BuildContext context) {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Settings',
+                        AppLocalizations.of(context)!.settings,
                         style: GoogleFonts.inter(
                           fontSize: AppTextSize.xl2,
                           fontWeight: AppFontWeight.semiBold,
@@ -464,7 +484,7 @@ class _ServerUrlRow extends StatelessWidget {
                   Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Server URL',
+                        Text(AppLocalizations.of(context)!.serverUrl,
                             style: GoogleFonts.inter(
                                 fontWeight: AppFontWeight.medium,
                                 color: AppColors.onSurface)),
@@ -488,7 +508,7 @@ class _ServerUrlRow extends StatelessWidget {
                           color: AppColors.outlineVariant
                               .withValues(alpha: 0.2)),
                     ),
-                    child: Text('Advanced',
+                    child: Text(AppLocalizations.of(context)!.advanced,
                         style: GoogleFonts.inter(
                             fontSize: AppTextSize.xs,
                             color: AppColors.onSurfaceVariant)),
@@ -587,7 +607,7 @@ class _LogoutCard extends StatelessWidget {
                         strokeWidth: 2, color: AppColors.error),
                   )
                 : Text(
-                    'Log out',
+                    AppLocalizations.of(context)!.logOut,
                     style: GoogleFonts.inter(
                       fontSize: AppTextSize.base,
                       fontWeight: AppFontWeight.semiBold,
@@ -629,7 +649,7 @@ class _ServerUrlDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainer,
-      title: Text('Server URL',
+      title: Text(AppLocalizations.of(context)!.serverUrl,
           style: GoogleFonts.inter(
               fontWeight: AppFontWeight.semiBold,
               color: AppColors.onSurface)),
@@ -653,17 +673,114 @@ class _ServerUrlDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancel',
+          child: Text(AppLocalizations.of(context)!.cancel,
               style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-          child: Text('Save',
+          child: Text(AppLocalizations.of(context)!.save,
               style: GoogleFonts.inter(
                   color: AppColors.primaryContainer,
                   fontWeight: AppFontWeight.semiBold)),
         ),
       ],
+    );
+  }
+}
+
+// ── Language picker sheet ─────────────────────────────────────────────────────
+
+class _LanguagePickerSheet extends StatelessWidget {
+  const _LanguagePickerSheet({
+    required this.currentLocale,
+    required this.onSelect,
+  });
+
+  final Locale? currentLocale;
+  final ValueChanged<Locale> onSelect;
+
+  static const _locales = [
+    ('en', 'English'),
+    ('vi', 'Tiếng Việt'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final current = currentLocale?.languageCode ?? 'en';
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 6,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: AppColors.outlineVariant.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                AppLocalizations.of(context)!.language,
+                style: GoogleFonts.inter(
+                  fontSize: AppTextSize.lg,
+                  fontWeight: AppFontWeight.semiBold,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ),
+          ..._locales.map((entry) {
+            final (code, label) = entry;
+            final isSelected = current == code;
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  onSelect(Locale(code));
+                  Navigator.of(context).pop();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: GoogleFonts.inter(
+                            fontWeight: isSelected
+                                ? AppFontWeight.semiBold
+                                : AppFontWeight.medium,
+                            color: isSelected
+                                ? AppColors.primaryContainer
+                                : AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        const Icon(Icons.check,
+                            color: AppColors.primaryContainer, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 }
