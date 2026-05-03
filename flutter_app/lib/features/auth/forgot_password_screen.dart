@@ -85,7 +85,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Sleep Pad',
+                                'Sleep Tech',
                                 style: GoogleFonts.inter(
                                   fontSize: 28,
                                   fontWeight: AppFontWeight.bold,

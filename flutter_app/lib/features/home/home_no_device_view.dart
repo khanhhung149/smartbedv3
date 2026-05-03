@@ -29,7 +29,7 @@ class HomeNoDeviceView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Add a Sleep Pad device to get started.',
+              'Add a Sleep Tech device to get started.',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: AppColors.onSurfaceVariant,

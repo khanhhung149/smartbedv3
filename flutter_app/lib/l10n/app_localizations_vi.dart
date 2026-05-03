@@ -9,7 +9,7 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
-  String get appName => 'Sleep Pad';
+  String get appName => 'Sleep Tech';
 
   @override
   String get signIn => 'Đăng nhập';
@@ -235,21 +235,21 @@ class AppLocalizationsVi extends AppLocalizations {
   String get noDevice => 'Không có thiết bị';
 
   @override
-  String get setupSleepPad => 'Cài đặt Sleep Pad';
+  String get setupSleepPad => 'Cài đặt Sleep Tech';
 
   @override
-  String get sleepPadReady => 'Sleep Pad đã sẵn sàng';
+  String get sleepPadReady => 'Sleep Tech đã sẵn sàng';
 
   @override
   String get monitorSleepTagline =>
       'Theo dõi giấc ngủ,\nkhông cần đeo thiết bị';
 
   @override
-  String get giveWifi => 'Kết nối WiFi cho Sleep Pad';
+  String get giveWifi => 'Kết nối WiFi cho Sleep Tech';
 
   @override
   String get wifiDescription =>
-      'Sleep Pad sẽ dùng mạng này để gửi dữ liệu lên đám mây.';
+      'Sleep Tech sẽ dùng mạng này để gửi dữ liệu lên đám mây.';
 
   @override
   String get networkName => 'Tên mạng (SSID)';

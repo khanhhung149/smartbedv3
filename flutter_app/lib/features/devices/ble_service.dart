@@ -11,7 +11,7 @@ class BleException implements Exception {
   String toString() => message;
 }
 
-// Wraps flutter_blue_plus for Sleep Pad BLE provisioning operations.
+// Wraps flutter_blue_plus for Sleep Tech BLE provisioning operations.
 // All public methods throw BleException on failure — callers handle display.
 //
 // Two usage modes:
@@ -240,7 +240,7 @@ class BleService {
     }
   }
 
-  // Finds the Sleep Pad GATT service by UUID in discovered services list.
+  // Finds the Sleep Tech GATT service by UUID in discovered services list.
   BluetoothService _findService(List<BluetoothService> services) {
     try {
       return services.firstWhere(
@@ -249,7 +249,7 @@ class BleService {
       );
     } catch (_) {
       throw const BleException(
-        'Sleep Pad service not found. Ensure the device is in provisioning mode.',
+        'Sleep Tech service not found. Ensure the device is in provisioning mode.',
       );
     }
   }

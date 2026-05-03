@@ -30,7 +30,7 @@ class BlePairingAppBar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Setup Sleep Pad',
+                  'Setup Sleep Tech',
                   style: GoogleFonts.inter(
                     fontSize: AppTextSize.sm,
                     fontWeight: AppFontWeight.semiBold,

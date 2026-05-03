@@ -239,7 +239,7 @@ class _RouterAppState extends ConsumerState<_RouterApp> {
   Widget build(BuildContext context) {
     final locale = ref.watch(localeProvider);
     return MaterialApp.router(
-      title: 'Sleep Pad',
+      title: 'Sleep Tech',
       theme: AppTheme.dark,
       routerConfig: _router,
       debugShowCheckedModeBanner: false,

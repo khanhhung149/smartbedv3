@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// No description provided for @appName.
   ///
   /// In en, this message translates to:
-  /// **'Sleep Pad'**
+  /// **'Sleep Tech'**
   String get appName;
 
   /// No description provided for @signIn.
@@ -527,13 +527,13 @@ abstract class AppLocalizations {
   /// No description provided for @setupSleepPad.
   ///
   /// In en, this message translates to:
-  /// **'Setup Sleep Pad'**
+  /// **'Setup Sleep Tech'**
   String get setupSleepPad;
 
   /// No description provided for @sleepPadReady.
   ///
   /// In en, this message translates to:
-  /// **'Sleep Pad is ready'**
+  /// **'Sleep Tech is ready'**
   String get sleepPadReady;
 
   /// No description provided for @monitorSleepTagline.
@@ -545,13 +545,13 @@ abstract class AppLocalizations {
   /// No description provided for @giveWifi.
   ///
   /// In en, this message translates to:
-  /// **'Give your Sleep Pad WiFi'**
+  /// **'Give your Sleep Tech WiFi'**
   String get giveWifi;
 
   /// No description provided for @wifiDescription.
   ///
   /// In en, this message translates to:
-  /// **'Your Sleep Pad will use this network to send data to the cloud.'**
+  /// **'Your Sleep Tech will use this network to send data to the cloud.'**
   String get wifiDescription;
 
   /// No description provided for @networkName.

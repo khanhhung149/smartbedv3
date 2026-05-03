@@ -109,7 +109,7 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Sleep Pad',
+                          'Sleep Tech',
                           style: GoogleFonts.inter(
                             fontSize: 28,
                             fontWeight: AppFontWeight.bold,

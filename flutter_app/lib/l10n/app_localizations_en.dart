@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appName => 'Sleep Pad';
+  String get appName => 'Sleep Tech';
 
   @override
   String get signIn => 'Sign in';
@@ -235,20 +235,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noDevice => 'No device';
 
   @override
-  String get setupSleepPad => 'Setup Sleep Pad';
+  String get setupSleepPad => 'Setup Sleep Tech';
 
   @override
-  String get sleepPadReady => 'Sleep Pad is ready';
+  String get sleepPadReady => 'Sleep Tech is ready';
 
   @override
   String get monitorSleepTagline => 'Monitor sleep,\nwithout wearables';
 
   @override
-  String get giveWifi => 'Give your Sleep Pad WiFi';
+  String get giveWifi => 'Give your Sleep Tech WiFi';
 
   @override
   String get wifiDescription =>
-      'Your Sleep Pad will use this network to send data to the cloud.';
+      'Your Sleep Tech will use this network to send data to the cloud.';
 
   @override
   String get networkName => 'Network Name (SSID)';

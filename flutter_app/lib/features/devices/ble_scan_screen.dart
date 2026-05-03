@@ -171,7 +171,7 @@ class _PermissionDeniedBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Sleep Pad needs Bluetooth to find your device. Grant '
+            'Sleep Tech needs Bluetooth to find your device. Grant '
             'permission to continue.',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(

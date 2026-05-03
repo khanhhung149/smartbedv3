@@ -13,7 +13,7 @@ import 'providers/auth_repository_provider.dart';
 
 // Register screen matching register/code.html:
 // - bg-surface-container-lowest, centered max-w-[360px]
-// - Header: vital_signs icon + "Sleep Pad" in primary-container,
+// - Header: vital_signs icon + "Sleep Tech" in primary-container,
 //   h2 "Create your account" text-2xl font-semibold
 // - Email, Password, Confirm Password fields rounded-[20px]
 // - "Create account" gradient button rounded-full h-[52px]
@@ -102,7 +102,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Sleep Pad',
+                        'Sleep Tech',
                         style: GoogleFonts.inter(
                           fontSize: 28,
                           fontWeight: AppFontWeight.bold,

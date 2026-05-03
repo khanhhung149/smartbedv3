@@ -130,7 +130,7 @@ class DeviceDetailStatusCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'SLEEP PAD V2',
+            'SLEEP TECH V2',
             style: GoogleFonts.inter(
               fontSize: AppTextSize.xs,
               color: AppColors.onSurfaceVariant.withValues(alpha: 0.7),

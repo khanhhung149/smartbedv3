@@ -14,7 +14,7 @@ import 'providers/auth_repository_provider.dart';
 
 // Login screen matching login/code.html:
 // - bg-background, centered max-w-sm column
-// - Branding: monitoring icon + "Sleep Pad" in primary color
+// - Branding: monitoring icon + "Sleep Tech" in primary color
 // - h2 "Welcome back" text-3xl font-medium
 // - Email + password fields (password has eye toggle)
 // - "Sign in" gradient button rounded-full
@@ -103,7 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Sleep Pad',
+                                'Sleep Tech',
                                 style: GoogleFonts.inter(
                                   fontSize: 28,
                                   fontWeight: AppFontWeight.bold,

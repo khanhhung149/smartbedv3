@@ -1,7 +1,7 @@
 {
   "@@locale": "vi",
 
-  "appName": "Sleep Pad",
+  "appName": "Sleep Tech",
 
   "signIn": "Đăng nhập",
   "signUp": "Đăng ký",
@@ -111,11 +111,11 @@
   "deviceNameHint": "Tên thiết bị",
   "noDevice": "Không có thiết bị",
 
-  "setupSleepPad": "Cài đặt Sleep Pad",
-  "sleepPadReady": "Sleep Pad đã sẵn sàng",
+  "setupSleepPad": "Cài đặt Sleep Tech",
+  "sleepPadReady": "Sleep Tech đã sẵn sàng",
   "monitorSleepTagline": "Theo dõi giấc ngủ,\nkhông cần đeo thiết bị",
-  "giveWifi": "Kết nối WiFi cho Sleep Pad",
-  "wifiDescription": "Sleep Pad sẽ dùng mạng này để gửi dữ liệu lên đám mây.",
+  "giveWifi": "Kết nối WiFi cho Sleep Tech",
+  "wifiDescription": "Sleep Tech sẽ dùng mạng này để gửi dữ liệu lên đám mây.",
   "networkName": "Tên mạng (SSID)",
   "saveAndGoHome": "Lưu và về trang chủ",
   "pairingWithDevice": "Đang ghép đôi thiết bị...",

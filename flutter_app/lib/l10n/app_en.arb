@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
 
-  "appName": "Sleep Pad",
+  "appName": "Sleep Tech",
 
   "signIn": "Sign in",
   "signUp": "Sign up",
@@ -111,11 +111,11 @@
   "deviceNameHint": "Device name",
   "noDevice": "No device",
 
-  "setupSleepPad": "Setup Sleep Pad",
-  "sleepPadReady": "Sleep Pad is ready",
+  "setupSleepPad": "Setup Sleep Tech",
+  "sleepPadReady": "Sleep Tech is ready",
   "monitorSleepTagline": "Monitor sleep,\nwithout wearables",
-  "giveWifi": "Give your Sleep Pad WiFi",
-  "wifiDescription": "Your Sleep Pad will use this network to send data to the cloud.",
+  "giveWifi": "Give your Sleep Tech WiFi",
+  "wifiDescription": "Your Sleep Tech will use this network to send data to the cloud.",
   "networkName": "Network Name (SSID)",
   "saveAndGoHome": "Save and go home",
   "pairingWithDevice": "Pairing with your device...",

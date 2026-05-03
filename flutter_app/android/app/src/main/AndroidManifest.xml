@@ -17,7 +17,7 @@
          No-op in dev (Firebase not configured). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:label="sleep_pad"
+        android:label="Sleep Tech"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
