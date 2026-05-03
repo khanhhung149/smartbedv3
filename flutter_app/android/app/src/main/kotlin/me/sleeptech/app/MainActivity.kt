@@ -1,4 +1,4 @@
-package com.sleeppad.sleep_pad
+package me.sleeptech.app
 
 import io.flutter.embedding.android.FlutterActivity
 
