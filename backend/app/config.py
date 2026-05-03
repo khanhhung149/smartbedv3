@@ -28,9 +28,17 @@ class Settings(BaseSettings):
 
     fcm_credentials_path: str = ""
 
-    mailgun_api_key: str = ""
-    mailgun_domain: str = ""
-    email_from: str = "SleepPad <noreply@sleeppad.io>"
+    # SMTP email (FastAPI-Mail). Empty mail_server → dev mode (log OTP to stdout, no real send).
+    mail_username: str = ""
+    mail_password: str = ""
+    mail_from: str = "hi@sleeptech.me"
+    mail_from_name: str = "SleepTech"
+    mail_server: str = ""
+    mail_port: int = 465
+    mail_ssl_tls: bool = True
+    mail_starttls: bool = False
+    use_credentials: bool = True
+    validate_certs: bool = True
 
 
 @lru_cache
