@@ -30,8 +30,10 @@
 
   "emailAddress": "Địa chỉ email",
   "password": "Mật khẩu",
+  "currentPassword": "Mật khẩu hiện tại",
   "newPassword": "Mật khẩu mới",
   "confirmPassword": "Xác nhận mật khẩu",
+  "passwordChanged": "Đổi mật khẩu thành công.",
 
   "checkYourEmail": "Kiểm tra email của bạn",
   "verifyEmailSubtitle": "Chúng tôi đã gửi mã 6 chữ số đến\n{email}",

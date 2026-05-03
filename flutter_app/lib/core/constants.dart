@@ -27,4 +27,7 @@ abstract final class AppConstants {
 
   // Secure storage key for persisting last selected device id
   static const String lastDeviceIdKey = 'last_device_id';
+
+  // Secure storage key for persisting logged-in user email
+  static const String userEmailKey = 'user_email';
 }

@@ -46,6 +46,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       final token = res.data['access_token'] as String;
       await _storage.writeToken(token);
+      await _storage.writeEmail(email);
       return token;
     } on DioException catch (e) {
       throw AuthException(_mapDioError(e, isRegister: false));
@@ -66,6 +67,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       final token = res.data['access_token'] as String;
       await _storage.writeToken(token);
+      await _storage.writeEmail(email);
       return token;
     } on DioException catch (e) {
       throw AuthException(_mapDioError(e, isRegister: false));
@@ -102,6 +104,25 @@ class AuthRepositoryImpl implements AuthRepository {
       );
     } on DioException catch (e) {
       throw AuthException(_mapDioError(e, isRegister: false));
+    }
+  }
+
+  @override
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    try {
+      await _client.dio.post(
+        '/auth/change-password',
+        data: {'current_password': currentPassword, 'new_password': newPassword},
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.unknown) {
+        throw const AuthException("Couldn't reach server. Check your connection.");
+      }
+      if (status == 401) throw const AuthException('Incorrect current password.');
+      if (status == 422) throw const AuthException('New password must be at least 8 characters.');
+      throw AuthException('Something went wrong (${status ?? 'unknown'}). Try again.');
     }
   }
 

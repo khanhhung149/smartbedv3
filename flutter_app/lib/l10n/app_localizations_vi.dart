@@ -88,10 +88,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get password => 'Mật khẩu';
 
   @override
+  String get currentPassword => 'Mật khẩu hiện tại';
+
+  @override
   String get newPassword => 'Mật khẩu mới';
 
   @override
   String get confirmPassword => 'Xác nhận mật khẩu';
+
+  @override
+  String get passwordChanged => 'Đổi mật khẩu thành công.';
 
   @override
   String get checkYourEmail => 'Kiểm tra email của bạn';

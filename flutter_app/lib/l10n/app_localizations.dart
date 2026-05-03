@@ -254,6 +254,12 @@ abstract class AppLocalizations {
   /// **'Password'**
   String get password;
 
+  /// No description provided for @currentPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password'**
+  String get currentPassword;
+
   /// No description provided for @newPassword.
   ///
   /// In en, this message translates to:
@@ -265,6 +271,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm password'**
   String get confirmPassword;
+
+  /// No description provided for @passwordChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed successfully.'**
+  String get passwordChanged;
 
   /// No description provided for @checkYourEmail.
   ///

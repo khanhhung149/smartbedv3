@@ -30,8 +30,10 @@
 
   "emailAddress": "Email address",
   "password": "Password",
+  "currentPassword": "Current password",
   "newPassword": "New password",
   "confirmPassword": "Confirm password",
+  "passwordChanged": "Password changed successfully.",
 
   "checkYourEmail": "Check your email",
   "verifyEmailSubtitle": "We sent a 6-digit code to\n{email}",

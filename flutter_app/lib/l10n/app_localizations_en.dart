@@ -88,10 +88,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get password => 'Password';
 
   @override
+  String get currentPassword => 'Current password';
+
+  @override
   String get newPassword => 'New password';
 
   @override
   String get confirmPassword => 'Confirm password';
+
+  @override
+  String get passwordChanged => 'Password changed successfully.';
 
   @override
   String get checkYourEmail => 'Check your email';

@@ -21,3 +21,12 @@ final initialAuthProvider = FutureProvider<String?>((ref) async {
   final storage = ref.read(authStorageProvider);
   return storage.readToken();
 });
+
+// Reads the persisted user email from secure storage.
+// Returns null if not logged in yet.
+final userEmailProvider = FutureProvider<String?>((ref) async {
+  // Re-run whenever auth state changes (login/logout).
+  ref.watch(authProvider);
+  final storage = ref.read(authStorageProvider);
+  return storage.readEmail();
+});

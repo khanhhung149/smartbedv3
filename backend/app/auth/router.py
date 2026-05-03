@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 
 from auth.email_service import send_otp_email
 from auth.models import (
+    ChangePasswordRequest,
     FcmTokenUpdate,
     ForgotPasswordRequest,
     OtpVerifyRequest,
@@ -162,6 +163,21 @@ async def me(
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
     return UserOut(id=row["id"], email=row["email"])
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: ChangePasswordRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    pool: asyncpg.Pool = Depends(get_db_pool_from_request),
+) -> None:
+    row = await pool.fetchrow("SELECT password_hash FROM users WHERE id=$1", user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
+    if not verify_password(payload.current_password, row["password_hash"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect current password")
+    pwd_hash = hash_password(payload.new_password)
+    await pool.execute("UPDATE users SET password_hash=$1 WHERE id=$2", pwd_hash, user_id)
 
 
 @router.patch("/fcm-token", status_code=status.HTTP_204_NO_CONTENT)

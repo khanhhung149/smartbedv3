@@ -8,10 +8,11 @@ import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/providers/app_env_provider.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../../shared/providers/locale_provider.dart';
 import '../../shared/services/fcm_service.dart';
 import '../../shared/widgets/alert_bell_button.dart';
 import '../../l10n/app_localizations.dart';
-import '../../shared/providers/locale_provider.dart';
+import 'change_password_dialog.dart';
 
 
 // Settings screen.
@@ -75,12 +76,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _InfoRow(
                 leading: _Avatar(),
                 title: l10n.account,
-                subtitle: 'user@example.com',
+                subtitle: ref.watch(userEmailProvider).valueOrNull ?? '—',
               ),
               _DividerRow(),
               _TappableRow(
                 label: l10n.changePassword,
-                onTap: () {},
+                onTap: () => _showChangePasswordDialog(context),
               ),
             ]),
             const SizedBox(height: 32),
@@ -158,6 +159,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _showChangePasswordDialog(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const ChangePasswordDialog(),
+    );
+    if (changed == true && mounted) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.passwordChanged)),
+      );
+    }
   }
 
   void _showLanguagePicker(BuildContext context) {

@@ -20,10 +20,19 @@ class AuthStorage {
 
   Future<void> deleteToken() async {
     await _storage.delete(key: AppConstants.jwtStorageKey);
+    await _storage.delete(key: AppConstants.userEmailKey);
   }
 
   Future<bool> hasToken() async {
     final token = await readToken();
     return token != null && token.isNotEmpty;
+  }
+
+  Future<String?> readEmail() async {
+    return _storage.read(key: AppConstants.userEmailKey);
+  }
+
+  Future<void> writeEmail(String email) async {
+    await _storage.write(key: AppConstants.userEmailKey, value: email);
   }
 }
