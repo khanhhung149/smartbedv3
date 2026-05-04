@@ -68,3 +68,4 @@ backend/
 ## Secrets — never commit
 
 `.gitignore` excludes `.env.dev`, `.env.prod`, `secrets/`, `mosquitto/passwords`. Double-check before `git add`.
+# CI/CD smoke test marker — 2026-05-05 01:48
