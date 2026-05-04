@@ -18,12 +18,12 @@
   let pillow = $derived(($json('products.items.smart_pillow') as Product) ?? empty);
 </script>
 
-<section id="products" class="section bg-cloud">
+<section id="products" class="section surface-alt">
   <div class="container-page">
     <div class="max-w-3xl mb-16">
       <div class="kicker">{$_('products.kicker')}</div>
       <h2 class="text-4xl md:text-5xl font-bold leading-tight mb-6">{$_('products.title')}</h2>
-      <p class="text-lg text-ink/70">{$_('products.lead')}</p>
+      <p class="text-lg text-ink/70 dark:text-cloud/70">{$_('products.lead')}</p>
     </div>
 
     <!-- Hero product: YumePad -->
@@ -75,18 +75,18 @@
     <!-- Smart Bed + Smart Pillow side-by-side -->
     <div class="grid md:grid-cols-2 gap-6">
       {#each [{ p: bed, img: '/generated/smart-bed.png' }, { p: pillow, img: '/generated/smart-pillow.png' }] as { p, img }}
-        <article class="rounded-3xl bg-white border border-ink/10 overflow-hidden hover:border-primary/30 hover:shadow-lg transition flex flex-col">
-          <div class="relative aspect-[4/3] overflow-hidden bg-moon">
+        <article class="rounded-3xl surface-card border overflow-hidden hover:border-primary/30 dark:hover:border-primary-soft/40 hover:shadow-lg transition flex flex-col">
+          <div class="relative aspect-[4/3] overflow-hidden bg-moon dark:bg-ink">
             <img src={img} alt={p.name} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
           </div>
           <div class="p-8 flex-1 flex flex-col">
-            <span class="inline-block px-2.5 py-1 rounded-full bg-moon text-ink/60 text-xs font-semibold mb-4 self-start">
+            <span class="inline-block px-2.5 py-1 rounded-full bg-moon dark:bg-white/10 text-ink/60 dark:text-cloud/60 text-xs font-semibold mb-4 self-start">
               {p.status}
             </span>
             <h3 class="text-2xl font-bold mb-2">{p.name}</h3>
-            <p class="text-ink/70 italic mb-4">{p.tagline}</p>
-            <p class="text-ink/60 leading-relaxed mb-6 text-sm flex-1">{p.description}</p>
-            <a href="#cta" class="text-sm font-semibold text-primary hover:text-primary-dark transition self-start">
+            <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{p.tagline}</p>
+            <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{p.description}</p>
+            <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
               {p.cta} →
             </a>
           </div>

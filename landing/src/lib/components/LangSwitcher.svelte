@@ -16,7 +16,7 @@
 <div class="relative">
   <button
     onclick={() => (open = !open)}
-    class="inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white/80 px-3 py-1.5 text-xs font-semibold text-ink/80 hover:bg-white transition"
+    class="inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white/80 px-3 py-1.5 text-xs font-semibold text-ink/80 hover:bg-white transition dark:border-white/10 dark:bg-ink/60 dark:text-cloud/80 dark:hover:bg-ink/80"
     aria-haspopup="listbox"
     aria-expanded={open}
   >
@@ -27,16 +27,17 @@
   </button>
   {#if open}
     <ul
-      class="absolute right-0 mt-2 w-40 rounded-xl border border-ink/10 bg-white shadow-xl py-1.5 text-sm overflow-hidden"
+      class="absolute right-0 mt-2 w-40 rounded-xl border border-ink/10 dark:border-white/10 bg-white dark:bg-ink shadow-xl py-1.5 text-sm overflow-hidden"
       role="listbox"
     >
       {#each locales as loc}
         <li>
           <button
             onclick={() => pickLang(loc)}
-            class="w-full text-left px-4 py-2 hover:bg-moon transition"
+            class="w-full text-left px-4 py-2 hover:bg-moon dark:hover:bg-white/5 transition"
             class:font-semibold={loc === current}
             class:text-primary={loc === current}
+            class:dark:text-primary-soft={loc === current}
           >
             {localeNames[loc]}
           </button>

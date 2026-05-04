@@ -14,8 +14,9 @@
       loop
       playsinline
     ></video>
-    <div class="absolute inset-0 bg-gradient-to-br from-cloud/95 via-cloud/70 to-cloud/55"></div>
-    <div class="absolute inset-0 bg-gradient-to-t from-cloud via-transparent to-transparent"></div>
+    <!-- Subtle vignette only for text legibility — keep video clearly visible -->
+    <div class="absolute inset-0 bg-gradient-to-r from-cloud/85 via-cloud/40 to-transparent dark:from-ink/85 dark:via-ink/40"></div>
+    <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-cloud to-transparent dark:from-ink"></div>
   </div>
 
   <div class="container-page py-32 lg:py-44">
@@ -32,7 +33,7 @@
           {$_('hero.title_2')}
         </span>
       </h1>
-      <p class="text-lg md:text-xl text-ink/70 leading-relaxed mb-10 max-w-2xl">
+      <p class="text-lg md:text-xl text-ink/70 dark:text-cloud/70 leading-relaxed mb-10 max-w-2xl">
         {$_('hero.subtitle')}
       </p>
       <div class="flex flex-wrap gap-3">
@@ -42,7 +43,7 @@
     </div>
   </div>
 
-  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 text-xs uppercase tracking-widest text-ink/40">
+  <div class="absolute bottom-8 left-1/2 -translate-x-1/2 text-xs uppercase tracking-widest text-ink/40 dark:text-cloud/40">
     {$_('hero.scroll_hint')}
   </div>
 </section>
