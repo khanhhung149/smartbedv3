@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     use_credentials: bool = True
     validate_certs: bool = True
 
+    # Cloudflare Turnstile — empty secret → skip verification in dev (logs warning)
+    turnstile_secret_key: str = ""
+    turnstile_verify_url: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+    # Contact form destination
+    contact_to_email: str = "hi@sleeptech.me"
+
 
 @lru_cache
 def get_settings() -> Settings:
