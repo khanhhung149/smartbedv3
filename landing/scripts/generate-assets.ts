@@ -278,6 +278,67 @@ const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
     prompt:
       'Editorial illustration-photo: a phantom human silhouette lying on a smart sleep pad, with a luminous ballistic waveform (J-wave, K-wave peaks) traced over the body in soft indigo and sakura light. Scientific anatomy meets premium design. Dark background, cinematic depth of field. No text, no logos, no watermarks.'
   },
+  // ── Inline images articles 6-10 ───────────────────────────────────────────
+  {
+    name: 'news-realtime-vital-alerts-balance-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo of a smartphone on a wooden bedside table, screen glowing softly with a minimal notification badge in soft green, a thin smart sleep pad visible at the bed edge, dim ambient indigo light filling the room. Photorealistic, calm bedroom mood, no alarm urgency. No text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-realtime-vital-alerts-balance-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial illustration-photo: an abstract escalating tier of soft glowing rings — the innermost ring small and calm indigo, middle ring soft amber, outer ring barely visible sakura pink — representing alert escalation tiers. Dark premium background, minimalist scientific design, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-sleep-apnea-detection-at-home-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Photorealistic editorial close-up of a sleeping man on a cream pillow, soft pre-dawn indigo light from the window, peaceful expression, shallow depth of field. Documentary photography quality. No clinical equipment visible, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-sleep-apnea-detection-at-home-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: a breath-rate waveform — shown as smooth glowing light arcs against dark background — with a subtle interruption gap in the middle representing an apnea pause, then resuming. Indigo and soft sakura palette, abstract scientific, premium editorial. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-sustainable-sleep-routine-with-data-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial lifestyle photo: a minimal weekly sleep trend chart shown on a smartphone screen sitting beside a morning cup of matcha on a wooden desk, warm dawn light through a Japanese window. Photorealistic, calm productive morning mood. No readable text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-sustainable-sleep-routine-with-data-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a peaceful Japanese bedroom in the morning, warm sunlight through shoji screens, neatly folded futon with a thin sleep pad placed on top, a small plant beside the window. Implies a consistent calming routine. Photorealistic, warm tones. No people, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-hrv-and-sleep-quality-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial macro photo: a glowing HRV recovery score graph — a gentle upward-trending curve in soft indigo on dark background, with a calm peak labeled by a soft sakura-pink dot. No numbers, no text. Abstract data visualization as art. Premium editorial, no logos, no watermarks.'
+  },
+  {
+    name: 'news-hrv-and-sleep-quality-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial split photo concept: left side shows a glass of red wine on a nightstand with a slightly suppressed HRV waveform above it in amber glow; right side shows a glass of water with a higher, healthier HRV waveform in indigo. Symbolic lifestyle comparison, no text, no logos, no watermarks. Premium studio photography.'
+  },
+  {
+    name: 'news-bedroom-climate-and-sleep-stages-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a Japanese minimalist bedroom at night with cool blue moonlight through shoji screens, crisp white linen on a low bed, a soft temperature display glowing on the wall showing a comfortable cool reading. Calm, premium, cinematic. No text on display, no logos, no watermarks.'
+  },
+  {
+    name: 'news-bedroom-climate-and-sleep-stages-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: a cross-section diagram of sleep stages shown as layered glowing bands — deep blue for slow-wave sleep, amber for REM, soft indigo for light sleep — with a temperature gradient color overlay showing cooler temperatures correlating with deeper blue stages. Abstract scientific art, premium dark background, no text, no logos, no watermarks.'
+  },
   // ── Feature/hero images (one per article, per article page) ───────────────
   {
     name: 'news-how-ai-revolutionizes-sleep-monitoring',
