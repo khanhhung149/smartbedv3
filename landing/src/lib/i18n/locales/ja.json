@@ -151,6 +151,33 @@
       "compliance": "コンプライアンス"
     }
   },
+  "contact": {
+    "title": "お問い合わせ",
+    "intro": "YumePadやご注文、テクノロジーについてご質問がありましたら、メッセージをお送りください。2営業日以内にご返信いたします。",
+    "back_to_home": "← ホームに戻る",
+    "form": {
+      "name": "お名前",
+      "name_placeholder": "山田 太郎",
+      "email": "メールアドレス",
+      "email_placeholder": "you@example.com",
+      "subject": "件名",
+      "subject_placeholder": "YumePadについての質問",
+      "message": "メッセージ",
+      "message_placeholder": "どのようなご用件でしょうか？",
+      "submit": "送信する",
+      "sending": "送信中…",
+      "captcha_label": "ロボットではないことを確認"
+    },
+    "success": {
+      "title": "送信完了 ✓",
+      "body": "ありがとうございます！2営業日以内にご返信いたします。"
+    },
+    "error": {
+      "captcha": "キャプチャの確認に失敗しました。もう一度お試しください。",
+      "ratelimit": "送信回数が多すぎます。1時間後にもう一度お試しください。",
+      "generic": "エラーが発生しました。hi@sleeptech.me まで直接メールをお送りください。"
+    }
+  },
   "lang": {
     "switch": "言語"
   },

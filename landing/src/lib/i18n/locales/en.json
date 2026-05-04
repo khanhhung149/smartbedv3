@@ -151,6 +151,33 @@
       "compliance": "Compliance"
     }
   },
+  "contact": {
+    "title": "Contact us",
+    "intro": "Have a question about YumePad, your order, or our technology? Send us a message and we'll get back to you within 2 business days.",
+    "back_to_home": "← Back to home",
+    "form": {
+      "name": "Your name",
+      "name_placeholder": "Jane Doe",
+      "email": "Your email",
+      "email_placeholder": "you@example.com",
+      "subject": "Subject",
+      "subject_placeholder": "Question about YumePad",
+      "message": "Message",
+      "message_placeholder": "How can we help?",
+      "submit": "Send message",
+      "sending": "Sending…",
+      "captcha_label": "Confirm you're human"
+    },
+    "success": {
+      "title": "Message sent ✓",
+      "body": "Thank you! We'll respond within 2 business days."
+    },
+    "error": {
+      "captcha": "Captcha verification failed. Please try again.",
+      "ratelimit": "Too many submissions. Please try again in an hour.",
+      "generic": "Something went wrong. Please email hi@sleeptech.me directly."
+    }
+  },
   "lang": {
     "switch": "Language"
   },

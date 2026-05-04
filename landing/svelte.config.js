@@ -17,7 +17,8 @@ const config = {
         '*',
         '/en', '/ja', '/th', '/vi',
         '/en/terms', '/ja/terms', '/th/terms', '/vi/terms',
-        '/en/privacy', '/ja/privacy', '/th/privacy', '/vi/privacy'
+        '/en/privacy', '/ja/privacy', '/th/privacy', '/vi/privacy',
+        '/en/contact', '/ja/contact', '/th/contact', '/vi/contact'
       ],
       handleMissingId: 'ignore'
     }

@@ -151,6 +151,33 @@
       "compliance": "Tuân thủ"
     }
   },
+  "contact": {
+    "title": "Liên hệ với chúng tôi",
+    "intro": "Có câu hỏi về YumePad, đơn hàng hay công nghệ của chúng tôi? Hãy gửi tin nhắn và chúng tôi sẽ phản hồi trong vòng 2 ngày làm việc.",
+    "back_to_home": "← Về trang chủ",
+    "form": {
+      "name": "Tên của bạn",
+      "name_placeholder": "Nguyễn Văn A",
+      "email": "Email của bạn",
+      "email_placeholder": "you@example.com",
+      "subject": "Chủ đề",
+      "subject_placeholder": "Câu hỏi về YumePad",
+      "message": "Tin nhắn",
+      "message_placeholder": "Chúng tôi có thể giúp gì cho bạn?",
+      "submit": "Gửi tin nhắn",
+      "sending": "Đang gửi…",
+      "captcha_label": "Xác nhận bạn không phải robot"
+    },
+    "success": {
+      "title": "Đã gửi tin nhắn ✓",
+      "body": "Cảm ơn bạn! Chúng tôi sẽ phản hồi trong vòng 2 ngày làm việc."
+    },
+    "error": {
+      "captcha": "Xác minh Captcha thất bại. Vui lòng thử lại.",
+      "ratelimit": "Bạn gửi quá nhiều lần. Vui lòng thử lại sau 1 giờ.",
+      "generic": "Đã xảy ra lỗi. Vui lòng gửi email trực tiếp đến hi@sleeptech.me."
+    }
+  },
   "lang": {
     "switch": "Ngôn ngữ"
   },

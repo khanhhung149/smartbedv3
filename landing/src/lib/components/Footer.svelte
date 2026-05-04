@@ -41,7 +41,7 @@
         <ul class="space-y-2 text-sm">
           <li><a href="/{lang}/privacy" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.privacy')}</a></li>
           <li><a href="/{lang}/terms" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.terms')}</a></li>
-          <li><a href="mailto:hi@sleeptech.me" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.contact')}</a></li>
+          <li><a href="/{lang}/contact" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.contact')}</a></li>
         </ul>
       </div>
     </div>
