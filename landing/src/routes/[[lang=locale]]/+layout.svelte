@@ -14,9 +14,14 @@
 
 <header class="fixed inset-x-0 top-0 z-40 backdrop-blur-md bg-cloud/70 dark:bg-ink/70 border-b border-ink/5 dark:border-white/5">
   <div class="container-page flex h-16 items-center justify-between">
-    <a href="/{data.lang}" class="flex items-center gap-2 font-display font-bold text-lg tracking-tight">
-      <span class="inline-block w-2 h-2 rounded-full bg-primary"></span>
-      {$_('brand')}
+    <a href="/{data.lang}" class="flex items-center" aria-label={$_('brand')}>
+      <img
+        src="/sleep-tech-logo-ngang.png"
+        alt={$_('brand')}
+        class="h-8 w-auto dark:invert dark:brightness-200"
+        width="180"
+        height="56"
+      />
     </a>
     <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-ink/70 dark:text-cloud/70">
       <a href="#about" class="hover:text-ink dark:hover:text-cloud transition">{$_('nav.about')}</a>

@@ -8,10 +8,13 @@
   <div class="container-page">
     <div class="grid md:grid-cols-5 gap-8 mb-12">
       <div class="md:col-span-2">
-        <div class="flex items-center gap-2 font-display font-bold text-lg mb-3">
-          <span class="inline-block w-2 h-2 rounded-full bg-primary"></span>
-          {$_('brand')}
-        </div>
+        <img
+          src="/sleep-tech-logo-doc.png"
+          alt={$_('brand')}
+          class="h-24 w-auto mb-4 dark:invert dark:brightness-200"
+          width="120"
+          height="160"
+        />
         <p class="text-sm text-ink/60 dark:text-cloud/60 leading-relaxed max-w-xs">{$_('footer.tagline')}</p>
       </div>
       <div>
