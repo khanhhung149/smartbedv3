@@ -217,6 +217,68 @@ async function generateVideo() {
 }
 
 const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
+  // ── Inline images (2 per article, 5 articles = 10 total) ──────────────────
+  {
+    name: 'news-how-ai-revolutionizes-sleep-monitoring-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: an AI data-visualization dashboard floating holographically above a thin sleep pad on a premium Japanese bed. Glowing indigo neural-network nodes and soft waveforms representing REM and deep-sleep stages. Dark atmospheric background, sakura-pink accent highlights. Photorealistic, cinematic, premium tech editorial. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-how-ai-revolutionizes-sleep-monitoring-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Macro editorial photo: a cross-section layered view of a mattress with a gossamer-thin sensor pad embedded inside, soft indigo light tracing signal pathways through the layers. Abstract yet scientific, premium editorial photography aesthetic. Deep indigo and off-white palette. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-heart-rate-variability-explained-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo concept: a glowing HRV waveform (inter-beat intervals shown as a rhythmic oscillating curve) rendered as soft light on dark premium fabric surface. The peaks pulse gently between indigo and sakura pink, conveying calm parasympathetic dominance. No people, no text, no logos, no watermarks. Premium scientific editorial photography.'
+  },
+  {
+    name: 'news-heart-rate-variability-explained-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial illustration-photo: a circular HRV frequency spectrum wheel rendered as a glowing mandala in deep indigo and sakura pink — the center calm, outer edges representing low-frequency stress signatures. Scientific beauty, abstract editorial, premium dark background. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-wearables-vs-non-contact-sensors-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial close-up photo of a smartwatch on a wrist resting on white linen pillow, soft sleep environment context. Premium product photography, shallow depth of field, warm side light. The watch face dark/sleep mode. Off-white and warm silver palette. No text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-wearables-vs-non-contact-sensors-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: under-mattress view concept — a thin translucent sensor pad between mattress layers, soft indigo LED trace lines mapping body zones. An X-ray style illustrative overlay on a real bedroom environment. Premium health-tech editorial, calm scientific mood. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-privacy-first-sleep-ai-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: microscopic data particles swirling inside a transparent glass sphere, contained and protected. Deep indigo and soft gold tones, privacy-as-containment metaphor. Dark premium background, editorial science photography aesthetic. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-privacy-first-sleep-ai-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a minimalist Japanese bedroom at night, the smart sleep pad glowing with soft indigo, but all data represented as particles dissolving and disappearing before reaching the wall — a visual metaphor for edge-only processing. No cloud connection visible. Cinematic, premium. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-ballistocardiography-future-sleep-tech-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial macro photo: slow-motion water surface ripple pattern on deep indigo liquid, shot from above — a visual metaphor for the micro-vibrations that ballistocardiography captures. Each concentric ring a heartbeat. Premium editorial photography, clean abstract. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-ballistocardiography-future-sleep-tech-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial illustration-photo: a phantom human silhouette lying on a smart sleep pad, with a luminous ballistic waveform (J-wave, K-wave peaks) traced over the body in soft indigo and sakura light. Scientific anatomy meets premium design. Dark background, cinematic depth of field. No text, no logos, no watermarks.'
+  },
+  // ── Feature/hero images (one per article, per article page) ───────────────
   {
     name: 'news-how-ai-revolutionizes-sleep-monitoring',
     aspectRatio: '16:9',
@@ -339,12 +401,16 @@ const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
   },
 ];
 
-async function generateNewsImages() {
+async function generateImageList(items: ImagePrompt[], label: string, skipExisting = false) {
   await ensureDir(ROOT);
-  console.log(`Generating ${NEWS_IMAGE_PROMPTS.length} news feature images → ${ROOT}/`);
+  console.log(`Generating ${items.length} ${label} → ${ROOT}/`);
   let retries = 0;
-  for (const item of NEWS_IMAGE_PROMPTS) {
+  for (const item of items) {
     const outPath = resolve(ROOT, `${item.name}.png`);
+    if (skipExisting && existsSync(outPath)) {
+      console.log(`  • ${item.name} — already exists, skipping`);
+      continue;
+    }
     process.stdout.write(`  • ${item.name} ... `);
     let success = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -381,12 +447,22 @@ async function generateNewsImages() {
   console.log(`Done. Total retries: ${retries}`);
 }
 
+async function generateNewsImages() {
+  await generateImageList(NEWS_IMAGE_PROMPTS, 'news feature images');
+}
+
+async function generateNewsInlineImages() {
+  const inlinePrompts = NEWS_IMAGE_PROMPTS.filter((p) => p.name.includes('-inline-'));
+  await generateImageList(inlinePrompts, 'news inline images');
+}
+
 const cmd = process.argv[2];
 if (cmd === 'images') generateImages();
 else if (cmd === 'avatars') generateAvatars();
 else if (cmd === 'video') generateVideo();
 else if (cmd === 'news-images') generateNewsImages();
+else if (cmd === 'news-inline-images') generateNewsInlineImages();
 else {
-  console.error('Usage: tsx scripts/generate-assets.ts <images|avatars|video|news-images>');
+  console.error('Usage: tsx scripts/generate-assets.ts <images|avatars|video|news-images|news-inline-images>');
   process.exit(1);
 }

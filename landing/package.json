@@ -11,7 +11,8 @@
     "gen:images": "tsx scripts/generate-assets.ts images",
     "gen:avatars": "tsx scripts/generate-assets.ts avatars",
     "gen:video": "tsx scripts/generate-assets.ts video",
-    "gen:news-images": "tsx scripts/generate-assets.ts news-images"
+    "gen:news-images": "tsx scripts/generate-assets.ts news-images",
+    "gen:news-inline-images": "tsx scripts/generate-assets.ts news-inline-images"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",
