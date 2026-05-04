@@ -27,7 +27,7 @@
     </div>
 
     <!-- Hero product: YumePad -->
-    <article class="rounded-[2.5rem] bg-gradient-to-br from-ink to-primary-dark text-white mb-6 relative overflow-hidden">
+    <article id="product-yumepad" class="rounded-[2.5rem] bg-gradient-to-br from-ink to-primary-dark text-white mb-6 relative overflow-hidden">
       <div class="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-sakura/20 blur-3xl"></div>
       <div class="absolute top-10 right-10 text-[12rem] leading-none font-jp opacity-10 select-none pointer-events-none">
         {yume.kanji}
@@ -74,24 +74,38 @@
 
     <!-- Smart Bed + Smart Pillow side-by-side -->
     <div class="grid md:grid-cols-2 gap-6">
-      {#each [{ p: bed, img: '/generated/smart-bed.png' }, { p: pillow, img: '/generated/smart-pillow.png' }] as { p, img }}
-        <article class="rounded-3xl surface-card border overflow-hidden hover:border-primary/30 dark:hover:border-primary-soft/40 hover:shadow-lg transition flex flex-col">
-          <div class="relative aspect-[4/3] overflow-hidden bg-moon dark:bg-ink">
-            <img src={img} alt={p.name} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-          </div>
-          <div class="p-8 flex-1 flex flex-col">
-            <span class="inline-block px-2.5 py-1 rounded-full bg-moon dark:bg-white/10 text-ink/60 dark:text-cloud/60 text-xs font-semibold mb-4 self-start">
-              {p.status}
-            </span>
-            <h3 class="text-2xl font-bold mb-2">{p.name}</h3>
-            <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{p.tagline}</p>
-            <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{p.description}</p>
-            <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
-              {p.cta} →
-            </a>
-          </div>
-        </article>
-      {/each}
+      <article id="product-smart-bed" class="rounded-3xl surface-card border overflow-hidden hover:border-primary/30 dark:hover:border-primary-soft/40 hover:shadow-lg transition flex flex-col">
+        <div class="relative aspect-[4/3] overflow-hidden bg-moon dark:bg-ink">
+          <img src="/generated/smart-bed.png" alt={bed.name} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        </div>
+        <div class="p-8 flex-1 flex flex-col">
+          <span class="inline-block px-2.5 py-1 rounded-full bg-moon dark:bg-white/10 text-ink/60 dark:text-cloud/60 text-xs font-semibold mb-4 self-start">
+            {bed.status}
+          </span>
+          <h3 class="text-2xl font-bold mb-2">{bed.name}</h3>
+          <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{bed.tagline}</p>
+          <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{bed.description}</p>
+          <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
+            {bed.cta} →
+          </a>
+        </div>
+      </article>
+      <article id="product-smart-pillow" class="rounded-3xl surface-card border overflow-hidden hover:border-primary/30 dark:hover:border-primary-soft/40 hover:shadow-lg transition flex flex-col">
+        <div class="relative aspect-[4/3] overflow-hidden bg-moon dark:bg-ink">
+          <img src="/generated/smart-pillow.png" alt={pillow.name} class="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        </div>
+        <div class="p-8 flex-1 flex flex-col">
+          <span class="inline-block px-2.5 py-1 rounded-full bg-moon dark:bg-white/10 text-ink/60 dark:text-cloud/60 text-xs font-semibold mb-4 self-start">
+            {pillow.status}
+          </span>
+          <h3 class="text-2xl font-bold mb-2">{pillow.name}</h3>
+          <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{pillow.tagline}</p>
+          <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{pillow.description}</p>
+          <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
+            {pillow.cta} →
+          </a>
+        </div>
+      </article>
     </div>
   </div>
 </section>

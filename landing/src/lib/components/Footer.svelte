@@ -31,9 +31,9 @@
       <div>
         <h4 class="text-xs font-semibold uppercase tracking-widest text-ink/40 dark:text-cloud/40 mb-3">{$_('footer.links.products')}</h4>
         <ul class="space-y-2 text-sm">
-          <li><a href="#products" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.yumepad')}</a></li>
-          <li><a href="#products" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.smart_bed')}</a></li>
-          <li><a href="#products" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.smart_pillow')}</a></li>
+          <li><a href="/en#product-yumepad" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.yumepad')}</a></li>
+          <li><a href="/en#product-smart-bed" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.smart_bed')}</a></li>
+          <li><a href="/en#product-smart-pillow" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.smart_pillow')}</a></li>
         </ul>
       </div>
       <div>
