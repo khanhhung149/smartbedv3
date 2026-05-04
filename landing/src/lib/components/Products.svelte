@@ -1,5 +1,7 @@
 <script lang="ts">
   import { _, json } from 'svelte-i18n';
+  import { defaultLocale } from '$lib/i18n';
+  import { page } from '$app/state';
 
   type Product = {
     name: string;
@@ -16,6 +18,7 @@
   let yume = $derived(($json('products.items.yumepad') as Product) ?? empty);
   let bed = $derived(($json('products.items.smart_bed') as Product) ?? empty);
   let pillow = $derived(($json('products.items.smart_pillow') as Product) ?? empty);
+  let lang = $derived((page.params.lang ?? defaultLocale) as string);
 </script>
 
 <section id="products" class="section surface-alt">
@@ -56,7 +59,7 @@
               </li>
             {/each}
           </ul>
-          <a href="#cta" class="inline-flex items-center justify-center rounded-full bg-white text-ink px-6 py-3 text-sm font-semibold hover:bg-cloud transition">
+          <a href="/{lang}/contact" class="inline-flex items-center justify-center rounded-full bg-white text-ink px-6 py-3 text-sm font-semibold hover:bg-cloud transition">
             {yume.cta}
           </a>
         </div>
@@ -85,7 +88,7 @@
           <h3 class="text-2xl font-bold mb-2">{bed.name}</h3>
           <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{bed.tagline}</p>
           <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{bed.description}</p>
-          <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
+          <a href="/{lang}/contact" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
             {bed.cta} →
           </a>
         </div>
@@ -101,7 +104,7 @@
           <h3 class="text-2xl font-bold mb-2">{pillow.name}</h3>
           <p class="text-ink/70 dark:text-cloud/70 italic mb-4">{pillow.tagline}</p>
           <p class="text-ink/60 dark:text-cloud/60 leading-relaxed mb-6 text-sm flex-1">{pillow.description}</p>
-          <a href="#cta" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
+          <a href="/{lang}/contact" class="text-sm font-semibold text-primary dark:text-primary-soft hover:text-primary-dark dark:hover:text-cloud transition self-start">
             {pillow.cta} →
           </a>
         </div>
