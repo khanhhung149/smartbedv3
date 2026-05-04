@@ -155,8 +155,7 @@
       "support": "Support",
       "legal": "Legal",
       "about": "About SleepTech",
-      "press": "Press",
-      "careers": "Careers",
+      "press": "News",
       "yumepad": "YumePad",
       "smart_bed": "Smart Bed",
       "smart_pillow": "Smart Pillow",
@@ -194,6 +193,21 @@
       "ratelimit": "Too many submissions. Please try again in an hour.",
       "generic": "Something went wrong. Please email hi@sleeptech.me directly."
     }
+  },
+  "news": {
+    "kicker": "News",
+    "title": "Insights from SleepTech",
+    "lead": "Explore the science of AI-powered sleep technology, elderly care innovations, and the future of restorative rest — perspectives from our team and the global sleep research community.",
+    "back_to_index": "← All articles",
+    "back_to_home": "← Back to home",
+    "read_time_suffix": "min read",
+    "categories": {
+      "sleep_tech_ai": "Sleep Tech AI",
+      "sleep_care": "Sleep Care",
+      "elderly_care": "Elderly Care"
+    },
+    "more_articles": "More articles",
+    "published": "Published"
   },
   "lang": {
     "switch": "Language"

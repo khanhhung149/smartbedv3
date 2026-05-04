@@ -155,8 +155,7 @@
       "support": "サポート",
       "legal": "法的情報",
       "about": "SleepTechについて",
-      "press": "プレス",
-      "careers": "採用情報",
+      "press": "ニュース",
       "yumepad": "YumePad",
       "smart_bed": "Smart Bed",
       "smart_pillow": "Smart Pillow",
@@ -194,6 +193,21 @@
       "ratelimit": "送信回数が多すぎます。1時間後にもう一度お試しください。",
       "generic": "エラーが発生しました。hi@sleeptech.me まで直接メールをお送りください。"
     }
+  },
+  "news": {
+    "kicker": "ニュース",
+    "title": "SleepTechからの洞察",
+    "lead": "AI睡眠テクノロジーの科学、高齢者ケアのイノベーション、そして回復力ある睡眠の未来を探求する — 私たちのチームと世界の睡眠研究コミュニティからのインサイト。",
+    "back_to_index": "← 記事一覧",
+    "back_to_home": "← ホームに戻る",
+    "read_time_suffix": "分で読了",
+    "categories": {
+      "sleep_tech_ai": "Sleep Tech AI",
+      "sleep_care": "睡眠ケア",
+      "elderly_care": "高齢者ケア"
+    },
+    "more_articles": "もっと見る",
+    "published": "公開日"
   },
   "lang": {
     "switch": "言語"

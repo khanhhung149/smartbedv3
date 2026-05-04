@@ -216,11 +216,177 @@ async function generateVideo() {
   }
 }
 
+const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
+  {
+    name: 'news-how-ai-revolutionizes-sleep-monitoring',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo of a thin sleep monitoring pad on a soft bed with subtle indigo data visualization overlaid as light rays, floating waveform patterns representing heart rate and breath. Photorealistic, calm, premium tech editorial, deep indigo and off-white palette. No text, no logos, no watermarks.',
+  },
+  {
+    name: 'news-heart-rate-variability-explained',
+    aspectRatio: '16:9',
+    prompt:
+      'Close-up editorial macro photo of a glowing blue-indigo heartbeat waveform projected onto the surface of a premium dark fabric. Cinematic depth of field, sakura-pink accent highlights on wave peaks. No people, no text, no logos. Photorealistic premium tech.',
+  },
+  {
+    name: 'news-wearables-vs-non-contact-sensors',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial split composition: left side shows a smartwatch on a wrist on white linen; right side shows a thin sleep pad under a mattress with faint indigo glow. Clean neutral background, premium product photography, soft studio lighting. No text, no logos.',
+  },
+  {
+    name: 'news-privacy-first-sleep-ai',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo concept: a glowing padlock formed from soft light resting on a minimalist Japanese bedroom nightstand, indigo ambient light, data particles dissolving into the air and stopping at a room boundary. Photorealistic, calm, premium. No text, no logos.',
+  },
+  {
+    name: 'news-ballistocardiography-future-sleep-tech',
+    aspectRatio: '16:9',
+    prompt:
+      'Macro editorial photo of a cross-section diagram rendered as glowing light on dark fabric — subtle heartbeat mechanical wave ripples emanating from a thin pad under premium mattress fabric. Deep indigo tones, soft sakura accents. Photorealistic editorial. No text, no logos.',
+  },
+  {
+    name: 'news-realtime-vital-alerts-balance',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a smartphone on a bedside table showing a calm, minimal sleep dashboard with soft green vital-sign indicators. Japanese minimalist bedroom background, pre-dawn light through shoji screen. Photorealistic, peaceful mood. No text on screen, no logos.',
+  },
+  {
+    name: 'news-sleep-apnea-detection-at-home',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a person sleeping peacefully in a dark Japanese bedroom, a thin smart pad glowing faintly indigo under the mattress, soft breathing indicator light pulsing. Warm intimate documentary photography, no clinical equipment visible. No text, no logos.',
+  },
+  {
+    name: 'news-sustainable-sleep-routine-with-data',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial lifestyle photo: a morning journal open on a wooden desk next to a smartphone showing a minimal sleep chart, a steaming cup of tea, warm dawn light. Japanese minimalist interior, off-white and warm wood tones. Photorealistic. No readable text, no logos.',
+  },
+  {
+    name: 'news-hrv-and-sleep-quality',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial illustration-photo hybrid: a glowing double helix or feedback loop formed from soft indigo light and sakura-pink accents, representing the bidirectional relationship between sleep and heart rate variability. Dark premium background, science editorial aesthetic. No text, no logos.',
+  },
+  {
+    name: 'news-bedroom-climate-and-sleep-stages',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a cozy Japanese minimalist bedroom at night, subtle cool-blue moonlight through shoji, a smart thermostat glowing softly on the wall, crisp white linen, temperature fog effect near the floor. Cinematic, premium, calm. No text, no logos.',
+  },
+  {
+    name: 'news-snoring-detection-with-ai',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: abstract sound waveforms in soft indigo light floating above a sleeping figure silhouette in a Japanese bedroom. The waves transform from rough snore patterns to smooth sleep waves. No faces visible, artistic, premium. No text, no logos.',
+  },
+  {
+    name: 'news-mindful-pre-sleep-routines-with-data',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial lifestyle photo: a woman sitting cross-legged on a Japanese bedroom floor in soft lamplight, eyes closed in meditation, a sleep pad glowing softly under the nearby futon, warm sakura-pink and indigo ambient tones. Photorealistic, calm, premium. No text, no logos.',
+  },
+  {
+    name: 'news-tracking-elderly-sleep-patterns',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: an elderly Japanese woman (80s) sleeping peacefully in a traditional Japanese bedroom, soft morning light through shoji screens, a thin smart pad visible under her futon mattress with faint indigo glow. Documentary warmth, intimate, respectful framing. No text, no logos.',
+  },
+  {
+    name: 'news-shift-workers-sleep-strategies',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a tired nurse or worker arriving home at dawn pulling blackout curtains closed, a smart sleep pad visible on the bed, circadian clock concept with day and night blending through the window. Photorealistic, empathetic mood. No text, no logos.',
+  },
+  {
+    name: 'news-caring-from-afar-night-monitoring',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a woman in her 40s checking her phone with a peaceful expression while her elderly mother sleeps in another room visible through soft focus in the background. Warm intimate tones, a care-at-distance theme. Photorealistic, Asian features. No text, no logos.',
+  },
+  {
+    name: 'news-bed-presence-detection-fall-prevention',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo concept: a Japanese bedroom at night seen from slightly above, an elderly person\'s silhouette beginning to sit up in bed, a subtle safety glow around the bed edge, smart sensor light glowing blue-indigo. Protective, caring mood. No text, no logos.',
+  },
+  {
+    name: 'news-caring-elders-japan-tradition-meets-ai',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a daughter (40s) and her elderly mother (80s) sitting together in a traditional Japanese room, soft tatami and shoji light, a smartphone showing a sleep report between them. Warm oyakoko filial devotion mood, photorealistic documentary. No text on phone, no logos.',
+  },
+  {
+    name: 'news-yumepad-first-night-setup-elderly-parent',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a son in his 40s gently placing a thin sleep monitoring pad under his elderly father\'s mattress in a Japanese bedroom, warm soft lamp light, careful and gentle gesture. Documentary warmth, photorealistic, authentic Asian features. No text, no logos.',
+  },
+  {
+    name: 'news-real-family-stories-peace-of-mind',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a collage-style composition of three moments — a woman smiling at her phone at dawn, an elderly person sleeping peacefully, a family video call on a tablet in a warm living room. Warm connected family mood, photorealistic. No text, no logos.',
+  },
+  {
+    name: 'news-nighttime-caregiver-burden-tech-relief',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: an exhausted caregiver (woman, 50s) sitting in a chair next to an elderly relative\'s bed at night, but relaxed — a smartphone on the side table shows a peaceful vital-sign readout in soft green. The technology has given her permission to rest. Empathetic mood, photorealistic. No text, no logos.',
+  },
+];
+
+async function generateNewsImages() {
+  await ensureDir(ROOT);
+  console.log(`Generating ${NEWS_IMAGE_PROMPTS.length} news feature images → ${ROOT}/`);
+  let retries = 0;
+  for (const item of NEWS_IMAGE_PROMPTS) {
+    const outPath = resolve(ROOT, `${item.name}.png`);
+    process.stdout.write(`  • ${item.name} ... `);
+    let success = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await ai.models.generateImages({
+          model: 'imagen-4.0-generate-001',
+          prompt: item.prompt,
+          config: {
+            numberOfImages: 1,
+            aspectRatio: item.aspectRatio ?? '16:9',
+          },
+        });
+        const generated = response.generatedImages?.[0];
+        if (!generated?.image?.imageBytes) throw new Error('no image bytes returned');
+        const bytes = Buffer.from(generated.image.imageBytes, 'base64');
+        await writeFile(outPath, bytes);
+        console.log(`✓ ${(bytes.length / 1024).toFixed(0)}KB`);
+        success = true;
+        break;
+      } catch (err) {
+        if (attempt < 3) {
+          console.error(`  attempt ${attempt} failed: ${(err as Error).message}, retrying…`);
+          retries++;
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        } else {
+          console.error(`✗ ${(err as Error).message}`);
+        }
+      }
+    }
+    if (!success) {
+      console.warn(`  Skipped: ${item.name}`);
+    }
+  }
+  console.log(`Done. Total retries: ${retries}`);
+}
+
 const cmd = process.argv[2];
 if (cmd === 'images') generateImages();
 else if (cmd === 'avatars') generateAvatars();
 else if (cmd === 'video') generateVideo();
+else if (cmd === 'news-images') generateNewsImages();
 else {
-  console.error('Usage: tsx scripts/generate-assets.ts <images|avatars|video>');
+  console.error('Usage: tsx scripts/generate-assets.ts <images|avatars|video|news-images>');
   process.exit(1);
 }

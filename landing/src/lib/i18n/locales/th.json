@@ -155,8 +155,7 @@
       "support": "สนับสนุน",
       "legal": "ทางกฎหมาย",
       "about": "เกี่ยวกับ SleepTech",
-      "press": "ข่าวสาร",
-      "careers": "ร่วมงาน",
+      "press": "ข่าว",
       "yumepad": "YumePad",
       "smart_bed": "Smart Bed",
       "smart_pillow": "Smart Pillow",
@@ -194,6 +193,21 @@
       "ratelimit": "ส่งข้อความมากเกินไป กรุณาลองอีกครั้งในอีก 1 ชั่วโมง",
       "generic": "เกิดข้อผิดพลาด กรุณาส่งอีเมลโดยตรงที่ hi@sleeptech.me"
     }
+  },
+  "news": {
+    "kicker": "ข่าว",
+    "title": "ข้อมูลเชิงลึกจาก SleepTech",
+    "lead": "สำรวจวิทยาศาสตร์เบื้องหลังเทคโนโลยีการนอน AI นวัตกรรมการดูแลผู้สูงอายุ และอนาคตของการนอนหลับที่ฟื้นฟูร่างกาย — มุมมองจากทีมงานและชุมชนวิจัยการนอนหลับทั่วโลก",
+    "back_to_index": "← บทความทั้งหมด",
+    "back_to_home": "← กลับหน้าหลัก",
+    "read_time_suffix": "นาทีอ่าน",
+    "categories": {
+      "sleep_tech_ai": "Sleep Tech AI",
+      "sleep_care": "การดูแลการนอน",
+      "elderly_care": "การดูแลผู้สูงอายุ"
+    },
+    "more_articles": "บทความเพิ่มเติม",
+    "published": "เผยแพร่"
   },
   "lang": {
     "switch": "ภาษา"

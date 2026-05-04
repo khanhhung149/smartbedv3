@@ -155,8 +155,7 @@
       "support": "Hỗ trợ",
       "legal": "Pháp lý",
       "about": "Về SleepTech",
-      "press": "Báo chí",
-      "careers": "Tuyển dụng",
+      "press": "Tin tức",
       "yumepad": "YumePad",
       "smart_bed": "Smart Bed",
       "smart_pillow": "Smart Pillow",
@@ -194,6 +193,21 @@
       "ratelimit": "Bạn gửi quá nhiều lần. Vui lòng thử lại sau 1 giờ.",
       "generic": "Đã xảy ra lỗi. Vui lòng gửi email trực tiếp đến hi@sleeptech.me."
     }
+  },
+  "news": {
+    "kicker": "Tin tức",
+    "title": "Góc nhìn từ SleepTech",
+    "lead": "Khám phá khoa học đằng sau công nghệ giấc ngủ AI, các đổi mới trong chăm sóc người cao tuổi, và tương lai của giấc ngủ phục hồi — góc nhìn từ đội ngũ và cộng đồng nghiên cứu giấc ngủ toàn cầu.",
+    "back_to_index": "← Tất cả bài viết",
+    "back_to_home": "← Về trang chủ",
+    "read_time_suffix": "phút đọc",
+    "categories": {
+      "sleep_tech_ai": "Sleep Tech AI",
+      "sleep_care": "Chăm sóc giấc ngủ",
+      "elderly_care": "Chăm sóc người cao tuổi"
+    },
+    "more_articles": "Bài viết khác",
+    "published": "Ngày đăng"
   },
   "lang": {
     "switch": "Ngôn ngữ"

@@ -24,8 +24,7 @@
         <h4 class="text-xs font-semibold uppercase tracking-widest text-ink/40 dark:text-cloud/40 mb-3">{$_('footer.links.company')}</h4>
         <ul class="space-y-2 text-sm">
           <li><a href="#about" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.about')}</a></li>
-          <li><a href="#" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.press')}</a></li>
-          <li><a href="#" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.careers')}</a></li>
+          <li><a href="/{lang}/news" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.press')}</a></li>
         </ul>
       </div>
       <div>

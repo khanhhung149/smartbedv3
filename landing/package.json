@@ -10,7 +10,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "gen:images": "tsx scripts/generate-assets.ts images",
     "gen:avatars": "tsx scripts/generate-assets.ts avatars",
-    "gen:video": "tsx scripts/generate-assets.ts video"
+    "gen:video": "tsx scripts/generate-assets.ts video",
+    "gen:news-images": "tsx scripts/generate-assets.ts news-images"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",
