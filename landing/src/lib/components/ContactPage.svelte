@@ -5,9 +5,8 @@
 
   let { lang }: { lang: string } = $props();
 
-  // Replace this with your real Turnstile site key after creating a site at
-  // https://dash.cloudflare.com/?to=/:account/turnstile
-  const TURNSTILE_SITE_KEY = '__PASTE_SITE_KEY__';
+  // Cloudflare Turnstile site key (public). Validated server-side via the matching secret.
+  const TURNSTILE_SITE_KEY = '0x4AAAAAADIyUlo_soNpH-Qp';
 
   const API_URL = 'https://api.sleeptech.me/contact';
 
