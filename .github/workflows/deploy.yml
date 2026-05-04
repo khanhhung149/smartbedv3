@@ -63,8 +63,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: landing/pnpm-lock.yaml
 
       - name: Install deps
         run: cd landing && pnpm install --frozen-lockfile
@@ -97,8 +95,10 @@ jobs:
             --exclude='__pycache__' \
             --exclude='*.pyc' \
             --exclude='*.pyo' \
-            --exclude='.env.dev' \
-            --exclude='.env.prod.example' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets/' \
+            --exclude='mosquitto/passwords' \
             --exclude='docker-compose.dev.yml' \
             --exclude='docker-compose.override.yml' \
             --exclude='mosquitto/mosquitto-dev.conf' \
