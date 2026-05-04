@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "gen:images": "tsx scripts/generate-assets.ts images",
+    "gen:avatars": "tsx scripts/generate-assets.ts avatars",
     "gen:video": "tsx scripts/generate-assets.ts video"
   },
   "devDependencies": {

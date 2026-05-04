@@ -32,7 +32,11 @@ type ImagePrompt = {
   aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 };
 
-const PROMPTS: { images: ImagePrompt[]; video: { name: string; prompt: string } } = {
+const PROMPTS: {
+  images: ImagePrompt[];
+  avatars: ImagePrompt[];
+  video: { name: string; prompt: string };
+} = {
   images: [
     {
       name: 'hero-bedroom-jp',
@@ -63,6 +67,32 @@ const PROMPTS: { images: ImagePrompt[]; video: { name: string; prompt: string } 
       aspectRatio: '16:9',
       prompt:
         'Soft editorial illustration: silhouette of a sleeping figure in one room connected by glowing dotted line to a phone in another room held by a daughter. Indigo and soft pink palette, minimalist line art on cream background. Conveys family care across distance. No text.'
+    }
+  ],
+  avatars: [
+    {
+      name: 'avatar-aiko',
+      aspectRatio: '1:1',
+      prompt:
+        'Head-and-shoulders portrait photograph of a Japanese woman, mid-30s to early 40s, with authentic East Asian features — slightly rounded face, dark straight hair neatly styled, age-appropriate skin texture with natural micro-imperfections. Genuine calm expression, small warm smile, peaceful and composed — the look of a caring mother. Soft natural window light from the side. Neutral premium background: warm beige or soft off-white, softly blurred. Modern casual-premium attire, muted tones. Photorealistic, 35mm portrait lens bokeh. No text, no logos, no watermarks, no illustration, no anime.'
+    },
+    {
+      name: 'avatar-linh',
+      aspectRatio: '1:1',
+      prompt:
+        'Head-and-shoulders portrait photograph of a Vietnamese woman, late 20s to mid-30s, with authentic Southeast Asian features — oval face, dark almond-shaped eyes, naturally dark hair, warm medium skin tone, age-appropriate natural skin texture. Gentle warm expression, slightly hopeful and caring smile — the look of a caring daughter. Soft diffused natural light. Neutral premium background: soft warm beige or pale indigo, softly blurred. Modern casual-premium attire, light colors. Photorealistic, shallow depth of field, portrait photography. No text, no logos, no watermarks, no illustration, no anime.'
+    },
+    {
+      name: 'avatar-somchai',
+      aspectRatio: '1:1',
+      prompt:
+        'Head-and-shoulders portrait photograph of a Thai man, early-to-mid 30s, with authentic Southeast Asian features — broad face, warm olive-brown skin, dark short hair, relaxed confident expression with a casual approachable smile — the look of an easygoing tech-savvy professional. Soft natural indoor light. Neutral premium background: soft off-white or warm sand, softly blurred. Modern casual-premium shirt, dark colors. Photorealistic, 35mm portrait lens bokeh. No text, no logos, no watermarks, no illustration, no anime.'
+    },
+    {
+      name: 'avatar-hiroshi',
+      aspectRatio: '1:1',
+      prompt:
+        'Head-and-shoulders portrait photograph of a Japanese man, mid-40s to early 50s, with authentic East Asian features — lean angular face, slightly greying short dark hair at temples, refined composed expression with a subtle thoughtful half-smile — the look of a design-appreciating professional, refined but not stiff. Soft directional natural light. Neutral premium background: muted deep indigo or warm off-white, softly blurred. Modern casual-premium attire, dark navy or charcoal. Photorealistic, 35mm portrait lens bokeh. No text, no logos, no watermarks, no illustration, no anime.'
     }
   ],
   video: {
@@ -103,6 +133,34 @@ async function generateImages() {
   console.log('Done.');
 }
 
+async function generateAvatars() {
+  await ensureDir(ROOT);
+  console.log(`Generating ${PROMPTS.avatars.length} avatars → ${ROOT}/`);
+  for (const item of PROMPTS.avatars) {
+    const outPath = resolve(ROOT, `${item.name}.png`);
+    process.stdout.write(`  • ${item.name} (1:1) ... `);
+    try {
+      const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: item.prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: '1:1'
+        }
+      });
+      const generated = response.generatedImages?.[0];
+      if (!generated?.image?.imageBytes) throw new Error('no image bytes returned');
+      const bytes = Buffer.from(generated.image.imageBytes, 'base64');
+      await writeFile(outPath, bytes);
+      console.log(`✓ ${(bytes.length / 1024).toFixed(0)}KB`);
+    } catch (err) {
+      console.error(`✗ ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
+  console.log('Done.');
+}
+
 async function generateVideo() {
   await ensureDir(ROOT);
   const outPath = resolve(ROOT, `${PROMPTS.video.name}.mp4`);
@@ -136,8 +194,9 @@ async function generateVideo() {
 
 const cmd = process.argv[2];
 if (cmd === 'images') generateImages();
+else if (cmd === 'avatars') generateAvatars();
 else if (cmd === 'video') generateVideo();
 else {
-  console.error('Usage: tsx scripts/generate-assets.ts <images|video>');
+  console.error('Usage: tsx scripts/generate-assets.ts <images|avatars|video>');
   process.exit(1);
 }
