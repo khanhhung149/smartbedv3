@@ -400,6 +400,67 @@ const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
     prompt:
       'Editorial soft illustration-photo: an elderly woman sleeping peacefully in a Japanese bedroom, a thin smart pad glowing faintly under her futon. A glowing dotted-light arc connects from the room outward through the wall — symbolizing a quiet data connection to a distant family member. Indigo and sakura-pink tones, intimate and safe mood, no text, no logos, no watermarks.'
   },
+  // ── Articles 16-20 inline images ─────────────────────────────────────────
+  {
+    name: 'news-bed-presence-detection-fall-prevention-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo concept: a Japanese bedroom at night seen from slightly above, an elderly person\'s silhouette beginning to sit up in bed, a subtle safety glow around the bed edge, smart sensor light glowing blue-indigo. Protective, caring mood. No text, no logos, no watermarks. Photorealistic, deep indigo and off-white palette.'
+  },
+  {
+    name: 'news-bed-presence-detection-fall-prevention-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a smartphone on a bedside table with warm lamp light, displaying a soft minimal alert notification showing bed-exit time and elapsed absence duration. Japanese minimalist bedroom background, peaceful early morning mood. No readable text on screen, no logos, no watermarks. Photorealistic.'
+  },
+  {
+    name: 'news-caring-elders-japan-tradition-meets-ai-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a daughter in her 40s and her elderly mother (80s) sitting together in a traditional Japanese tatami room, soft shoji morning light, a smartphone showing a calm sleep report resting between them on the floor. Warm oyakoko filial devotion mood, photorealistic documentary. Authentic Asian features, no readable text on phone, no logos, no watermarks.'
+  },
+  {
+    name: 'news-caring-elders-japan-tradition-meets-ai-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a thin YumePad sleep sensor pad barely visible tucked under a futon mattress in a traditional Japanese bedroom with tatami flooring and shoji screen panels. Soft dawn light, deep indigo and off-white palette, calm and unobtrusive mood. No people, no text, no logos, no watermarks. Photorealistic wabi-sabi aesthetic.'
+  },
+  {
+    name: 'news-yumepad-first-night-setup-elderly-parent-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a son in his early 40s gently and carefully sliding a thin sleep monitoring pad under his elderly father\'s mattress in a warm Japanese bedroom with soft lamp lighting. The gesture is gentle and respectful. Documentary warmth, photorealistic, authentic Asian features. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-yumepad-first-night-setup-elderly-parent-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a close-up of a smartphone screen showing a SleepTech app first-night baseline learning progress screen with a soft progress ring and a gentle reassurance message, all in warm indigo and off-white tones. Phone resting on a wooden bedside table. No readable text, no logos, no watermarks. Photorealistic soft product photography.'
+  },
+  {
+    name: 'news-real-family-stories-peace-of-mind-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a woman in her late 40s smiling warmly at her smartphone screen in early morning soft light, a cup of coffee nearby on a kitchen table. The screen glow suggests a reassuring sleep report. Warm, peaceful, connected mood. Photorealistic, authentic Asian features. No readable text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-real-family-stories-peace-of-mind-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a professional care coordinator (woman, 40s) calmly reviewing a tablet showing multiple soft sleep summary cards in a warm, organized office. Calm focused expression conveying reassurance rather than alarm. Premium editorial, photorealistic, authentic Asian features. No readable text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-nighttime-caregiver-burden-tech-relief-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: an exhausted female caregiver (50s) resting in a comfortable chair beside an elderly relative\'s bed at night, but her posture is relaxed — a smartphone on the side table shows a calm vital-sign readout in soft green light. The technology has given her permission to rest. Empathetic, warm mood. Photorealistic, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-nighttime-caregiver-burden-tech-relief-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a woman caregiver sleeping peacefully in her own comfortable bed, a smartphone on the bedside table displaying a soft green peaceful vital-sign indicator from her elderly relative\'s room. The scene conveys earned rest and trust in monitoring technology. Warm bedroom tones, photorealistic. No text, no logos, no watermarks.'
+  },
   // ── Feature/hero images (one per article, per article page) ───────────────
   {
     name: 'news-how-ai-revolutionizes-sleep-monitoring',
