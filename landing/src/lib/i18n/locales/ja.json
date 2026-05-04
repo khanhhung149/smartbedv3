@@ -1,0 +1,157 @@
+{
+  "brand": "SleepTech",
+  "brand_tagline": "心を込めた睡眠テクノロジー。",
+  "nav": {
+    "about": "私たちについて",
+    "products": "製品",
+    "testimonials": "お客様の声",
+    "certifications": "認証",
+    "contact": "お問い合わせ"
+  },
+  "hero": {
+    "kicker": "SleepTech",
+    "title_1": "あなたの眠りを、",
+    "title_2": "理解する。",
+    "subtitle": "日本のおもてなしの心から生まれたAI睡眠テクノロジー。リアルタイムのバイタルサイン、安らかな洞察、家族みんなの静かな安心。",
+    "cta_primary": "YumePadを見る",
+    "cta_secondary": "製品ラインナップ",
+    "scroll_hint": "スクロールして探す"
+  },
+  "about": {
+    "kicker": "SleepTechについて",
+    "title": "休息を尊重する睡眠テクノロジー。",
+    "lead": "日本のデザイン哲学を礎に、SleepTechは邪魔をせずに見守るコネクテッド睡眠デバイスを設計しています。すでに信頼している表面 — パッド、ベッド、枕 — からバイタルサインを測定します。",
+    "pillars": [
+      {
+        "title": "日本の職人技",
+        "body": "静寂のために調整されたハードウェア。生地の仕上げ、センサーの配置、安らかなデザインの細部にこだわります。"
+      },
+      {
+        "title": "AIによる洞察",
+        "body": "エッジセンシングがプライベートクラウドへ。心拍変動、呼吸数、体動 — 行動可能な夜の物語に翻訳されます。"
+      },
+      {
+        "title": "家族で共有",
+        "body": "兄弟、パートナー、介護者を招待。大切な人のバイタルがベースラインから外れた時にアラート。プライバシー第一、常にオプトイン。"
+      }
+    ]
+  },
+  "products": {
+    "kicker": "製品",
+    "title": "人生の最も静かな時間のために。",
+    "lead": "成長する製品ファミリー、すべてが同じSleepTechの言語を話します。",
+    "items": {
+      "yumepad": {
+        "name": "YumePad",
+        "kanji": "夢",
+        "subtitle": "Sleep Pad AI",
+        "tagline": "夢を測る場所。",
+        "description": "YumePadをマットレスの下に滑り込ませるだけ。非接触の心弾動図 (BCG) が心拍変動、呼吸数、体動、在床を捉え、あなたのリズムを学習しプライベートAIが大切な人を見守ります。",
+        "features": [
+          "心拍変動 + 呼吸数 (BCGセンサー、肌に触れない)",
+          "体動・在床検知",
+          "睡眠者ごとのAIベースライン学習",
+          "バイタル変動のリアルタイムプッシュ通知",
+          "ロールベースアクセスの家族共有",
+          "オフラインエッジ処理 — あなたのデータはあなたのもの"
+        ],
+        "status": "発売中",
+        "cta": "YumePadを予約"
+      },
+      "smart_bed": {
+        "name": "Smart Bed",
+        "tagline": "聴き、調整し、学ぶベッド。",
+        "description": "ゾーン制御の温度管理、優しい昇降、内蔵されたYumePadセンシングを備えたフルスマートベッドフレーム — あなたの睡眠ステージに振り付けされています。",
+        "status": "2026年第3四半期",
+        "cta": "ウェイトリスト"
+      },
+      "smart_pillow": {
+        "name": "Smart Pillow",
+        "tagline": "いびき検知。姿勢誘導。静かな存在。",
+        "description": "マイクアレイとマイクロハプティクスを内蔵したメモリーフォーム枕。いびきを検知し、優しい姿勢の変化を提案、YumePadとSmart Bedと同期します。",
+        "status": "開発中",
+        "cta": "通知を受け取る"
+      }
+    },
+    "common": {
+      "learn_more": "詳しく見る",
+      "key_features": "主な機能"
+    }
+  },
+  "testimonials": {
+    "kicker": "お客様の声",
+    "title": "アジア中の家族に愛されています。",
+    "lead": "SleepTechで穏やかな夜を取り戻した人々の本当の物語。",
+    "items": [
+      {
+        "quote": "2週間以内にYumePadは私が気づく前に無呼吸を発見しました。夜ごとの物語が夫を医師に診てもらう決意をさせました。",
+        "author": "Aiko M.",
+        "location": "東京、日本",
+        "verified": "認証済みYumePadオーナー"
+      },
+      {
+        "quote": "私はハノイに住んでいますが、母はフエにいます。家族共有のおかげで毎朝彼女のバイタルをチェックできます。まるで2ブロック先にいるよう。",
+        "author": "Linh P.",
+        "location": "ハノイ、ベトナム",
+        "verified": "認証済みYumePadオーナー"
+      },
+      {
+        "quote": "パッドはマットレスの下で消えます。ストラップなし、充電なし、面倒なし。アプリは毎朝はっきりとした物語を教えてくれます。",
+        "author": "Somchai T.",
+        "location": "バンコク、タイ",
+        "verified": "認証済みYumePadオーナー"
+      },
+      {
+        "quote": "セットアップは5分。日本のディテールへのこだわりがすべてに表れています — パッケージ、生地、アプリのリズム。騒がしくないプレミアム。",
+        "author": "Hiroshi K.",
+        "location": "大阪、日本",
+        "verified": "認証済みYumePadオーナー"
+      }
+    ]
+  },
+  "certifications": {
+    "kicker": "信頼",
+    "title": "試験済み、認証済み、透明性。",
+    "lead": "ハードウェアとデータ慣行を国際的な最高水準に保ちます。",
+    "items": [
+      { "code": "ISO 13485", "label": "医療機器品質管理" },
+      { "code": "ISO 27001", "label": "情報セキュリティ" },
+      { "code": "CE", "label": "EU適合" },
+      { "code": "FCC", "label": "FCC Part 15B" },
+      { "code": "PSE", "label": "電気用品安全法" },
+      { "code": "RoHS", "label": "有害物質規制" }
+    ]
+  },
+  "cta": {
+    "kicker": "準備はいつでも",
+    "title": "今夜から睡眠の物語を始めましょう。",
+    "lead": "穏やかな朝を選んだ何千もの家族に加わってください。",
+    "primary": "YumePadを予約",
+    "secondary": "お問い合わせ"
+  },
+  "footer": {
+    "tagline": "心を込めた睡眠テクノロジー。",
+    "rights": "All rights reserved.",
+    "links": {
+      "company": "会社",
+      "products": "製品",
+      "support": "サポート",
+      "legal": "法的情報",
+      "about": "SleepTechについて",
+      "press": "プレス",
+      "careers": "採用情報",
+      "yumepad": "YumePad",
+      "smart_bed": "Smart Bed",
+      "smart_pillow": "Smart Pillow",
+      "help": "ヘルプセンター",
+      "warranty": "保証",
+      "contact": "お問い合わせ",
+      "privacy": "プライバシー",
+      "terms": "利用規約",
+      "compliance": "コンプライアンス"
+    }
+  },
+  "lang": {
+    "switch": "言語"
+  }
+}

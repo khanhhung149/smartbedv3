@@ -1,0 +1,157 @@
+{
+  "brand": "SleepTech",
+  "brand_tagline": "Công nghệ giấc ngủ, làm với sự quan tâm.",
+  "nav": {
+    "about": "Về chúng tôi",
+    "products": "Sản phẩm",
+    "testimonials": "Đánh giá",
+    "certifications": "Chứng nhận",
+    "contact": "Liên hệ"
+  },
+  "hero": {
+    "kicker": "SleepTech",
+    "title_1": "Giấc ngủ của bạn,",
+    "title_2": "được hiểu rõ.",
+    "subtitle": "Công nghệ AI giấc ngủ ra đời từ sự chăm chút kiểu Nhật. Sinh hiệu thời gian thực, hiểu biết yên bình, và sự an tâm tĩnh lặng cho cả gia đình.",
+    "cta_primary": "Khám phá YumePad",
+    "cta_secondary": "Sản phẩm của chúng tôi",
+    "scroll_hint": "Cuộn để khám phá"
+  },
+  "about": {
+    "kicker": "Về SleepTech",
+    "title": "Chúng tôi tạo công nghệ giấc ngủ tôn trọng sự nghỉ ngơi.",
+    "lead": "Lấy cảm hứng từ tinh thần thiết kế Nhật Bản, SleepTech kỹ thuật các thiết bị giấc ngủ kết nối — theo dõi mà không xâm phạm — đo sinh hiệu qua những bề mặt bạn đã tin tưởng: tấm lót, giường, gối.",
+    "pillars": [
+      {
+        "title": "Nghệ thuật Nhật Bản",
+        "body": "Phần cứng được tinh chỉnh cho sự tĩnh lặng. Chúng tôi đặt nặng hoàn thiện vải, vị trí cảm biến, và những tinh tế của thiết kế nghỉ ngơi."
+      },
+      {
+        "title": "Hiểu biết từ AI",
+        "body": "Cảm biến biên đưa lên đám mây riêng. Biến thiên nhịp tim, nhịp thở, chuyển động cơ thể — chuyển thành những câu chuyện đêm có thể hành động."
+      },
+      {
+        "title": "Chia sẻ gia đình",
+        "body": "Mời anh chị em, người yêu, hoặc người chăm sóc. Nhận thông báo khi sinh hiệu của người thân lệch khỏi đường cơ sở. Riêng tư là trên hết, luôn opt-in."
+      }
+    ]
+  },
+  "products": {
+    "kicker": "Sản phẩm",
+    "title": "Được tạo cho những giờ tĩnh lặng nhất của cuộc sống.",
+    "lead": "Một gia đình thiết bị đang lớn lên, tất cả nói cùng một ngôn ngữ SleepTech.",
+    "items": {
+      "yumepad": {
+        "name": "YumePad",
+        "kanji": "夢",
+        "subtitle": "Sleep Pad AI",
+        "tagline": "Nơi những giấc mơ được đo lường.",
+        "description": "Trượt YumePad dưới bất kỳ đệm nào. Bóng tâm xung không tiếp xúc nắm bắt biến thiên nhịp tim, nhịp thở, chuyển động cơ thể, và sự hiện diện trên giường — nuôi dưỡng AI riêng học nhịp điệu của bạn và canh giữ người thân.",
+        "features": [
+          "HRV + nhịp thở (cảm biến BCG, không tiếp xúc da)",
+          "Phát hiện chuyển động cơ thể & hiện diện trên giường",
+          "Học cơ sở AI cho từng người ngủ",
+          "Cảnh báo push thời gian thực khi sinh hiệu lệch",
+          "Chia sẻ gia đình với truy cập theo vai trò",
+          "Xử lý biên offline — dữ liệu của bạn vẫn là của bạn"
+        ],
+        "status": "Đang bán",
+        "cta": "Đặt trước YumePad"
+      },
+      "smart_bed": {
+        "name": "Smart Bed",
+        "tagline": "Chiếc giường biết lắng nghe, điều chỉnh, và học hỏi.",
+        "description": "Khung giường thông minh đầy đủ với điều khiển khí hậu theo vùng, nâng nhẹ nhàng, và cảm biến YumePad tích hợp — vũ đạo theo các giai đoạn giấc ngủ của bạn.",
+        "status": "Q3 2026",
+        "cta": "Tham gia waitlist"
+      },
+      "smart_pillow": {
+        "name": "Smart Pillow",
+        "tagline": "Phát hiện ngáy. Nhắc tư thế. Hiện diện tĩnh lặng.",
+        "description": "Gối foam nhớ với mảng micro và vi haptics nhúng. Phát hiện ngáy, gợi ý chuyển tư thế nhẹ nhàng, đồng bộ với YumePad và Smart Bed.",
+        "status": "Đang phát triển",
+        "cta": "Nhận thông báo"
+      }
+    },
+    "common": {
+      "learn_more": "Tìm hiểu thêm",
+      "key_features": "Tính năng chính"
+    }
+  },
+  "testimonials": {
+    "kicker": "Đánh giá",
+    "title": "Được các gia đình khắp châu Á yêu thích.",
+    "lead": "Câu chuyện thật từ những người đã tìm lại đêm yên bình với SleepTech.",
+    "items": [
+      {
+        "quote": "Trong vòng hai tuần, YumePad đã phát hiện chứng ngưng thở của tôi trước cả tôi. Câu chuyện đêm-qua-đêm là điều thuyết phục chồng tôi đi gặp bác sĩ.",
+        "author": "Aiko M.",
+        "location": "Tokyo, Nhật Bản",
+        "verified": "Chủ sở hữu YumePad đã xác minh"
+      },
+      {
+        "quote": "Tôi sống ở Hà Nội nhưng mẹ tôi ở Huế. Chia sẻ gia đình giúp tôi kiểm tra sinh hiệu của mẹ mỗi sáng. Như thể mẹ chỉ cách hai con phố.",
+        "author": "Linh P.",
+        "location": "Hà Nội, Việt Nam",
+        "verified": "Chủ sở hữu YumePad đã xác minh"
+      },
+      {
+        "quote": "Tấm pad biến mất dưới đệm. Không dây đeo, không sạc, không phiền hà. Ứng dụng chỉ kể một câu chuyện rõ ràng mỗi sáng.",
+        "author": "Somchai T.",
+        "location": "Bangkok, Thái Lan",
+        "verified": "Chủ sở hữu YumePad đã xác minh"
+      },
+      {
+        "quote": "Cài đặt mất 5 phút. Sự chăm chút Nhật Bản hiện diện trong từng phần — đóng gói, vải, nhịp điệu app. Cao cấp mà không ồn ào.",
+        "author": "Hiroshi K.",
+        "location": "Osaka, Nhật Bản",
+        "verified": "Chủ sở hữu YumePad đã xác minh"
+      }
+    ]
+  },
+  "certifications": {
+    "kicker": "Tin cậy",
+    "title": "Đã thử nghiệm, chứng nhận, minh bạch.",
+    "lead": "Chúng tôi giữ phần cứng và thực hành dữ liệu ở những tiêu chuẩn quốc tế cao nhất.",
+    "items": [
+      { "code": "ISO 13485", "label": "QMS thiết bị y tế" },
+      { "code": "ISO 27001", "label": "An ninh thông tin" },
+      { "code": "CE", "label": "Tuân thủ EU" },
+      { "code": "FCC", "label": "FCC Part 15B" },
+      { "code": "PSE", "label": "An toàn điện Nhật Bản" },
+      { "code": "RoHS", "label": "Tuân thủ chất nguy hại" }
+    ]
+  },
+  "cta": {
+    "kicker": "Sẵn sàng khi bạn sẵn sàng",
+    "title": "Bắt đầu câu chuyện giấc ngủ của bạn đêm nay.",
+    "lead": "Tham gia hàng nghìn gia đình đã chọn những buổi sáng yên bình hơn.",
+    "primary": "Đặt trước YumePad",
+    "secondary": "Trao đổi với chúng tôi"
+  },
+  "footer": {
+    "tagline": "Công nghệ giấc ngủ, làm với sự quan tâm.",
+    "rights": "Đã đăng ký bản quyền.",
+    "links": {
+      "company": "Công ty",
+      "products": "Sản phẩm",
+      "support": "Hỗ trợ",
+      "legal": "Pháp lý",
+      "about": "Về SleepTech",
+      "press": "Báo chí",
+      "careers": "Tuyển dụng",
+      "yumepad": "YumePad",
+      "smart_bed": "Smart Bed",
+      "smart_pillow": "Smart Pillow",
+      "help": "Trung tâm trợ giúp",
+      "warranty": "Bảo hành",
+      "contact": "Liên hệ chúng tôi",
+      "privacy": "Quyền riêng tư",
+      "terms": "Điều khoản",
+      "compliance": "Tuân thủ"
+    }
+  },
+  "lang": {
+    "switch": "Ngôn ngữ"
+  }
+}
