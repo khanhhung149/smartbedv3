@@ -264,13 +264,6 @@
       </form>
     {/if}
 
-    <hr class="my-16 border-ink/10 dark:border-white/10" />
-    <p class="text-sm text-ink/60 dark:text-cloud/60">
-      © 2026 SleepTech.
-      <a href="mailto:hi@sleeptech.me" class="text-primary dark:text-primary-soft hover:underline"
-        >hi@sleeptech.me</a
-      >
-    </p>
   </div>
 </article>
 
