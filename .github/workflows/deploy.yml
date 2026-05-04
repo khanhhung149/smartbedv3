@@ -77,7 +77,7 @@ jobs:
         run: |
           sleep 2
           for path in /en /en/news /en/contact; do
-            code=$(curl -sI -o /dev/null -w '%{http_code}' "https://sleeptech.me${path}")
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://sleeptech.me${path}")
             echo "$path -> $code"
             test "$code" = "200" || exit 1
           done
@@ -125,6 +125,6 @@ jobs:
 
       - name: Smoke test API
         run: |
-          code=$(curl -sI -o /dev/null -w '%{http_code}' https://api.sleeptech.me/health)
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://api.sleeptech.me/health)
           echo "/health -> $code"
           test "$code" = "200" || exit 1

@@ -35,7 +35,8 @@ yarn-error.log*
 # package manager
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
+# Track pnpm-lock for CI reproducible installs (frozen-lockfile)
+!pnpm-lock.yaml
 
 # semantic-release
 .nyc_output
