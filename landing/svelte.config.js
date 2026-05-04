@@ -13,7 +13,13 @@ const config = {
       strict: true
     }),
     prerender: {
-      entries: ['*', '/en', '/ja', '/th', '/vi']
+      entries: [
+        '*',
+        '/en', '/ja', '/th', '/vi',
+        '/en/terms', '/ja/terms', '/th/terms', '/vi/terms',
+        '/en/privacy', '/ja/privacy', '/th/privacy', '/vi/privacy'
+      ],
+      handleMissingId: 'ignore'
     }
   }
 };

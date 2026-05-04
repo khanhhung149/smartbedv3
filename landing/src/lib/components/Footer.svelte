@@ -1,7 +1,10 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
+  import { defaultLocale } from '$lib/i18n';
+  import { page } from '$app/state';
 
   const year = new Date().getFullYear();
+  let lang = $derived((page.params.lang ?? defaultLocale) as string);
 </script>
 
 <footer class="surface border-t border-ink/10 dark:border-white/10 py-16">
@@ -36,8 +39,8 @@
       <div>
         <h4 class="text-xs font-semibold uppercase tracking-widest text-ink/40 dark:text-cloud/40 mb-3">{$_('footer.links.legal')}</h4>
         <ul class="space-y-2 text-sm">
-          <li><a href="#" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.privacy')}</a></li>
-          <li><a href="#" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.terms')}</a></li>
+          <li><a href="/{lang}/privacy" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.privacy')}</a></li>
+          <li><a href="/{lang}/terms" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.terms')}</a></li>
           <li><a href="mailto:hi@sleeptech.me" class="text-ink/70 dark:text-cloud/70 hover:text-ink dark:hover:text-cloud transition">{$_('footer.links.contact')}</a></li>
         </ul>
       </div>
