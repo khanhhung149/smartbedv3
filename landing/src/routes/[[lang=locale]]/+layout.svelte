@@ -28,6 +28,7 @@
       <a href="#products" class="hover:text-ink dark:hover:text-cloud transition">{$_('nav.products')}</a>
       <a href="#testimonials" class="hover:text-ink dark:hover:text-cloud transition">{$_('nav.testimonials')}</a>
       <a href="#certifications" class="hover:text-ink dark:hover:text-cloud transition">{$_('nav.certifications')}</a>
+      <a href="/{data.lang}/news" class="hover:text-ink dark:hover:text-cloud transition">{$_('nav.news')}</a>
     </nav>
     <div class="flex items-center gap-2">
       <ThemeToggle />
