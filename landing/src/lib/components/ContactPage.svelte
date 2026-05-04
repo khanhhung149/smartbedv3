@@ -245,20 +245,22 @@
         </div>
 
         <!-- Turnstile widget — renders only in browser via onMount -->
-        <div>
-          <p class="text-sm font-medium mb-2">{$_('contact.form.captcha_label')}</p>
+        <div class="flex flex-col items-center pt-4">
+          <p class="text-sm font-medium mb-3 text-center">{$_('contact.form.captcha_label')}</p>
           <!-- Container injected by Turnstile JS at runtime; empty during SSR/prerender -->
-          <div bind:this={turnstileContainer}></div>
+          <div bind:this={turnstileContainer} class="flex justify-center"></div>
         </div>
 
-        <!-- Submit -->
-        <button
-          type="submit"
-          disabled={state === 'sending'}
-          class="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition"
-        >
-          {state === 'sending' ? $_('contact.form.sending') : $_('contact.form.submit')}
-        </button>
+        <!-- Submit (centered) -->
+        <div class="flex justify-center pt-2">
+          <button
+            type="submit"
+            disabled={state === 'sending'}
+            class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-10 py-3 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed transition"
+          >
+            {state === 'sending' ? $_('contact.form.sending') : $_('contact.form.submit')}
+          </button>
+        </div>
       </form>
     {/if}
 
