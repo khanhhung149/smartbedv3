@@ -1,5 +1,9 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
+  import { defaultLocale } from '$lib/i18n';
+  import { page } from '$app/state';
+
+  let lang = $derived((page.params.lang ?? defaultLocale) as string);
 </script>
 
 <section id="cta" class="section bg-ink text-white relative overflow-hidden">
@@ -12,10 +16,7 @@
     <h2 class="text-4xl md:text-6xl font-bold leading-tight mb-6">{$_('cta.title')}</h2>
     <p class="text-lg text-white/70 mb-10">{$_('cta.lead')}</p>
     <div class="flex flex-wrap gap-3 justify-center">
-      <a href="mailto:hi@sleeptech.me" class="inline-flex items-center justify-center rounded-full bg-white text-ink px-8 py-4 text-sm font-semibold hover:bg-cloud transition">
-        {$_('cta.primary')}
-      </a>
-      <a href="mailto:hi@sleeptech.me" class="inline-flex items-center justify-center rounded-full border border-white/30 px-8 py-4 text-sm font-semibold hover:bg-white/10 transition">
+      <a href="/{lang}/contact" class="inline-flex items-center justify-center rounded-full bg-white text-ink px-10 py-4 text-sm font-semibold hover:bg-cloud transition">
         {$_('cta.secondary')}
       </a>
     </div>
