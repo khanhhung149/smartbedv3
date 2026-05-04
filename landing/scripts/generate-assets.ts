@@ -339,6 +339,67 @@ const NEWS_IMAGE_PROMPTS: ImagePrompt[] = [
     prompt:
       'Editorial concept photo: a cross-section diagram of sleep stages shown as layered glowing bands — deep blue for slow-wave sleep, amber for REM, soft indigo for light sleep — with a temperature gradient color overlay showing cooler temperatures correlating with deeper blue stages. Abstract scientific art, premium dark background, no text, no logos, no watermarks.'
   },
+  // ── Inline images articles 11-15 ─────────────────────────────────────────
+  {
+    name: 'news-snoring-detection-with-ai-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo of a tilted minimalist memory-foam pillow with a faintly glowing micro-mesh sensor edge, soft indigo studio light, premium product photography. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-snoring-detection-with-ai-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: abstract acoustic waveforms rendered as glowing indigo arcs floating above a dark bedroom pillow surface — the waves progress from jagged rough snore patterns on the left to smooth sinusoidal sleep waves on the right, symbolizing AI-assisted snoring detection and correction. Cinematic, premium, no faces, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-mindful-pre-sleep-routines-with-data-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial lifestyle photo: a Japanese ofuro (deep soaking bath) with steam rising, soft warm lamplight, a wooden tray with a single candle and folded towel resting on the edge. Tranquil pre-sleep ritual atmosphere. Photorealistic, warm amber and off-white tones, no people, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-mindful-pre-sleep-routines-with-data-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a smartphone resting on a low wooden bedside table displaying a minimal circular wind-down progress tracker glowing softly in indigo — T-90/T-60/T-30 segments shown as arcs, no readable text. A single burning candle and a closed book beside it. Photorealistic, calm evening mood, no logos, no watermarks.'
+  },
+  {
+    name: 'news-tracking-elderly-sleep-patterns-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial macro photo: a thin translucent sleep sensor pad lying flat on cream Japanese futon fabric, faint indigo light tracing a body-zone silhouette on the pad surface. Soft natural morning light from the side. Premium product editorial, no people, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-tracking-elderly-sleep-patterns-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: an elderly Japanese woman (80s) and her adult daughter (50s) sitting calmly together at a low wooden table, a smartphone between them displaying a gentle sleep trend graph in soft indigo — an intimate, dignified conversation about health. Documentary warmth, authentic Asian features, no readable text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-shift-workers-sleep-strategies-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a nurse in scrubs arriving home at dawn, pulling thick blackout curtains closed across a window where sunrise light edges through. A smart sleep pad glows softly indigo on the bed behind her. Empathetic, cinematic, photorealistic. No text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-shift-workers-sleep-strategies-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial concept photo: a dual-exposure composition — one half shows a city under blazing midday sun (busy street, people moving), the other half shows a darkened bedroom with blackout curtains and a peacefully sleeping figure under soft indigo light. A visual metaphor for circadian disruption. Cinematic editorial split, no text, no logos, no watermarks.'
+  },
+  {
+    name: 'news-caring-from-afar-night-monitoring-inline-1',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial photo: a woman in her 40s checking her smartphone with a calm, relieved expression at her kitchen table in early morning, a cup of coffee nearby. Through a soft-focus background, the implication of distance — a cozy, separate home visible through a window. Warm tones, photorealistic, authentic Asian features. No text on screen, no logos, no watermarks.'
+  },
+  {
+    name: 'news-caring-from-afar-night-monitoring-inline-2',
+    aspectRatio: '16:9',
+    prompt:
+      'Editorial soft illustration-photo: an elderly woman sleeping peacefully in a Japanese bedroom, a thin smart pad glowing faintly under her futon. A glowing dotted-light arc connects from the room outward through the wall — symbolizing a quiet data connection to a distant family member. Indigo and sakura-pink tones, intimate and safe mood, no text, no logos, no watermarks.'
+  },
   // ── Feature/hero images (one per article, per article page) ───────────────
   {
     name: 'news-how-ai-revolutionizes-sleep-monitoring',
@@ -514,7 +575,7 @@ async function generateNewsImages() {
 
 async function generateNewsInlineImages() {
   const inlinePrompts = NEWS_IMAGE_PROMPTS.filter((p) => p.name.includes('-inline-'));
-  await generateImageList(inlinePrompts, 'news inline images');
+  await generateImageList(inlinePrompts, 'news inline images', true);
 }
 
 const cmd = process.argv[2];
