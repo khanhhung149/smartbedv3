@@ -18,9 +18,26 @@
     "scroll_hint": "Scroll to explore"
   },
   "about": {
-    "kicker": "About SleepTech",
-    "title": "We build sleep technology that respects rest.",
-    "lead": "Headquartered with a Japanese design ethos, SleepTech engineers connected sleep devices that monitor without intruding — measuring vital signs through the surfaces you already trust: pads, beds, pillows.",
+    "kicker": "About Us",
+    "title": "Caring for Japan's elders since 2012.",
+    "lead": "SleepTech was founded in Tokyo in 2012 with a single focus: keeping Japan's growing elderly population safe and comfortable through the night. What began as a research project in partnership with Japanese care homes has grown into an internationally recognised sleep-technology family trusted in 20+ countries.",
+    "story": "Japan's culture of caring for its elders — rooted in the concept of oyakoko, filial devotion — runs through everything we make. Our engineers combine traditional Japanese craftsmanship with safety-critical medical-grade sensing, translating the quiet attentiveness of a bedside caregiver into hardware that listens without waking. Every stitch of fabric, every sensor placement, and every AI inference is shaped by one question: would you trust this beside your mother?",
+    "stats": [
+      { "value": "2012", "label": "Founded in Japan" },
+      { "value": "20+", "label": "Countries served" },
+      { "value": "12", "label": "International awards" }
+    ],
+    "regions_title": "Trusted across continents",
+    "regions_lead": "From care homes in Osaka to families in London, Sydney, and São Paulo — SleepTech devices now watch over loved ones in more than 20 countries across Europe, North America, Australia, and Asia.",
+    "awards_title": "Recognition & awards",
+    "awards_lead": "Recognised by the world's most prestigious design and innovation bodies for combining human-centred care with precision engineering.",
+    "awards": [
+      { "year": "2024", "name": "Good Design Award (Japan)" },
+      { "year": "2023", "name": "iF Design Award (Germany)" },
+      { "year": "2022", "name": "CES Innovation Honoree (USA)" },
+      { "year": "2021", "name": "Red Dot Award" },
+      { "year": "2019", "name": "Tokyo Care Tech Excellence Prize" }
+    ],
     "pillars": [
       {
         "title": "Japanese craft",

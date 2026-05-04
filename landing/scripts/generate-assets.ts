@@ -67,6 +67,30 @@ const PROMPTS: {
       aspectRatio: '16:9',
       prompt:
         'Soft editorial illustration: silhouette of a sleeping figure in one room connected by glowing dotted line to a phone in another room held by a daughter. Indigo and soft pink palette, minimalist line art on cream background. Conveys family care across distance. No text.'
+    },
+    {
+      name: 'about-heritage',
+      aspectRatio: '16:9',
+      prompt:
+        'Photorealistic editorial photo of a multi-generational Japanese family scene — a daughter in her 40s sitting calmly beside her elderly mother (80s) on a tatami floor, soft morning light through shoji screens, a thin smart sleep pad faintly visible under the futon. Warm intimate atmosphere conveying caring across generations. Color palette: deep indigo, off-white, sakura accent. No text, no logos, no watermarks. Documentary photography, 35mm, Asian features authentic.'
+    },
+    {
+      name: 'about-team',
+      aspectRatio: '4:3',
+      prompt:
+        'Photorealistic photo of a small Japanese product-design team in a modern minimalist Tokyo office — three to four professionals (mix of men and women, mid-30s to 50s, authentic Japanese features) leaning over a wooden table examining a thin sleep monitoring pad prototype. Soft natural window light, clean whites and warm wood, calm focused expression on faces. No text on screens or paper. Premium editorial photography, 35mm.'
+    },
+    {
+      name: 'about-awards',
+      aspectRatio: '1:1',
+      prompt:
+        'Premium close-up product photography of two physical award trophies on a dark walnut surface — one a sleek modern glass pyramid award, one a brushed-metal medallion with red ribbon. Soft directional studio lighting from upper-left, deep indigo and gold reflections. Out-of-focus warm bokeh background suggesting an office shelf. No readable text on the awards. Premium luxury product photography.'
+    },
+    {
+      name: 'about-global',
+      aspectRatio: '16:9',
+      prompt:
+        'Soft editorial illustration: a stylized world map shown in deep indigo on cream paper, with about 20 small glowing sakura-pink dots distributed across Europe, North America, Australia, Japan, Southeast Asia. Subtle dotted lines connecting some points. Minimalist, premium, no country labels, no text. Color palette: indigo, off-white, sakura pink.'
     }
   ],
   avatars: [

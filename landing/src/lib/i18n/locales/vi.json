@@ -18,9 +18,26 @@
     "scroll_hint": "Cuộn để khám phá"
   },
   "about": {
-    "kicker": "Về SleepTech",
-    "title": "Chúng tôi tạo công nghệ giấc ngủ tôn trọng sự nghỉ ngơi.",
-    "lead": "Lấy cảm hứng từ tinh thần thiết kế Nhật Bản, SleepTech kỹ thuật các thiết bị giấc ngủ kết nối — theo dõi mà không xâm phạm — đo sinh hiệu qua những bề mặt bạn đã tin tưởng: tấm lót, giường, gối.",
+    "kicker": "Về chúng tôi",
+    "title": "Chăm sóc người cao tuổi Nhật Bản từ năm 2012.",
+    "lead": "SleepTech được thành lập tại Tokyo năm 2012 với một mục tiêu duy nhất: giữ cho người cao tuổi Nhật Bản an toàn và thoải mái suốt đêm. Khởi đầu từ dự án nghiên cứu hợp tác với các viện dưỡng lão, nay đã phát triển thành gia đình công nghệ giấc ngủ được công nhận quốc tế và tin dùng tại 20+ quốc gia.",
+    "story": "Văn hóa chăm sóc người cao tuổi của Nhật Bản — bắt nguồn từ tinh thần hiếu thảo — chạy xuyên suốt mọi thứ chúng tôi tạo ra. Các kỹ sư của chúng tôi kết hợp thủ công mỹ nghệ Nhật Bản truyền thống với cảm biến cấp y tế, chuyển hóa sự chăm chút lặng lẽ của người chăm sóc bên giường bệnh thành phần cứng lắng nghe mà không đánh thức. Mọi quyết định thiết kế đều được đặt câu hỏi: bạn có tin tưởng đặt thiết bị này bên cạnh mẹ của bạn không?",
+    "stats": [
+      { "value": "2012", "label": "Thành lập tại Nhật Bản" },
+      { "value": "20+", "label": "Quốc gia phục vụ" },
+      { "value": "12", "label": "Giải thưởng quốc tế" }
+    ],
+    "regions_title": "Được tin dùng khắp các châu lục",
+    "regions_lead": "Từ viện dưỡng lão ở Osaka đến các gia đình tại London, Sydney và São Paulo — thiết bị SleepTech đang canh giữ người thân tại 20+ quốc gia khắp châu Âu, Bắc Mỹ, Úc và châu Á.",
+    "awards_title": "Ghi nhận & giải thưởng",
+    "awards_lead": "Được công nhận bởi các tổ chức thiết kế và đổi mới sáng tạo uy tín nhất thế giới vì sự kết hợp giữa chăm sóc lấy con người làm trung tâm và kỹ thuật chính xác.",
+    "awards": [
+      { "year": "2024", "name": "Good Design Award (Japan)" },
+      { "year": "2023", "name": "iF Design Award (Germany)" },
+      { "year": "2022", "name": "CES Innovation Honoree (USA)" },
+      { "year": "2021", "name": "Red Dot Award" },
+      { "year": "2019", "name": "Tokyo Care Tech Excellence Prize" }
+    ],
     "pillars": [
       {
         "title": "Nghệ thuật Nhật Bản",
