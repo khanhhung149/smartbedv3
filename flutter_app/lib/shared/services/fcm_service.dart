@@ -3,11 +3,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/api_client.dart';
 import '../../core/config/app_env.dart';
 import '../../firebase_options.dart';
 
-// Top-level background handler — must be top-level, registered before runApp.
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -19,8 +19,14 @@ class FcmService {
 
   static bool _initialized = false;
 
-  // Call once from main() after WidgetsFlutterBinding.ensureInitialized().
-  // Dev flavor: initializes Firebase but skips permission request and token upload.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  // Storage keys for local FCM token cache (Essen pattern)
+  static const _keyFcmToken = 'fcm_token';
+  static const _keyFcmSynced = 'fcm_token_synced';
+
   static Future<void> initialize(AppEnv env) async {
     try {
       await Firebase.initializeApp(
@@ -29,7 +35,7 @@ class FcmService {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
       if (env.isDev) {
-        dev.log('[FCM] Dev flavor — Firebase init done, skipping permission request.', name: 'FcmService');
+        dev.log('[FCM] Dev flavor — skipping permission + token upload.', name: 'FcmService');
         return;
       }
 
@@ -37,10 +43,16 @@ class FcmService {
       await messaging.requestPermission(alert: true, badge: true, sound: true);
       _initialized = true;
 
-      // Token refresh — re-upload when FCM rotates the token.
-      messaging.onTokenRefresh.listen((token) => _sendToBackend(token, env));
+      // When FCM rotates the token: save locally, reset synced flag, re-upload.
+      messaging.onTokenRefresh.listen((token) async {
+        final cached = await _storage.read(key: _keyFcmToken);
+        if (cached != token) {
+          await _storage.write(key: _keyFcmToken, value: token);
+          await _storage.write(key: _keyFcmSynced, value: 'false');
+          await _sendToBackend(token, env);
+        }
+      });
 
-      // Foreground messages — shown as local notification (optional future work).
       FirebaseMessaging.onMessage.listen((msg) {
         dev.log('[FCM] Foreground: ${msg.notification?.title}', name: 'FcmService');
       });
@@ -51,41 +63,62 @@ class FcmService {
     }
   }
 
-  // Call after login / verify-email so FCM token is sent with a valid JWT.
-  // On iOS, APNs token may not be ready yet at login time — skip and let
-  // onTokenRefresh handle the upload once APNs is available.
+  // Call after login. Skips upload if token hasn't changed since last sync.
+  // On iOS, APNs may not be ready at login time — skip and rely on onTokenRefresh.
   static Future<void> syncAfterLogin(AppEnv env) async {
     if (!_initialized) {
       debugPrint('[FCM] syncAfterLogin skipped — not initialized');
       return;
     }
+
+    // Skip if already synced with the same token
+    final isSynced = await _storage.read(key: _keyFcmSynced) == 'true';
+    if (isSynced) {
+      debugPrint('[FCM] Token already synced — skipping');
+      return;
+    }
+
     try {
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         final apns = await FirebaseMessaging.instance.getAPNSToken();
         if (apns == null) {
-          debugPrint('[FCM] APNs not ready yet — onTokenRefresh will upload when ready');
+          debugPrint('[FCM] APNs not ready — onTokenRefresh will upload when ready');
           return;
         }
       }
+
       debugPrint('[FCM] getToken() calling...');
       final token = await FirebaseMessaging.instance.getToken();
-      debugPrint('[FCM] getToken() result: ${token == null ? "NULL" : token.isEmpty ? "EMPTY STRING" : "OK (${token.substring(0, 20)}...)"}');
-      if (token != null && token.isNotEmpty) {
-        await _sendToBackend(token, env);
+      debugPrint('[FCM] getToken() result: ${token == null ? "NULL" : token.isEmpty ? "EMPTY" : "OK (${token.substring(0, 20)}...)"}');
+
+      if (token == null || token.isEmpty) return;
+
+      // Only upload if token changed
+      final cached = await _storage.read(key: _keyFcmToken);
+      if (cached == token) {
+        // Token unchanged but wasn't marked synced — re-upload to be safe
+        debugPrint('[FCM] Token unchanged, re-uploading to ensure sync');
       }
+
+      await _sendToBackend(token, env);
+      await _storage.write(key: _keyFcmToken, value: token);
+      await _storage.write(key: _keyFcmSynced, value: 'true');
     } catch (e) {
       debugPrint('[FCM] syncAfterLogin failed: $e');
     }
   }
 
-  // Clear token on logout — backend stops sending pushes to this device.
+  // Call on logout — clears backend token, resets local sync state.
   static Future<void> clearToken(AppEnv env) async {
     if (!_initialized) return;
     try {
       final client = ApiClient(baseUrl: env.apiBaseUrl);
       await client.dio.patch('/auth/fcm-token', data: {'fcm_token': ''});
     } on DioException catch (_) {
-      // Best-effort on logout path — ignore failures.
+      // Best-effort on logout — ignore failures.
+    } finally {
+      // Always reset sync state so next login re-registers the token
+      await _storage.write(key: _keyFcmSynced, value: 'false');
     }
   }
 
