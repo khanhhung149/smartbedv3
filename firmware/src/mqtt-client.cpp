@@ -1,109 +1,44 @@
 #include "mqtt-client.h"
 #include "nvs-config.h"
 #include <WiFi.h>
+#include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// ESP-IDF MQTT client (built into arduino-esp32 3.x). Supports tcp / mqtts / ws / wss
-// out of the box, with auto-reconnect, last-will, and TLS via the bundled CA store.
-#include "mqtt_client.h"
-#include "esp_crt_bundle.h"
-
 // --- Module-level state ---
-//
-// All config strings are kept in module-scope String/buffers so that the
-// `const char*` pointers handed to esp_mqtt_client_config_t stay valid for the
-// lifetime of the client (the lib does not deep-copy URI/topics/creds).
 
-static esp_mqtt_client_handle_t s_client = nullptr;
-static volatile bool s_connected = false;
-static bool s_started = false;
+static WiFiClient     s_wifi_client;
+static PubSubClient   s_mqtt(s_wifi_client);
 
 static String s_device_id;
+static String s_host;
+static uint16_t s_port     = 1883;
 static String s_user;
 static String s_pass;
-static String s_uri;            // "mqtt://host:1883" or "wss://host/mqtt"
+static bool   s_scheme_ok  = false; // false → ws/wss not supported, abort
+
 static String s_topic_status;
 static String s_topic_sec;
 static String s_topic_min;
 static String s_topic_cmd;
 
-// LWT payload kept as a literal so we can pass a stable pointer to the lib.
-static const char* LWT_OFFLINE = "offline";
+static unsigned long s_last_reconnect_ms = 0;
+static constexpr unsigned long RECONNECT_INTERVAL_MS = 5000;
 
-// Bound how long mqtt_connect() waits for the driver task to land
-// MQTT_EVENT_CONNECTED before returning false. The driver keeps reconnecting
-// in the background regardless, so this only gates the boot-time UX.
-static constexpr unsigned long CONNECT_WAIT_MS = 10000;
+// --- Helper: parse "host[:port]" into host + port ---
 
-// --- Helpers ---
-
-// Build an esp-mqtt URI from the (scheme, host) pair the backend sends.
-// Backend `_mqtt_scheme_from_domain` returns one of: "tcp" | "ws" | "wss".
-// Host may already carry a ":port" suffix (e.g. dev: "192.168.1.11:1883").
-//
-// For `wss` we append `/mqtt` because that's the path mosquitto's WS listener
-// is reached at through cloudflared (see mosquitto-prod.conf + tunnel ingress).
-static String build_uri(const String& scheme, const String& host) {
-    if (scheme == "wss") return String("wss://") + host + "/mqtt";
-    if (scheme == "ws")  return String("ws://")  + host + "/mqtt";
-    if (scheme == "mqtts") return String("mqtts://") + host;
-    // Default: plain TCP. Embed default port if caller did not specify one.
-    if (host.indexOf(':') >= 0) return String("mqtt://") + host;
-    return String("mqtt://") + host + ":1883";
-}
-
-// Handle remote `factory_reset` published to sleeppad/{id}/cmd.
-// Backend publishes with retain=true so an offline device receives it on
-// next reconnect. After reset we must clear the retained message — otherwise
-// a re-paired device with the same ID would reset itself indefinitely.
-static void handle_data(esp_mqtt_event_handle_t e) {
-    String topic(e->topic, e->topic_len);
-    String msg(e->data, e->data_len);
-    Serial.printf("[MQTT] cmd received on %s: %s\n", topic.c_str(), msg.c_str());
-    if (msg == "factory_reset") {
-        Serial.println("[MQTT] factory_reset — clearing retained cmd + wiping NVS");
-        esp_mqtt_client_publish(s_client, topic.c_str(), "", 0, /*qos=*/1, /*retain=*/1);
-        delay(500);   // give the publish a chance to flush before reset
-        nvs_config_erase_all();
-        delay(500);
-        ESP.restart();
+static void parse_host_port(const String& raw, String& out_host, uint16_t& out_port) {
+    int colon = raw.lastIndexOf(':');
+    if (colon > 0) {
+        // Ensure there is something after the colon and it looks numeric
+        String port_str = raw.substring(colon + 1);
+        if (port_str.length() > 0 && isDigit(port_str[0])) {
+            out_host = raw.substring(0, colon);
+            out_port = (uint16_t)port_str.toInt();
+            return;
+        }
     }
-}
-
-static void event_cb(void* /*arg*/, esp_event_base_t /*base*/,
-                     int32_t event_id, void* event_data) {
-    auto* e = static_cast<esp_mqtt_event_handle_t>(event_data);
-    switch (static_cast<esp_mqtt_event_id_t>(event_id)) {
-        case MQTT_EVENT_CONNECTED:
-            s_connected = true;
-            Serial.println("[MQTT] Connected");
-            // Replace the retained "offline" LWT with "online" now that we're up.
-            esp_mqtt_client_publish(s_client, s_topic_status.c_str(),
-                                    "online", 0, /*qos=*/0, /*retain=*/1);
-            // QoS 1 so retained factory_reset is delivered across brief reconnects.
-            esp_mqtt_client_subscribe(s_client, s_topic_cmd.c_str(), 1);
-            Serial.printf("[MQTT] Subscribed to %s\n", s_topic_cmd.c_str());
-            break;
-        case MQTT_EVENT_DISCONNECTED:
-            s_connected = false;
-            Serial.println("[MQTT] Disconnected");
-            break;
-        case MQTT_EVENT_DATA:
-            handle_data(e);
-            break;
-        case MQTT_EVENT_ERROR:
-            if (e->error_handle) {
-                Serial.printf("[MQTT] Error type=%d tls_err=0x%x sock_errno=%d\n",
-                              e->error_handle->error_type,
-                              e->error_handle->esp_tls_last_esp_err,
-                              e->error_handle->esp_transport_sock_errno);
-            } else {
-                Serial.println("[MQTT] Error (no detail)");
-            }
-            break;
-        default:
-            break;
-    }
+    out_host = raw;
+    // out_port unchanged (caller initialises to default)
 }
 
 // --- Public API ---
@@ -122,93 +57,114 @@ void mqtt_setup(const char* device_id,
     s_topic_min    = "sleeppad/" + s_device_id + "/min";
     s_topic_cmd    = "sleeppad/" + s_device_id + "/cmd";
 
-    s_uri = build_uri(String(scheme), String(host));
-
-    Serial.printf("[MQTT] Setup: uri=%s client_id=%s user=%s\n",
-                  s_uri.c_str(), s_device_id.c_str(),
-                  s_user.length() > 0 ? s_user.c_str() : "(anonymous)");
-
-    // Tear down any previous client (re-provisioning path calls mqtt_setup again).
-    if (s_client) {
-        esp_mqtt_client_stop(s_client);
-        esp_mqtt_client_destroy(s_client);
-        s_client = nullptr;
-        s_started = false;
-        s_connected = false;
-    }
-
-    esp_mqtt_client_config_t cfg = {};
-    cfg.broker.address.uri = s_uri.c_str();
-    // Mozilla CA bundle — verifies Cloudflare-issued certs for wss://*.sleeptech.me
-    // out of the box. No-op for plain `mqtt://` URIs.
-    cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
-
-    cfg.credentials.client_id = s_device_id.c_str();
-    if (s_user.length() > 0) {
-        cfg.credentials.username = s_user.c_str();
-        cfg.credentials.authentication.password = s_pass.c_str();
-    }
-
-    cfg.session.keepalive = 60;
-    cfg.session.last_will.topic = s_topic_status.c_str();
-    cfg.session.last_will.msg = LWT_OFFLINE;
-    cfg.session.last_will.msg_len = (int)strlen(LWT_OFFLINE);
-    cfg.session.last_will.qos = 0;
-    cfg.session.last_will.retain = 1;
-
-    cfg.network.timeout_ms = 5000;
-    cfg.network.reconnect_timeout_ms = 5000;
-
-    s_client = esp_mqtt_client_init(&cfg);
-    if (!s_client) {
-        Serial.println("[MQTT] esp_mqtt_client_init failed");
+    String scheme_str(scheme);
+    if (scheme_str != "tcp") {
+        // WS/WSS not supported by PubSubClient — deferred to production firmware
+        Serial.printf("[MQTT] Scheme \"%s\" not supported in POC (TCP only). "
+                      "WS/WSS via PubSubClient requires a WebSocket bridge — deferred.\n",
+                      scheme);
+        s_scheme_ok = false;
         return;
     }
-    esp_mqtt_client_register_event(s_client,
-                                   static_cast<esp_mqtt_event_id_t>(MQTT_EVENT_ANY),
-                                   event_cb, nullptr);
+    s_scheme_ok = true;
+
+    // Default TCP port; overridden if host contains ":port"
+    s_port = 1883;
+    parse_host_port(String(host), s_host, s_port);
+
+    Serial.printf("[MQTT] Setup: broker=%s:%u client_id=%s user=%s\n",
+                  s_host.c_str(), s_port, s_device_id.c_str(),
+                  s_user.length() > 0 ? s_user.c_str() : "(anonymous)");
+
+    s_mqtt.setServer(s_host.c_str(), s_port);
+    s_mqtt.setKeepAlive(60);
+    s_mqtt.setBufferSize(512);
+    // Bound the blocking connect()/publish() worst-case wait so an unreachable
+    // broker doesn't stall the main loop (and therefore UART draining) for the
+    // default 15 s. With 2 s, UART buffer survives comfortably at 115200 baud.
+    s_mqtt.setSocketTimeout(2);
+
+    // Subscribe handler: listen for remote factory_reset on `sleeppad/{id}/cmd`.
+    // Backend publishes with retain=true so an offline device still receives
+    // the reset on next reconnect.
+    s_mqtt.setCallback([](char* topic, uint8_t* payload, unsigned int len) {
+        String msg;
+        msg.reserve(len);
+        for (unsigned int i = 0; i < len; ++i) msg += (char)payload[i];
+        Serial.printf("[MQTT] cmd received on %s: %s\n", topic, msg.c_str());
+        if (msg == "factory_reset") {
+            Serial.println("[MQTT] factory_reset — clearing retained cmd + wiping NVS");
+            // CRITICAL: clear the retained command on the broker so the next
+            // owner who re-pairs this device_id doesn't immediately receive
+            // the old factory_reset and bounce into an infinite reset loop.
+            s_mqtt.publish(topic, (const uint8_t*)"", 0, /*retain=*/true);
+            s_mqtt.loop();          // flush outgoing queue
+            delay(200);
+            nvs_config_erase_all();
+            delay(500);
+            ESP.restart();
+        }
+    });
 }
 
 bool mqtt_connect() {
-    if (!s_client) {
-        Serial.println("[MQTT] mqtt_connect called before mqtt_setup");
+    if (!s_scheme_ok) {
+        Serial.println("[MQTT] Cannot connect — unsupported scheme (ws/wss deferred)");
         return false;
     }
-    if (!s_started) {
-        if (esp_mqtt_client_start(s_client) != ESP_OK) {
-            Serial.println("[MQTT] esp_mqtt_client_start failed");
-            return false;
-        }
-        s_started = true;
-    }
-    Serial.printf("[MQTT] Connecting to %s as client_id=\"%s\"...\n",
-                  s_uri.c_str(), s_device_id.c_str());
 
-    // Block briefly for the driver task to surface MQTT_EVENT_CONNECTED.
-    // If we time out, the driver still keeps trying — the BLE provisioning
-    // path uses a false return to surface a "mqtt_failed" status to the app.
-    unsigned long start = millis();
-    while (!s_connected && (millis() - start) < CONNECT_WAIT_MS) {
-        delay(100);
+    Serial.printf("[MQTT] Connecting to %s:%u as client_id=\"%s\"...\n",
+                  s_host.c_str(), s_port, s_device_id.c_str());
+
+    // LWT: retain=true, QoS=0
+    const char* lwt_payload = "offline";
+    bool ok;
+    if (s_user.length() > 0) {
+        ok = s_mqtt.connect(s_device_id.c_str(),
+                            s_user.c_str(), s_pass.c_str(),
+                            s_topic_status.c_str(), 0, true, lwt_payload);
+    } else {
+        // Anonymous connect (dev environment)
+        ok = s_mqtt.connect(s_device_id.c_str(),
+                            nullptr, nullptr,
+                            s_topic_status.c_str(), 0, true, lwt_payload);
     }
-    if (!s_connected) {
-        Serial.println("[MQTT] Connect wait timed out (driver keeps retrying)");
-        return false;
+
+    if (ok) {
+        Serial.println("[MQTT] Connected");
+        s_mqtt.publish(s_topic_status.c_str(), "online", /*retain=*/true);
+        // Subscribe to command topic.  QoS 1 so retained factory_reset is
+        // delivered even across brief reconnects.
+        s_mqtt.subscribe(s_topic_cmd.c_str(), 1);
+        Serial.printf("[MQTT] Subscribed to %s\n", s_topic_cmd.c_str());
+    } else {
+        Serial.printf("[MQTT] Connect failed, state=%d\n", s_mqtt.state());
     }
-    return true;
+    return ok;
 }
 
 void mqtt_loop() {
-    // No-op: esp-mqtt has its own driver task. Function kept for caller
-    // ABI compatibility (main.cpp calls this every loop()).
+    if (!s_scheme_ok) return;
+
+    if (!s_mqtt.connected()) {
+        unsigned long now = millis();
+        if (now - s_last_reconnect_ms >= RECONNECT_INTERVAL_MS) {
+            s_last_reconnect_ms = now;
+            Serial.println("[MQTT] Disconnected — attempting reconnect");
+            mqtt_connect();
+        }
+    }
+    s_mqtt.loop();
 }
 
-// --- Publish helpers ---
-
+// JSON buffer sized for min frames with headroom. Sec frame ~110 B, min frame
+// ~170 B — 384 leaves >2x margin and trips the overflow guard early.
 static constexpr size_t JSON_BUF_BYTES = 384;
 
 static bool serialize_or_warn(JsonDocument& doc, char* buf, size_t cap, size_t& out_n) {
     out_n = serializeJson(doc, buf, cap);
+    // serializeJson returns 0 if the buffer was too small. Also bail if we
+    // used the full capacity (truncation risk) so we never publish half a JSON.
     if (out_n == 0 || out_n >= cap - 1) {
         Serial.printf("[MQTT] JSON serialize overflow (n=%u cap=%u) — dropping publish\n",
                       (unsigned)out_n, (unsigned)cap);
@@ -218,7 +174,7 @@ static bool serialize_or_warn(JsonDocument& doc, char* buf, size_t cap, size_t& 
 }
 
 void mqtt_publish_sec(const SleepPadSecData& d) {
-    if (!s_connected || !s_client) return;
+    if (!s_mqtt.connected()) return;
 
     JsonDocument doc;
     doc["device_id"]  = s_device_id;
@@ -232,12 +188,11 @@ void mqtt_publish_sec(const SleepPadSecData& d) {
     char buf[JSON_BUF_BYTES];
     size_t n;
     if (!serialize_or_warn(doc, buf, sizeof(buf), n)) return;
-    esp_mqtt_client_publish(s_client, s_topic_sec.c_str(), buf, (int)n,
-                            /*qos=*/0, /*retain=*/0);
+    s_mqtt.publish(s_topic_sec.c_str(), (const uint8_t*)buf, n, /*retain=*/false);
 }
 
 void mqtt_publish_min(const SleepPadMinData& d) {
-    if (!s_connected || !s_client) return;
+    if (!s_mqtt.connected()) return;
 
     JsonDocument doc;
     doc["device_id"]     = s_device_id;
@@ -249,17 +204,16 @@ void mqtt_publish_min(const SleepPadMinData& d) {
     doc["snore_count"]   = d.snore_count;
     doc["resp_disorder"] = d.resp_disorder;
     doc["pthd"]          = d.pthd;
-    // Protocol stores temp as °C × 10; publish actual °C so backend Pydantic
+    // Protocol stores temp as C × 10; publish actual °C so backend Pydantic
     // bound (le=60) accepts and the app displays readable numbers.
     doc["temp"]          = serialized(String(d.temp / 10.0, 1));
 
     char buf[JSON_BUF_BYTES];
     size_t n;
     if (!serialize_or_warn(doc, buf, sizeof(buf), n)) return;
-    esp_mqtt_client_publish(s_client, s_topic_min.c_str(), buf, (int)n,
-                            /*qos=*/0, /*retain=*/0);
+    s_mqtt.publish(s_topic_min.c_str(), (const uint8_t*)buf, n, /*retain=*/false);
 }
 
 bool mqtt_connected() {
-    return s_connected;
+    return s_mqtt.connected();
 }
