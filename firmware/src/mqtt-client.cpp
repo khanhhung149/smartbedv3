@@ -24,6 +24,15 @@ static String s_topic_cmd;
 static unsigned long s_last_reconnect_ms = 0;
 static constexpr unsigned long RECONNECT_INTERVAL_MS = 5000;
 
+static String normalize_scheme(const char* scheme) {
+    String s = String(scheme ? scheme : "");
+    s.trim();
+    s.toLowerCase();
+    // Keep app-side naming compatible: treat "mqtt" as plain TCP MQTT.
+    if (s == "mqtt") return "tcp";
+    return s;
+}
+
 // --- Helper: parse "host[:port]" into host + port ---
 
 static void parse_host_port(const String& raw, String& out_host, uint16_t& out_port) {
@@ -57,12 +66,13 @@ void mqtt_setup(const char* device_id,
     s_topic_min    = "sleeppad/" + s_device_id + "/min";
     s_topic_cmd    = "sleeppad/" + s_device_id + "/cmd";
 
-    String scheme_str(scheme);
+    String scheme_str = normalize_scheme(scheme);
     if (scheme_str != "tcp") {
         // WS/WSS not supported by PubSubClient — deferred to production firmware
-        Serial.printf("[MQTT] Scheme \"%s\" not supported in POC (TCP only). "
-                      "WS/WSS via PubSubClient requires a WebSocket bridge — deferred.\n",
-                      scheme);
+        Serial.printf("[MQTT] Scheme \"%s\" not supported in POC. "
+                      "Use \"mqtt\" or \"tcp\" for plain TCP MQTT. "
+                      "WS/WSS requires a WebSocket bridge — deferred.\n",
+                      scheme ? scheme : "");
         s_scheme_ok = false;
         return;
     }

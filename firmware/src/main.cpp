@@ -26,15 +26,15 @@ static unsigned long  last_heartbeat_ms = 0;
 
 // Format: [0x7D][type][len_lo][len_hi][ID 10B][content...][0x0D]
 static void send_command(uint8_t frame_type, const uint8_t* content, size_t len) {
-    Serial2.write(0x7D);
-    Serial2.write(frame_type);
+    Serial1.write(0x7D);
+    Serial1.write(frame_type);
     uint16_t total = 1 + 1 + 2 + 10 + len + 1;
-    Serial2.write((uint8_t)(total & 0xFF));
-    Serial2.write((uint8_t)((total >> 8) & 0xFF));
-    Serial2.write((const uint8_t*)DEVICE_ID, 10);
-    if (len > 0) Serial2.write(content, len);
-    Serial2.write(0x0D);
-    Serial2.flush();
+    Serial1.write((uint8_t)(total & 0xFF));
+    Serial1.write((uint8_t)((total >> 8) & 0xFF));
+    Serial1.write((const uint8_t*)DEVICE_ID, 10);
+    if (len > 0) Serial1.write(content, len);
+    Serial1.write(0x0D);
+    Serial1.flush();
 }
 
 static void start_monitor_mode() {
@@ -70,16 +70,55 @@ static void on_idle() {
 
 // --- WiFi connect (blocking, 30 s timeout) ---
 
+static String normalize_ble_text(String s) {
+    s.trim();
+    // Some mobile BLE clients may send quoted JSON-like strings.
+    if (s.length() >= 2 && s[0] == '"' && s[s.length() - 1] == '"') {
+        s = s.substring(1, s.length() - 1);
+    }
+    return s;
+}
+
+static void dump_wifi_scan_for(const String& expected_ssid) {
+    Serial.println("\n[WiFi] Scanning nearby APs...");
+    int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+    if (n <= 0) {
+        Serial.println("[WiFi] Scan result: no AP found");
+        return;
+    }
+    bool found_exact = false;
+    for (int i = 0; i < n; ++i) {
+        String s = WiFi.SSID(i);
+        int32_t rssi = WiFi.RSSI(i);
+        uint8_t ch = WiFi.channel(i);
+        Serial.printf("[WiFi] AP[%d] SSID=\"%s\" RSSI=%d CH=%u ENC=%d\n",
+                      i, s.c_str(), (int)rssi, (unsigned)ch, (int)WiFi.encryptionType(i));
+        if (s == expected_ssid) found_exact = true;
+    }
+    Serial.printf("[WiFi] Target SSID %s in scan list\n", found_exact ? "FOUND" : "NOT FOUND");
+}
+
 static bool connect_wifi(const String& ssid, const String& pass) {
-    Serial.printf("[WiFi] Connecting to \"%s\"...\n", ssid.c_str());
+    String clean_ssid = normalize_ble_text(ssid);
+    String clean_pass = normalize_ble_text(pass);
+
+    Serial.printf("[WiFi] Connecting to \"%s\" (len=%u)...\n",
+                  clean_ssid.c_str(), (unsigned)clean_ssid.length());
+    if (clean_ssid.length() > 0) {
+        char last = clean_ssid[clean_ssid.length() - 1];
+        Serial.printf("[WiFi] SSID last-char=0x%02X\n", (unsigned char)last);
+    }
+
     WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid.c_str(), pass.c_str());
+    WiFi.begin(clean_ssid.c_str(), clean_pass.c_str());
 
     const unsigned long timeout_ms = 30000;
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() - start >= timeout_ms) {
-            Serial.println("[WiFi] Timeout");
+            wl_status_t st = WiFi.status();
+            Serial.printf("[WiFi] Timeout, status=%d\n", (int)st);
+            dump_wifi_scan_for(clean_ssid);
             return false;
         }
         delay(500);
@@ -92,6 +131,7 @@ static bool connect_wifi(const String& ssid, const String& pass) {
 // --- BLE provisioning flow (blocks until provisioning complete) ---
 
 static void run_ble_provisioning() {
+    Serial.printf("[BLE] Init — free heap before: %u\n", ESP.getFreeHeap());
     ble_init(DEVICE_ID);
     ble_set_status("waiting");
 
@@ -107,23 +147,31 @@ static void run_ble_provisioning() {
 void setup() {
     Serial.begin(115200);
     delay(500);
-    Serial.printf("\n[Boot] Sleep Pad ESP32 — device_id=%s\n", DEVICE_ID);
-
-    // UART2 for sleep pad hardware
-    Serial2.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
-    Serial.printf("[UART] Serial2 RX=%d TX=%d @ %d baud\n",
+    Serial.printf("\n[Boot] Sleep Pad ESP32 — device_id=%s\n", DEVICE_ID);    Serial.printf("[Boot] Free heap: %u bytes\n", ESP.getFreeHeap());
+    // UART1 for sleep pad hardware
+    Serial.println("[Boot] Starting Serial1...");
+    Serial.flush();
+    Serial1.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+    Serial.printf("[UART] Serial1 RX=%d TX=%d @ %d baud\n",
                   UART_RX_PIN, UART_TX_PIN, UART_BAUD);
+    Serial.flush();
 
     parser.onSecData = on_sec_data;
     parser.onMinData = on_min_data;
     parser.onIdle    = on_idle;
 
+    Serial.println("[Boot] NVS init...");
+    Serial.flush();
     if (!nvs_init()) {
         Serial.println("[Boot] NVS init failed — continuing anyway");
     }
 
+    Serial.println("[Boot] NVS load...");
+    Serial.flush();
     NvsConfig cfg = nvs_load();
     const bool fresh_provisioning = !cfg.has_wifi_creds();
+    Serial.printf("[Boot] fresh_provisioning=%d\n", fresh_provisioning);
+    Serial.flush();
 
     if (fresh_provisioning) {
         // ── Provisioning path with in-place retry ─────────────────────────
@@ -205,14 +253,14 @@ void setup() {
     }
 
     // Enter sleep pad monitor mode so it streams data.
-    // In mock build, Serial2 is unused so this is a no-op on the wire, but
+    // In mock build, Serial1 is unused so this is a no-op on the wire, but
     // leaving it in keeps the boot sequence identical to production.
     start_monitor_mode();
 
 #ifdef MOCK_SLEEPPAD
     g_mock_parser = &parser;
     mock_init(DEVICE_ID);
-    Serial.println("[Mock] SLEEP PAD MOCK ACTIVE — synthesizing telemetry, Serial2 bypassed");
+    Serial.println("[Mock] SLEEP PAD MOCK ACTIVE — synthesizing telemetry, Serial1 bypassed");
 #endif
 
     Serial.println("[Boot] Ready");
@@ -221,8 +269,8 @@ void setup() {
 void loop() {
 #ifndef MOCK_SLEEPPAD
     // Drain UART bytes into parser (production path)
-    while (Serial2.available()) {
-        parser.feed(static_cast<uint8_t>(Serial2.read()));
+    while (Serial1.available()) {
+        parser.feed(static_cast<uint8_t>(Serial1.read()));
     }
 #else
     // Mock path — generate synthetic frame bytes and feed the parser

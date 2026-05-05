@@ -36,7 +36,7 @@ class SleepPadParser {
 public:
     SleepPadParser();
 
-    // Feed one byte at a time from Serial2
+    // Feed one byte at a time from Serial1
     void feed(uint8_t byte);
 
     // Callbacks — set before calling feed()

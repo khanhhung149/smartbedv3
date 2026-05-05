@@ -7,12 +7,14 @@
 // JSON payload publish for sec/min frames, and auto-reconnect in loop().
 //
 // WS/WSS deferred: PubSubClient does not support WebSocket natively.
-// POC supports tcp scheme only; ws/wss logs a warning and sets mqtt_failed.
+// POC supports plain TCP only (accepts "mqtt" and "tcp"); ws/wss logs a
+// warning and sets mqtt_failed.
 
 // Initialise client with connection parameters. Does NOT connect yet.
 // device_id : e.g. "CNU2000001" — used as MQTT client_id (required for ACL)
 // host      : hostname or IP, optionally with port suffix "host:port"
-// scheme    : "tcp" | "ws" | "wss"  (ws/wss → graceful failure with log)
+// scheme    : "mqtt" | "tcp" | "ws" | "wss"
+//             ("mqtt" maps to TCP; ws/wss -> graceful failure with log)
 // user/pass : empty string = anonymous connect
 void mqtt_setup(const char* device_id,
                 const char* host,
