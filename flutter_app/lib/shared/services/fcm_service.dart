@@ -55,7 +55,11 @@ class FcmService {
     if (!_initialized) return;
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) await _sendToBackend(token, env);
+      if (token != null && token.isNotEmpty) {
+        await _sendToBackend(token, env);
+      } else {
+        dev.log('[FCM] getToken() returned null/empty — skipping upload', name: 'FcmService');
+      }
     } catch (e) {
       dev.log('[FCM] syncAfterLogin failed: $e', name: 'FcmService');
     }
