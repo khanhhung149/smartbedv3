@@ -107,6 +107,9 @@ jobs:
             --exclude='.gitignore' \
             backend/ /opt/sleeptech/backend/
 
+      - name: Reload mosquitto config (picks up ACL/listener changes)
+        run: docker exec sleeppad-mosquitto kill -HUP 1 || true
+
       - name: Rebuild fastapi container
         run: |
           cd /opt/sleeptech/backend
