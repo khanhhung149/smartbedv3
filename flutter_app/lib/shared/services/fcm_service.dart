@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../core/api_client.dart';
@@ -51,17 +52,29 @@ class FcmService {
   }
 
   // Call after login / verify-email so FCM token is sent with a valid JWT.
+  // On iOS, APNs token may not be ready yet at login time — skip and let
+  // onTokenRefresh handle the upload once APNs is available.
   static Future<void> syncAfterLogin(AppEnv env) async {
-    if (!_initialized) return;
+    if (!_initialized) {
+      debugPrint('[FCM] syncAfterLogin skipped — not initialized');
+      return;
+    }
     try {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final apns = await FirebaseMessaging.instance.getAPNSToken();
+        if (apns == null) {
+          debugPrint('[FCM] APNs not ready yet — onTokenRefresh will upload when ready');
+          return;
+        }
+      }
+      debugPrint('[FCM] getToken() calling...');
       final token = await FirebaseMessaging.instance.getToken();
+      debugPrint('[FCM] getToken() result: ${token == null ? "NULL" : token.isEmpty ? "EMPTY STRING" : "OK (${token.substring(0, 20)}...)"}');
       if (token != null && token.isNotEmpty) {
         await _sendToBackend(token, env);
-      } else {
-        dev.log('[FCM] getToken() returned null/empty — skipping upload', name: 'FcmService');
       }
     } catch (e) {
-      dev.log('[FCM] syncAfterLogin failed: $e', name: 'FcmService');
+      debugPrint('[FCM] syncAfterLogin failed: $e');
     }
   }
 
