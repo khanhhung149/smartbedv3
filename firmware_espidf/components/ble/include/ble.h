@@ -18,6 +18,8 @@ typedef struct {
 	char mqtt_scheme[BLE_MQTT_SCHEME_MAX_LEN + 1];
 } ble_config_data_t;
 
+extern ble_config_data_t s_config;
+
 void ble_init(void);
 const ble_config_data_t *ble_get_config(void);
 

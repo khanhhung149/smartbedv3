@@ -17,6 +17,7 @@
 
 #include "ble.h"
 #include "connect_wifi.h"
+#include "mqtt_wifi.h"
 
 static EventGroupHandle_t s_wifi_event_group;
 static const int WIFI_CONNECTED_BIT = BIT0;
@@ -24,6 +25,8 @@ static bool s_connected = false;
 static int s_retry_num = 0;
 static bool got_ip = false;
 static const char *TAG = "WIFI";
+
+static char buffer[512];
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
@@ -92,7 +95,9 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
         // Disable access point mode after successful station connection
         vTaskDelay(3000 / portTICK_PERIOD_MS);
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-        ESP_LOGI(TAG, "Connect to WiFi successful");
+        ESP_LOGI(TAG, "Connect to WiFi successful > connect MQTT");
+        snprintf(buffer, sizeof(buffer), "%s://%s:1883", s_config.mqtt_scheme, s_config.mqtt_broker);
+        mqtt_init(buffer, "sleeppad_test", s_config.mqtt_username, s_config.mqtt_password);
     }
 }
 

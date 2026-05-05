@@ -5,4 +5,6 @@ idf_component_register(SRCS "connect_wifi.c"
                         esp_event
                         nvs_flash
                         ble
+
+                        mqtt_wifi
                         )

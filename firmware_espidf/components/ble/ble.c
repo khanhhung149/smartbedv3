@@ -15,6 +15,7 @@
 
 #include "ble.h"
 #include "connect_wifi.h"
+#include "mqtt_wifi.h"
 
 static const char *TAG = "BLE";
 
@@ -60,7 +61,7 @@ enum {
     IDX_NB
 };
 
-static ble_config_data_t s_config;
+ble_config_data_t s_config;
 static bool s_ble_started;
 static esp_gatt_if_t s_gatts_if = ESP_GATT_IF_NONE;
 static uint16_t s_handle_table[IDX_NB];

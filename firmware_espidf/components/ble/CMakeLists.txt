@@ -4,4 +4,5 @@ idf_component_register(SRCS "ble.c"
                         bt
                         nvs_flash
                         connect_wifi
+                        mqtt_wifi
                         )
