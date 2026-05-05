@@ -73,6 +73,102 @@ class DeviceDetailInfoCard extends StatelessWidget {
   }
 }
 
+// ── Change WiFi card ──────────────────────────────────────────────────────────
+
+class DeviceDetailChangeWifiCard extends StatelessWidget {
+  const DeviceDetailChangeWifiCard({super.key, required this.onChangeWifi});
+  final VoidCallback onChangeWifi;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Material(
+      color: AppColors.surfaceContainer,
+      borderRadius: AppRadius.defaultBr,
+      child: InkWell(
+        onTap: onChangeWifi,
+        borderRadius: AppRadius.defaultBr,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.wifi, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  l10n.changeWifi,
+                  style: GoogleFonts.inter(
+                    fontWeight: AppFontWeight.medium,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+              const Icon(Icons.chevron_right,
+                  color: AppColors.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Change WiFi instruction dialog ────────────────────────────────────────────
+
+class DeviceChangeWifiDialog extends StatelessWidget {
+  const DeviceChangeWifiDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      backgroundColor: AppColors.surfaceContainer,
+      title: Text(
+        l10n.changeWifi,
+        style: GoogleFonts.inter(
+          fontWeight: AppFontWeight.semiBold,
+          color: AppColors.onSurface,
+        ),
+      ),
+      content: Text(
+        l10n.changeWifiDescription,
+        style: GoogleFonts.inter(
+          fontSize: AppTextSize.sm,
+          color: AppColors.onSurfaceVariant,
+          height: 1.5,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(
+            l10n.cancel,
+            style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(
+            l10n.changeWifiContinue,
+            style: GoogleFonts.inter(
+              color: AppColors.primaryContainer,
+              fontWeight: AppFontWeight.semiBold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ── Status card ───────────────────────────────────────────────────────────────
 
 // Backend returns last_seen as UTC ISO-8601; display in local tz DD/MM/YYYY HH:mm:ss.

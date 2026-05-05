@@ -191,5 +191,12 @@
   "openSettings": "Mở cài đặt",
   "strongSignal": "Tín hiệu mạnh",
   "moderateSignal": "Tín hiệu vừa",
-  "weakSignal": "Tín hiệu yếu"
+  "weakSignal": "Tín hiệu yếu",
+
+  "only24GhzSupported": "Thiết bị dùng WiFi 2.4GHz. Router 2 băng tần (cùng tên mạng) vẫn hoạt động bình thường. Nếu kết nối thất bại, hãy thử chọn mạng 2.4GHz riêng.",
+  "wifiConnectionFailed": "Kết nối WiFi thất bại",
+  "serverUnreachable": "Không thể kết nối máy chủ",
+  "changeWifi": "Đổi WiFi",
+  "changeWifiDescription": "Để đổi WiFi, giữ nút trên thiết bị Sleep Tech 5 giây cho đến khi đèn LED nhấp nháy xanh — thiết bị sẽ khởi động lại ở chế độ cài đặt.",
+  "changeWifiContinue": "Tiếp tục cài đặt"
 }

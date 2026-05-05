@@ -835,6 +835,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Weak signal'**
   String get weakSignal;
+
+  /// No description provided for @only24GhzSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This device uses 2.4GHz WiFi. Dual-band routers (same name for both bands) work fine. If connection fails, try a 2.4GHz-only network.'**
+  String get only24GhzSupported;
+
+  /// No description provided for @wifiConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi connection failed'**
+  String get wifiConnectionFailed;
+
+  /// No description provided for @serverUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Server unreachable'**
+  String get serverUnreachable;
+
+  /// No description provided for @changeWifi.
+  ///
+  /// In en, this message translates to:
+  /// **'Change WiFi'**
+  String get changeWifi;
+
+  /// No description provided for @changeWifiDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'To change WiFi, hold the button on your Sleep Tech device for 5 seconds until the LED blinks blue — it will restart in setup mode.'**
+  String get changeWifiDescription;
+
+  /// No description provided for @changeWifiContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue to setup'**
+  String get changeWifiContinue;
 }
 
 class _AppLocalizationsDelegate
