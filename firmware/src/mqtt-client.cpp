@@ -3,10 +3,13 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 
-// ESP-IDF MQTT client (built into arduino-esp32 3.x). Supports tcp / mqtts / ws / wss
+// ESP-IDF MQTT client (built into arduino-esp32 2.x/3.x). Supports tcp / mqtts / ws / wss
 // out of the box, with auto-reconnect, last-will, and TLS via the bundled CA store.
 #include "mqtt_client.h"
 #include "esp_crt_bundle.h"
+
+// arduino-esp32 2.x wraps esp_crt_bundle_attach under this name.
+extern "C" esp_err_t arduino_esp_crt_bundle_attach(void* conf);
 
 // --- Module-level state ---
 //
@@ -137,27 +140,29 @@ void mqtt_setup(const char* device_id,
         s_connected = false;
     }
 
+    // ESP-IDF 4.4.x flat struct (arduino-esp32 2.x).
+    // ESP-IDF 5.x renamed these to nested broker/credentials/session/network.
     esp_mqtt_client_config_t cfg = {};
-    cfg.broker.address.uri = s_uri.c_str();
+    cfg.uri = s_uri.c_str();
     // Mozilla CA bundle — verifies Cloudflare-issued certs for wss://*.sleeptech.me
     // out of the box. No-op for plain `mqtt://` URIs.
-    cfg.broker.verification.crt_bundle_attach = esp_crt_bundle_attach;
+    cfg.crt_bundle_attach = arduino_esp_crt_bundle_attach;
 
-    cfg.credentials.client_id = s_device_id.c_str();
+    cfg.client_id = s_device_id.c_str();
     if (s_user.length() > 0) {
-        cfg.credentials.username = s_user.c_str();
-        cfg.credentials.authentication.password = s_pass.c_str();
+        cfg.username = s_user.c_str();
+        cfg.password = s_pass.c_str();
     }
 
-    cfg.session.keepalive = 60;
-    cfg.session.last_will.topic = s_topic_status.c_str();
-    cfg.session.last_will.msg = LWT_OFFLINE;
-    cfg.session.last_will.msg_len = (int)strlen(LWT_OFFLINE);
-    cfg.session.last_will.qos = 0;
-    cfg.session.last_will.retain = 1;
+    cfg.keepalive = 60;
+    cfg.lwt_topic = s_topic_status.c_str();
+    cfg.lwt_msg   = LWT_OFFLINE;
+    cfg.lwt_msg_len = (int)strlen(LWT_OFFLINE);
+    cfg.lwt_qos    = 0;
+    cfg.lwt_retain = 1;
 
-    cfg.network.timeout_ms = 5000;
-    cfg.network.reconnect_timeout_ms = 5000;
+    cfg.network_timeout_ms     = 5000;
+    cfg.reconnect_timeout_ms   = 5000;
 
     s_client = esp_mqtt_client_init(&cfg);
     if (!s_client) {

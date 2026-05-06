@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "552649412097",
+    "project_id": "sleeptechdev",
+    "storage_bucket": "sleeptechdev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:552649412097:android:3260299625c040801fba00",
+        "android_client_info": {
+          "package_name": "me.sleeptech.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBPx4dcc6aZvJxB8IPpVc1x7PC8mb78cZs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
