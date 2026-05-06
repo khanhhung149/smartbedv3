@@ -31,27 +31,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushEnabled = true;
   bool _quietHours = false;
   int _themeIndex = 2; // 0=System, 1=Light, 2=Dark (default Dark per spec)
-  String _serverUrl = '';
   bool _loggingOut = false;
   String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
-    _loadPersistedSettings();
     _loadAppVersion();
   }
 
   Future<void> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     if (mounted) setState(() => _appVersion = 'v${info.version}');
-  }
-
-  Future<void> _loadPersistedSettings() async {
-    // Read the flavor-injected API URL from the provider.
-    // In-memory only for this POC; persistence deferred to a future task.
-    final env = ref.read(appEnvProvider);
-    setState(() => _serverUrl = env.apiBaseUrl);
   }
 
   Future<void> _launchUrl(String url) async {
@@ -142,16 +133,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ]),
             const SizedBox(height: 32),
 
-            // Section 4: Device Connection
-            _SectionLabel(label: l10n.deviceConnection),
-            _GroupCard(children: [
-              _ServerUrlRow(
-                url: _serverUrl,
-                onEdit: () => _editServerUrl(context),
-              ),
-            ]),
-            const SizedBox(height: 32),
-
             // Section 5: About
             _SectionLabel(label: l10n.about),
             _GroupCard(children: [
@@ -210,31 +191,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         onSelect: (locale) => ref.read(localeProvider.notifier).setLocale(locale),
       ),
     );
-  }
-
-  Future<void> _editServerUrl(BuildContext context) async {
-    final controller = TextEditingController(text: _serverUrl);
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = AppLocalizations.of(context)!;
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (_) => _ServerUrlDialog(controller: controller),
-      );
-      if (result == null || result.isEmpty || !mounted) return;
-      // Validate URL format
-      final uri = Uri.tryParse(result);
-      if (uri == null || !uri.hasScheme) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.invalidUrlFormat)),
-        );
-        return;
-      }
-      // NOTE: in-memory only in this POC; persistence + Dio rebuild deferred.
-      setState(() => _serverUrl = result);
-    } finally {
-      controller.dispose();
-    }
   }
 
 }
@@ -507,6 +463,7 @@ class _StitchSwitch extends StatelessWidget {
       );
 }
 
+// ignore: unused_element — kept for future re-enablement if needed
 class _ServerUrlRow extends StatelessWidget {
   const _ServerUrlRow({required this.url, required this.onEdit});
   final String url;
@@ -682,6 +639,7 @@ class _Avatar extends StatelessWidget {
 
 // ── Server URL edit dialog ────────────────────────────────────────────────────
 
+// ignore: unused_element — kept for future re-enablement if needed
 class _ServerUrlDialog extends StatelessWidget {
   const _ServerUrlDialog({required this.controller});
   final TextEditingController controller;
