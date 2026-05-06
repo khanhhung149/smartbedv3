@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/providers/app_env_provider.dart';
@@ -31,11 +33,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _themeIndex = 2; // 0=System, 1=Light, 2=Dark (default Dark per spec)
   String _serverUrl = '';
   bool _loggingOut = false;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadPersistedSettings();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _appVersion = 'v${info.version}');
   }
 
   Future<void> _loadPersistedSettings() async {
@@ -43,6 +52,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // In-memory only for this POC; persistence deferred to a future task.
     final env = ref.read(appEnvProvider);
     setState(() => _serverUrl = env.apiBaseUrl);
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể mở: $url')),
+        );
+      }
+    }
   }
 
   Future<void> _logout() async {
@@ -135,16 +155,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             // Section 5: About
             _SectionLabel(label: l10n.about),
             _GroupCard(children: [
-              _LabelValueRow(label: l10n.appVersion, value: 'v1.0.0'),
+              _LabelValueRow(label: l10n.appVersion, value: _appVersion),
               _DividerRow(),
-              _TappableRow(label: l10n.termsOfService, onTap: () {}),
+              _TappableRow(
+                label: l10n.termsOfService,
+                onTap: () => _launchUrl('https://sleeptech.me/en/terms'),
+              ),
               _DividerRow(),
-              _TappableRow(label: l10n.privacyPolicy, onTap: () {}),
+              _TappableRow(
+                label: l10n.privacyPolicy,
+                onTap: () => _launchUrl('https://sleeptech.me/en/privacy'),
+              ),
               _DividerRow(),
               _TappableRow(
                 label: l10n.supportEmail,
                 trailingIcon: Symbols.mail,
-                onTap: () {},
+                onTap: () => _launchUrl('mailto:hi@sleeptech.me'),
               ),
             ]),
             const SizedBox(height: 32),
