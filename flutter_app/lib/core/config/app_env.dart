@@ -42,7 +42,10 @@ final class ProdEnv extends AppEnv {
   const ProdEnv()
       : super(
           apiBaseUrl: 'https://api.sleeptech.me',
-          wsBaseUrl: 'wss://mqtt.sleeptech.me',
+          // FastAPI WebSocket (`/ws/{deviceId}`) — same host as the REST API.
+          // NOT the MQTT broker WSS (`wss://mqtt.sleeptech.me/mqtt`) which is
+          // only for firmware → mosquitto. Confusing them yields HTTP 502.
+          wsBaseUrl: 'wss://api.sleeptech.me',
           isDev: false,
         );
 }
