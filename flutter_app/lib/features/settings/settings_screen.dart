@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/providers/app_env_provider.dart';
@@ -28,21 +30,29 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushEnabled = true;
   bool _quietHours = false;
-  int _themeIndex = 2; // 0=System, 1=Light, 2=Dark (default Dark per spec)
-  String _serverUrl = '';
   bool _loggingOut = false;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
-    _loadPersistedSettings();
+    _loadAppVersion();
   }
 
-  Future<void> _loadPersistedSettings() async {
-    // Read the flavor-injected API URL from the provider.
-    // In-memory only for this POC; persistence deferred to a future task.
-    final env = ref.read(appEnvProvider);
-    setState(() => _serverUrl = env.apiBaseUrl);
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _appVersion = 'v${info.version}');
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể mở: $url')),
+        );
+      }
+    }
   }
 
   Future<void> _logout() async {
@@ -107,14 +117,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             // Section 3: Appearance
             _SectionLabel(label: l10n.appearance),
             _GroupCard(children: [
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: _ThemeSegment(
-                  selected: _themeIndex,
-                  onChanged: (i) => setState(() => _themeIndex = i),
-                ),
-              ),
-              _DividerRow(),
               _TappableRow(
                 label: l10n.language,
                 onTap: () => _showLanguagePicker(context),
@@ -122,29 +124,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ]),
             const SizedBox(height: 32),
 
-            // Section 4: Device Connection
-            _SectionLabel(label: l10n.deviceConnection),
-            _GroupCard(children: [
-              _ServerUrlRow(
-                url: _serverUrl,
-                onEdit: () => _editServerUrl(context),
-              ),
-            ]),
-            const SizedBox(height: 32),
-
             // Section 5: About
             _SectionLabel(label: l10n.about),
             _GroupCard(children: [
-              _LabelValueRow(label: l10n.appVersion, value: 'v1.0.0'),
+              _LabelValueRow(label: l10n.appVersion, value: _appVersion),
               _DividerRow(),
-              _TappableRow(label: l10n.termsOfService, onTap: () {}),
+              _TappableRow(
+                label: l10n.termsOfService,
+                onTap: () => _launchUrl('https://sleeptech.me/en/terms'),
+              ),
               _DividerRow(),
-              _TappableRow(label: l10n.privacyPolicy, onTap: () {}),
+              _TappableRow(
+                label: l10n.privacyPolicy,
+                onTap: () => _launchUrl('https://sleeptech.me/en/privacy'),
+              ),
               _DividerRow(),
               _TappableRow(
                 label: l10n.supportEmail,
                 trailingIcon: Symbols.mail,
-                onTap: () {},
+                onTap: () => _launchUrl('mailto:hi@sleeptech.me'),
               ),
             ]),
             const SizedBox(height: 32),
@@ -184,31 +182,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         onSelect: (locale) => ref.read(localeProvider.notifier).setLocale(locale),
       ),
     );
-  }
-
-  Future<void> _editServerUrl(BuildContext context) async {
-    final controller = TextEditingController(text: _serverUrl);
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = AppLocalizations.of(context)!;
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (_) => _ServerUrlDialog(controller: controller),
-      );
-      if (result == null || result.isEmpty || !mounted) return;
-      // Validate URL format
-      final uri = Uri.tryParse(result);
-      if (uri == null || !uri.hasScheme) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.invalidUrlFormat)),
-        );
-        return;
-      }
-      // NOTE: in-memory only in this POC; persistence + Dio rebuild deferred.
-      setState(() => _serverUrl = result);
-    } finally {
-      controller.dispose();
-    }
   }
 
 }
@@ -481,6 +454,7 @@ class _StitchSwitch extends StatelessWidget {
       );
 }
 
+// ignore: unused_element — kept for future re-enablement if needed
 class _ServerUrlRow extends StatelessWidget {
   const _ServerUrlRow({required this.url, required this.onEdit});
   final String url;
@@ -532,64 +506,6 @@ class _ServerUrlRow extends StatelessWidget {
           ),
         ),
       );
-}
-
-// ── Theme segment ─────────────────────────────────────────────────────────────
-
-class _ThemeSegment extends StatelessWidget {
-  const _ThemeSegment({required this.selected, required this.onChanged});
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  static const _labels = ['System', 'Light', 'Dark'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHighest,
-        borderRadius: AppRadius.fullBr,
-        border: Border.all(
-            color: AppColors.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: List.generate(_labels.length, (i) {
-          final isActive = i == selected;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? AppColors.surfaceContainer
-                      : Colors.transparent,
-                  borderRadius: AppRadius.fullBr,
-                  border: isActive
-                      ? Border.all(
-                          color: AppColors.outlineVariant.withValues(alpha: 0.3))
-                      : null,
-                ),
-                child: Text(
-                  _labels[i],
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: AppTextSize.sm,
-                    fontWeight: AppFontWeight.medium,
-                    color: isActive
-                        ? AppColors.primaryFixed
-                        : AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
 }
 
 // ── Logout card ───────────────────────────────────────────────────────────────
@@ -656,6 +572,7 @@ class _Avatar extends StatelessWidget {
 
 // ── Server URL edit dialog ────────────────────────────────────────────────────
 
+// ignore: unused_element — kept for future re-enablement if needed
 class _ServerUrlDialog extends StatelessWidget {
   const _ServerUrlDialog({required this.controller});
   final TextEditingController controller;
