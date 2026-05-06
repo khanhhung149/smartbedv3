@@ -40,8 +40,16 @@ class FcmService {
       }
 
       final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
       _initialized = true;
+      dev.log(
+        '[FCM] Permission status: ${settings.authorizationStatus.name}',
+        name: 'FcmService',
+      );
 
       // When FCM rotates the token: save locally, reset synced flag, re-upload.
       messaging.onTokenRefresh.listen((token) async {
@@ -79,6 +87,15 @@ class FcmService {
     }
 
     try {
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      debugPrint(
+        '[FCM] Notification permission: ${settings.authorizationStatus.name}',
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        debugPrint('[FCM] Notification permission denied — skipping token sync');
+        return;
+      }
+
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         final apns = await FirebaseMessaging.instance.getAPNSToken();
         if (apns == null) {
@@ -91,7 +108,11 @@ class FcmService {
       final token = await FirebaseMessaging.instance.getToken();
       debugPrint('[FCM] getToken() result: ${token == null ? "NULL" : token.isEmpty ? "EMPTY" : "OK (${token.substring(0, 20)}...)"}');
 
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        await _storage.write(key: _keyFcmSynced, value: 'false');
+        debugPrint('[FCM] No token available yet — backend upload skipped');
+        return;
+      }
 
       // Only upload if token changed
       final cached = await _storage.read(key: _keyFcmToken);
@@ -112,8 +133,15 @@ class FcmService {
   static Future<void> clearToken(AppEnv env) async {
     if (!_initialized) return;
     try {
+      final cached = await _storage.read(key: _keyFcmToken);
+      if (cached == null || cached.isEmpty) {
+        debugPrint('[FCM] No cached token to clear — skipping backend reset');
+        return;
+      }
+
       final client = ApiClient(baseUrl: env.apiBaseUrl);
       await client.dio.patch('/auth/fcm-token', data: {'fcm_token': ''});
+      await _storage.delete(key: _keyFcmToken);
     } on DioException catch (_) {
       // Best-effort on logout — ignore failures.
     } finally {
