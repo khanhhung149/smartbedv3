@@ -3,6 +3,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -44,6 +46,23 @@ class _BleProvisionWifiScreenState
     _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    _prefillCurrentSsid();
+  }
+
+  // Auto-fill the SSID the phone is currently connected to.
+  // Requires location permission on Android (system requirement to read WiFi info).
+  Future<void> _prefillCurrentSsid() async {
+    try {
+      final status = await Permission.locationWhenInUse.request();
+      if (!status.isGranted) return;
+      final ssid = await NetworkInfo().getWifiName();
+      if (ssid == null || ssid.isEmpty) return;
+      // Remove surrounding quotes that some platforms add (e.g. "\"MyWifi\"")
+      final clean = ssid.replaceAll('"', '');
+      if (mounted) setState(() => _ssidController.text = clean);
+    } catch (_) {
+      // Non-fatal — user can always type manually
+    }
   }
 
   @override
