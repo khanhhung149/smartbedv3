@@ -14,10 +14,24 @@ static SleepPadParser* g_mock_parser = nullptr;
 static void mock_feed_parser(uint8_t b) { g_mock_parser->feed(b); }
 #endif
 
-// Device ID — hardcoded at flash time (10 ASCII chars from sleep pad protocol).
+// Device ID — derived per-chip at boot from the ESP32 eFuse MAC.
+// Format: "CNU" + 7 hex chars uppercase (10 ASCII total) so the Legact V2 UART
+// protocol's fixed-width device_id field still fits. Sleep pad hardware does
+// not validate this field (passthrough tag — see protocol PDF §1 + §2.5), so
+// any unique 10-char ASCII works.
+//
 // MQTT client_id MUST equal this value — Mosquitto ACL enforces
 // pattern write sleeppad/%c/# so a mismatch causes silent publish drops.
-static const char* DEVICE_ID = "CNU2000001";
+static char DEVICE_ID[11];
+
+static void derive_device_id() {
+    uint64_t mac = ESP.getEfuseMac();
+    // Lower 28 bits of MAC → 7 hex chars. 256M-id space; birthday-50%
+    // at ~16K chips. Sufficient for sleep-pad consumer scale; if product
+    // ever exceeds ~100K units, switch to base32 of full MAC hash.
+    snprintf(DEVICE_ID, sizeof(DEVICE_ID), "CNU%07llX",
+             (unsigned long long)(mac & 0xFFFFFFFULL));
+}
 
 static SleepPadParser parser;
 static unsigned long  last_heartbeat_ms = 0;
@@ -26,15 +40,15 @@ static unsigned long  last_heartbeat_ms = 0;
 
 // Format: [0x7D][type][len_lo][len_hi][ID 10B][content...][0x0D]
 static void send_command(uint8_t frame_type, const uint8_t* content, size_t len) {
-    Serial2.write(0x7D);
-    Serial2.write(frame_type);
+    SLEEPPAD_UART.write(0x7D);
+    SLEEPPAD_UART.write(frame_type);
     uint16_t total = 1 + 1 + 2 + 10 + len + 1;
-    Serial2.write((uint8_t)(total & 0xFF));
-    Serial2.write((uint8_t)((total >> 8) & 0xFF));
-    Serial2.write((const uint8_t*)DEVICE_ID, 10);
-    if (len > 0) Serial2.write(content, len);
-    Serial2.write(0x0D);
-    Serial2.flush();
+    SLEEPPAD_UART.write((uint8_t)(total & 0xFF));
+    SLEEPPAD_UART.write((uint8_t)((total >> 8) & 0xFF));
+    SLEEPPAD_UART.write((const uint8_t*)DEVICE_ID, 10);
+    if (len > 0) SLEEPPAD_UART.write(content, len);
+    SLEEPPAD_UART.write(0x0D);
+    SLEEPPAD_UART.flush();
 }
 
 static void start_monitor_mode() {
@@ -68,25 +82,68 @@ static void on_idle() {
     start_monitor_mode();
 }
 
-// --- WiFi connect (blocking, 30 s timeout) ---
+// --- SNTP time sync ---
+//
+// TLS cert validity check (mbedtls) compares notBefore/notAfter against the
+// system clock. ESP32 boots with epoch 1970, so the very first TLS handshake
+// against any cert valid 2024+ rejects with PK verify error 0x4290 ("Certificate
+// matched but signature verification failed" — the actual reason is the
+// not-yet-valid date). We must SNTP-sync before the first MQTT connect.
+static bool sync_time(unsigned long timeout_ms = 10000) {
+    Serial.println("[Time] SNTP sync...");
+    configTime(0, 0, "pool.ntp.org", "time.cloudflare.com", "time.google.com");
+    unsigned long start = millis();
+    time_t now = 0;
+    while (millis() - start < timeout_ms) {
+        now = time(nullptr);
+        if (now > 1700000000) {   // > 2023-11-14 → real time set
+            Serial.printf("[Time] Synced: %ld\n", (long)now);
+            return true;
+        }
+        delay(200);
+    }
+    Serial.printf("[Time] Timeout (current=%ld) — TLS may reject certs\n", (long)now);
+    return false;
+}
 
-static bool connect_wifi(const String& ssid, const String& pass) {
-    Serial.printf("[WiFi] Connecting to \"%s\"...\n", ssid.c_str());
+// --- WiFi connect (blocking, ≤ 2 attempts × 20 s) ---
+//
+// One pass of WiFi.begin() routinely fails with WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT
+// (15) on ESP32-C3 even with correct credentials — race between SAE/WPA2 timing
+// and the AP. Retrying once after a clean slate (`disconnect(true, true)` flushes
+// any cached SSID/PMK from the driver) absorbs that transient without bouncing
+// the user back to the BLE app to retype the same password.
+
+static bool wifi_connect_once(const String& ssid, const String& pass,
+                              unsigned long timeout_ms) {
+    WiFi.disconnect(true, true);   // erase NVS-cached creds + flush driver
+    delay(200);
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), pass.c_str());
 
-    const unsigned long timeout_ms = 30000;
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - start >= timeout_ms) {
-            Serial.println("[WiFi] Timeout");
-            return false;
-        }
+        if (millis() - start >= timeout_ms) return false;
         delay(500);
         Serial.print('.');
     }
-    Serial.printf("\n[WiFi] Connected — IP: %s\n", WiFi.localIP().toString().c_str());
     return true;
+}
+
+static bool connect_wifi(const String& ssid, const String& pass) {
+    Serial.printf("[WiFi] Connecting to \"%s\"...\n", ssid.c_str());
+    if (wifi_connect_once(ssid, pass, /*timeout_ms=*/20000)) {
+        Serial.printf("\n[WiFi] Connected — IP: %s\n", WiFi.localIP().toString().c_str());
+        return true;
+    }
+    Serial.println("\n[WiFi] First attempt failed — retrying once after reset");
+    if (wifi_connect_once(ssid, pass, /*timeout_ms=*/20000)) {
+        Serial.printf("\n[WiFi] Connected on retry — IP: %s\n",
+                      WiFi.localIP().toString().c_str());
+        return true;
+    }
+    Serial.println("\n[WiFi] Both attempts failed — giving up");
+    return false;
 }
 
 // --- BLE provisioning flow (blocks until provisioning complete) ---
@@ -107,11 +164,12 @@ static void run_ble_provisioning() {
 void setup() {
     Serial.begin(115200);
     delay(500);
+    derive_device_id();   // populate DEVICE_ID before any subsystem reads it
     Serial.printf("\n[Boot] Sleep Pad ESP32 — device_id=%s\n", DEVICE_ID);
 
     // UART2 for sleep pad hardware
-    Serial2.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
-    Serial.printf("[UART] Serial2 RX=%d TX=%d @ %d baud\n",
+    SLEEPPAD_UART.begin(UART_BAUD, SERIAL_8N1, UART_RX_PIN, UART_TX_PIN);
+    Serial.printf("[UART] SLEEPPAD_UART RX=%d TX=%d @ %d baud\n",
                   UART_RX_PIN, UART_TX_PIN, UART_BAUD);
 
     parser.onSecData = on_sec_data;
@@ -159,6 +217,26 @@ void setup() {
             }
             ble_set_status("wifi_connected");
 
+            // SNTP time sync — REQUIRED before TLS or cert validity check fails
+            // with PK verify error 0x4290 (cert "not yet valid" because RTC=1970).
+            sync_time();
+
+            // Prime the DNS cache + ARP path before MQTT connect. Without this,
+            // the very first TLS attempt over a freshly-up WiFi link routinely
+            // fails with "Host is unreachable" while LwIP is still resolving
+            // the broker hostname / building the route entry, costing the user
+            // a full retry cycle through the BLE app.
+            {
+                IPAddress _resolved;
+                if (WiFi.hostByName(cfg.mqtt_host.c_str(), _resolved)) {
+                    Serial.printf("[Net] Resolved %s -> %s\n",
+                                  cfg.mqtt_host.c_str(), _resolved.toString().c_str());
+                } else {
+                    Serial.printf("[Net] DNS warmup failed for %s (continuing)\n",
+                                  cfg.mqtt_host.c_str());
+                }
+            }
+
             // Step 2: MQTT
             ble_set_status("mqtt_connecting");
             mqtt_setup(DEVICE_ID,
@@ -193,6 +271,7 @@ void setup() {
             delay(1000);
             ESP.restart();
         }
+        sync_time();   // TLS cert validity needs real time (see helper)
         mqtt_setup(DEVICE_ID,
                    cfg.mqtt_host.c_str(),
                    cfg.mqtt_scheme.c_str(),
@@ -205,14 +284,14 @@ void setup() {
     }
 
     // Enter sleep pad monitor mode so it streams data.
-    // In mock build, Serial2 is unused so this is a no-op on the wire, but
+    // In mock build, SLEEPPAD_UART is unused so this is a no-op on the wire, but
     // leaving it in keeps the boot sequence identical to production.
     start_monitor_mode();
 
 #ifdef MOCK_SLEEPPAD
     g_mock_parser = &parser;
     mock_init(DEVICE_ID);
-    Serial.println("[Mock] SLEEP PAD MOCK ACTIVE — synthesizing telemetry, Serial2 bypassed");
+    Serial.println("[Mock] SLEEP PAD MOCK ACTIVE — synthesizing telemetry, SLEEPPAD_UART bypassed");
 #endif
 
     Serial.println("[Boot] Ready");
@@ -221,8 +300,8 @@ void setup() {
 void loop() {
 #ifndef MOCK_SLEEPPAD
     // Drain UART bytes into parser (production path)
-    while (Serial2.available()) {
-        parser.feed(static_cast<uint8_t>(Serial2.read()));
+    while (SLEEPPAD_UART.available()) {
+        parser.feed(static_cast<uint8_t>(SLEEPPAD_UART.read()));
     }
 #else
     // Mock path — generate synthetic frame bytes and feed the parser

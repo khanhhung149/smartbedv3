@@ -36,7 +36,15 @@ static const char* LWT_OFFLINE = "offline";
 // Bound how long mqtt_connect() waits for the driver task to land
 // MQTT_EVENT_CONNECTED before returning false. The driver keeps reconnecting
 // in the background regardless, so this only gates the boot-time UX.
-static constexpr unsigned long CONNECT_WAIT_MS = 10000;
+//
+// First connection over WSS = DNS resolve + TLS handshake + MQTT CONNECT.
+// Over a slow phone hotspot or first-boot network the route/ARP table is cold
+// and the very first TLS connect attempt often surfaces "Host is unreachable"
+// before LwIP has established a working path; the driver then waits its
+// reconnect_timeout (5 s) before retrying. Two such cycles + handshake easily
+// exceeds 20 s. 30 s leaves headroom so BLE provisioning doesn't surface a
+// false "mqtt_failed" while the driver is still working in the background.
+static constexpr unsigned long CONNECT_WAIT_MS = 30000;
 
 // --- Helpers ---
 
