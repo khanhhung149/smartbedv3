@@ -10,10 +10,12 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from alerts.engine import run_alert_engine
 from alerts.router import router as alerts_router
 from auth.router import router as auth_router
+from contact.router import router as contact_router
 from data.router import router as data_router
 from database import init_pool
 from devices.router import router as devices_router
@@ -75,11 +77,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://sleeptech.me",
+        "https://www.sleeptech.me",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,
+)
+
 app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(data_router)
 app.include_router(alerts_router)
 app.include_router(sharing_router)
+app.include_router(contact_router)
 
 
 @app.get("/health")

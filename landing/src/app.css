@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: theme('fontFamily.sans');
+    @apply bg-cloud text-ink dark:bg-ink dark:text-cloud transition-colors;
+  }
+  :lang(ja) {
+    font-family: theme('fontFamily.jp');
+  }
+  h1, h2, h3 {
+    font-family: theme('fontFamily.display');
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto max-w-6xl px-6 lg:px-8;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/20 transition hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full border border-ink/15 px-6 py-3 text-sm font-semibold text-ink transition hover:bg-ink/5 dark:border-cloud/15 dark:text-cloud dark:hover:bg-cloud/5;
+  }
+  .kicker {
+    @apply mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary dark:text-primary-soft;
+  }
+  .section {
+    @apply py-24 lg:py-32;
+  }
+  .surface {
+    @apply bg-white dark:bg-ink/40;
+  }
+  .surface-alt {
+    @apply bg-cloud dark:bg-ink;
+  }
+  .surface-card {
+    @apply bg-white border-ink/10 dark:bg-ink/40 dark:border-white/10;
+  }
+}

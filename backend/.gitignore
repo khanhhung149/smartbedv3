@@ -3,6 +3,8 @@
 .env.dev
 .env.prod
 .env.*.local
+# Templates ARE committed — share schema with team
+!.env*.example
 
 # Secrets — mounted into containers
 secrets/

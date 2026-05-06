@@ -65,6 +65,20 @@ services:
       MQTT_DEVICE_USERNAME: ${MQTT_DEVICE_USERNAME:-}
       MQTT_DEVICE_PASSWORD: ${MQTT_DEVICE_PASSWORD:-}
       FCM_CREDENTIALS_PATH: /run/secrets/fcm.json
+      # SMTP via FastAPI-Mail
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-hi@sleeptech.me}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-SleepTech}
+      MAIL_SERVER: ${MAIL_SERVER:-}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_SSL_TLS: ${MAIL_SSL_TLS:-True}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-False}
+      USE_CREDENTIALS: ${USE_CREDENTIALS:-True}
+      VALIDATE_CERTS: ${VALIDATE_CERTS:-True}
+      # Cloudflare Turnstile + contact form
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      CONTACT_TO_EMAIL: ${CONTACT_TO_EMAIL:-hi@sleeptech.me}
     volumes:
       - ${FCM_CREDENTIALS_HOST_PATH:-./secrets/fcm.json}:/run/secrets/fcm.json:ro
     healthcheck:
@@ -85,3 +99,12 @@ volumes:
   postgres_data:
   redis_data:
   mosquitto_data:
+
+# Host ens19 MTU is 1450; default docker bridge defaults to 1500 which causes
+# TLS handshake stalls on outbound SMTP (and similar). Pin bridge MTU to 1450
+# so containers can reach external services like ocean.mxroute.com:465.
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1450"

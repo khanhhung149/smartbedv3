@@ -2,18 +2,18 @@
 #include <Arduino.h>
 #include "uart-parser.h"
 
-// MQTT client wrapper around PubSubClient.
-// Handles: connect (TCP only for POC), LWT, online status publish,
-// JSON payload publish for sec/min frames, and auto-reconnect in loop().
+// MQTT client wrapper around ESP-IDF esp_mqtt_client (built into arduino-esp32 3.x).
+// Handles: connect over TCP / WS / WSS, LWT, online status publish,
+// JSON payload publish for sec/min frames, and auto-reconnect (driver task).
 //
-// WS/WSS deferred: PubSubClient does not support WebSocket natively.
-// POC supports tcp scheme only; ws/wss logs a warning and sets mqtt_failed.
+// WSS uses the bundled Mozilla CA store via esp_crt_bundle_attach, which
+// validates Cloudflare-issued certs for *.sleeptech.me out of the box.
 
 // Initialise client with connection parameters. Does NOT connect yet.
 // device_id : e.g. "CNU2000001" — used as MQTT client_id (required for ACL)
 // host      : hostname or IP, optionally with port suffix "host:port"
-// scheme    : "tcp" | "ws" | "wss"  (ws/wss → graceful failure with log)
-// user/pass : empty string = anonymous connect
+// scheme    : "tcp" | "ws" | "wss" | "mqtts"
+// user/pass : empty string = anonymous connect (dev broker)
 void mqtt_setup(const char* device_id,
                 const char* host,
                 const char* scheme,

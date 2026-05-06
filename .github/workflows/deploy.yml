@@ -1,0 +1,133 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force-landing:
+        description: 'Force deploy landing'
+        type: boolean
+        default: false
+      force-backend:
+        description: 'Force deploy backend'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: [self-hosted, sleeptech-host]
+    outputs:
+      landing: ${{ steps.compute.outputs.landing }}
+      backend: ${{ steps.compute.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            landing:
+              - 'landing/**'
+            backend:
+              - 'backend/**'
+
+      - id: compute
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "landing=${{ inputs.force-landing }}" >> $GITHUB_OUTPUT
+            echo "backend=${{ inputs.force-backend }}" >> $GITHUB_OUTPUT
+          else
+            echo "landing=${{ steps.changes.outputs.landing }}" >> $GITHUB_OUTPUT
+            echo "backend=${{ steps.changes.outputs.backend }}" >> $GITHUB_OUTPUT
+          fi
+          echo "landing=${{ steps.changes.outputs.landing }} backend=${{ steps.changes.outputs.backend }}"
+
+  deploy-landing:
+    needs: detect
+    if: needs.detect.outputs.landing == 'true'
+    runs-on: [self-hosted, sleeptech-host]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install deps
+        run: cd landing && pnpm install --frozen-lockfile
+
+      - name: Produce static build
+        run: cd landing && pnpm build
+
+      - name: Sync to nginx volume
+        run: rsync -avz --delete landing/build/ /opt/sleeptech/landing/build/
+
+      - name: Smoke test live
+        run: |
+          sleep 2
+          for path in /en /en/news /en/contact; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://sleeptech.me${path}")
+            echo "$path -> $code"
+            test "$code" = "200" || exit 1
+          done
+
+  deploy-backend:
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: [self-hosted, sleeptech-host]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync backend source to /opt/sleeptech/backend
+        run: |
+          rsync -avz --delete \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='*.pyo' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='secrets/' \
+            --exclude='mosquitto/passwords' \
+            --exclude='docker-compose.dev.yml' \
+            --exclude='docker-compose.override.yml' \
+            --exclude='mosquitto/mosquitto-dev.conf' \
+            --exclude='mosquitto/passwords.example' \
+            --exclude='README.md' \
+            --exclude='.gitignore' \
+            backend/ /opt/sleeptech/backend/
+
+      - name: Reload mosquitto config (picks up ACL/listener changes)
+        run: docker exec sleeppad-mosquitto kill -HUP 1 || true
+
+      - name: Rebuild fastapi container
+        run: |
+          cd /opt/sleeptech/backend
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d --build fastapi
+
+      - name: Wait for healthy
+        run: |
+          for i in $(seq 1 12); do
+            sleep 5
+            status=$(docker inspect sleeppad-fastapi --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+            echo "attempt $i: $status"
+            test "$status" = "healthy" && exit 0
+          done
+          docker logs sleeppad-fastapi --tail 30
+          exit 1
+
+      - name: Smoke test API
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://api.sleeptech.me/health)
+          echo "/health -> $code"
+          test "$code" = "200" || exit 1

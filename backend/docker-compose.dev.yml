@@ -1,15 +1,20 @@
 # Sleep Pad Platform — Development Override
 # Local LAN access: direct port mappings, anonymous MQTT, hot-reload FastAPI.
 # No cloudflared tunnel — ESP32 and Flutter app access via LAN IP (e.g. 192.168.1.100).
+#
+# Per-machine values come from `.env.dev` (gitignored). Set these if defaults collide:
+#   POSTGRES_HOST_PORT, REDIS_HOST_PORT, FASTAPI_HOST_PORT — host port overrides
+#   MQTT_DOMAIN — full broker URL handed to ESP32 via BLE provisioning
+#                 (e.g. tcp://192.168.1.11:1883 — your Mac's LAN IP, NOT mosquitto hostname)
 
 services:
   postgres:
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
 
   redis:
     ports:
-      - "6380:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
 
   mosquitto:
     volumes:
@@ -20,12 +25,7 @@ services:
 
   fastapi:
     ports:
-      - "8000:8000"
-    environment:
-      # Dev uses TCP 1883 directly (ws/wss only needed for cloudflared prod).
-      # Host = Mac LAN IP so ESP32 can reach the broker. Firmware's PubSubClient
-      # supports only "tcp" scheme — ws/wss are deferred to prod via a bridge.
-      MQTT_DOMAIN: "tcp://192.168.1.15:1883"
+      - "${FASTAPI_HOST_PORT:-8000}:8000"
     volumes:
       - ./app:/app                              # hot-reload source code
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
