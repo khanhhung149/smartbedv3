@@ -8,8 +8,15 @@
 #include "mqtt_client.h"
 #include "esp_crt_bundle.h"
 
-// arduino-esp32 2.x wraps esp_crt_bundle_attach under this name.
+// arduino-esp32 2.x exposes a wrapper named `arduino_esp_crt_bundle_attach`;
+// arduino-esp32 3.x uses the upstream `esp_crt_bundle_attach` directly. Pick
+// based on ESP-IDF major version so this source compiles on both.
+#if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
+  #define MQTT_CRT_BUNDLE_ATTACH esp_crt_bundle_attach
+#else
 extern "C" esp_err_t arduino_esp_crt_bundle_attach(void* conf);
+  #define MQTT_CRT_BUNDLE_ATTACH arduino_esp_crt_bundle_attach
+#endif
 
 // --- Module-level state ---
 //
@@ -148,29 +155,48 @@ void mqtt_setup(const char* device_id,
         s_connected = false;
     }
 
-    // ESP-IDF 4.4.x flat struct (arduino-esp32 2.x).
+    // ESP-IDF 4.4.x uses a flat config struct (arduino-esp32 2.x).
     // ESP-IDF 5.x renamed these to nested broker/credentials/session/network.
+    // Toolchain detection via ESP_IDF_VERSION_MAJOR keeps this source compiling
+    // on both arduino-esp32 2.x machines (anh thời's HN setup) and 3.x machines.
     esp_mqtt_client_config_t cfg = {};
+#if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
+    cfg.broker.address.uri = s_uri.c_str();
+    cfg.broker.verification.crt_bundle_attach = MQTT_CRT_BUNDLE_ATTACH;
+    cfg.credentials.client_id = s_device_id.c_str();
+    if (s_user.length() > 0) {
+        cfg.credentials.username = s_user.c_str();
+        cfg.credentials.authentication.password = s_pass.c_str();
+    }
+    cfg.session.keepalive = 60;
+    cfg.session.last_will.topic = s_topic_status.c_str();
+    cfg.session.last_will.msg = LWT_OFFLINE;
+    cfg.session.last_will.msg_len = (int)strlen(LWT_OFFLINE);
+    cfg.session.last_will.qos = 0;
+    cfg.session.last_will.retain = 1;
+    // 5 s was too short over flaky residential WiFi (HoangHanPro/HN) — TLS
+    // handshake to Cloudflare 443 routinely timed out (mbedtls 0x8006). 15 s
+    // gives slow networks a chance; 10 s reconnect gap avoids hammering the
+    // broker if WiFi is bouncing.
+    cfg.network.timeout_ms = 15000;
+    cfg.network.reconnect_timeout_ms = 10000;
+#else
     cfg.uri = s_uri.c_str();
-    // Mozilla CA bundle — verifies Cloudflare-issued certs for wss://*.sleeptech.me
-    // out of the box. No-op for plain `mqtt://` URIs.
-    cfg.crt_bundle_attach = arduino_esp_crt_bundle_attach;
-
+    cfg.crt_bundle_attach = MQTT_CRT_BUNDLE_ATTACH;
     cfg.client_id = s_device_id.c_str();
     if (s_user.length() > 0) {
         cfg.username = s_user.c_str();
         cfg.password = s_pass.c_str();
     }
-
     cfg.keepalive = 60;
     cfg.lwt_topic = s_topic_status.c_str();
-    cfg.lwt_msg   = LWT_OFFLINE;
+    cfg.lwt_msg = LWT_OFFLINE;
     cfg.lwt_msg_len = (int)strlen(LWT_OFFLINE);
-    cfg.lwt_qos    = 0;
+    cfg.lwt_qos = 0;
     cfg.lwt_retain = 1;
-
-    cfg.network_timeout_ms     = 5000;
-    cfg.reconnect_timeout_ms   = 5000;
+    cfg.network_timeout_ms = 15000;       // see ESP-IDF 5.x branch above
+    cfg.reconnect_timeout_ms = 10000;
+#endif
 
     s_client = esp_mqtt_client_init(&cfg);
     if (!s_client) {
