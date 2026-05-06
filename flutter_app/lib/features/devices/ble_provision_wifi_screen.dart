@@ -50,18 +50,20 @@ class _BleProvisionWifiScreenState
   }
 
   // Auto-fill the SSID the phone is currently connected to.
-  // Requires location permission on Android (system requirement to read WiFi info).
+  // Android requires ACCESS_FINE_LOCATION to read WiFi SSID (all API levels).
   Future<void> _prefillCurrentSsid() async {
+    final status = await Permission.locationWhenInUse.request();
+    if (!status.isGranted) return;
     try {
-      final status = await Permission.locationWhenInUse.request();
-      if (!status.isGranted) return;
       final ssid = await NetworkInfo().getWifiName();
       if (ssid == null || ssid.isEmpty) return;
       // Remove surrounding quotes that some platforms add (e.g. "\"MyWifi\"")
       final clean = ssid.replaceAll('"', '');
-      if (mounted) setState(() => _ssidController.text = clean);
+      if (mounted && _ssidController.text.isEmpty) {
+        setState(() => _ssidController.text = clean);
+      }
     } catch (_) {
-      // Non-fatal — user can always type manually
+      // Non-fatal — user can type manually
     }
   }
 
