@@ -70,6 +70,10 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
               ),
               const SizedBox(height: 32),
               DeviceDetailStatusCard(device: device),
+              const SizedBox(height: 16),
+              DeviceDetailChangeWifiCard(
+                onChangeWifi: () => _confirmChangeWifi(context),
+              ),
               const SizedBox(height: 32),
               DeviceDetailThresholdsCard(
                 thresholdsAsync: thresholdsAsync,
@@ -98,6 +102,17 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
         pairedAt: DateTime.now().toIso8601String(),
         online: false,
       );
+
+  Future<void> _confirmChangeWifi(BuildContext context) async {
+    final router = GoRouter.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const DeviceChangeWifiDialog(),
+    );
+    if (confirmed == true && mounted) {
+      router.push('/devices/add');
+    }
+  }
 
   Future<void> _showRenameSheet(BuildContext context, DeviceOut? device) async {
     if (device == null) return;

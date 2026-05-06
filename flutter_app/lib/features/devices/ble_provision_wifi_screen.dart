@@ -114,7 +114,10 @@ class _BleProvisionWifiScreenState
                         height: 1.6,
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
+                    // 2.4GHz warning banner
+                    _TwoFourGhzBanner(),
+                    const SizedBox(height: 24),
                     // SSID input
                     _GlassInput(
                       controller: _ssidController,
@@ -269,6 +272,39 @@ class _WifiHero extends StatelessWidget {
               Icons.wifi,
               color: AppColors.primary,
               size: 32,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TwoFourGhzBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFB300).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Color(0xFFFFB300), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              AppLocalizations.of(context)!.only24GhzSupported,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFFFFB300),
+                height: 1.4,
+              ),
             ),
           ),
         ],

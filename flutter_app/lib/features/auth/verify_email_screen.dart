@@ -7,7 +7,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../l10n/app_localizations.dart';
+import '../../shared/providers/app_env_provider.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../../shared/services/fcm_service.dart';
 import '../../shared/widgets/primary_button.dart';
 import 'auth_repository_impl.dart' show AuthException;
 import 'providers/auth_repository_provider.dart';
@@ -82,6 +84,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
           await ref.read(authRepositoryProvider).verifyEmail(widget.email, otp);
       if (!mounted) return;
       ref.read(authProvider.notifier).setToken(token);
+      FcmService.syncAfterLogin(ref.read(appEnvProvider));
       context.go('/home');
     } on AuthException catch (e) {
       if (!mounted) return;

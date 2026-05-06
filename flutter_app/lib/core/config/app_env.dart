@@ -27,8 +27,8 @@ final class DevEnv extends AppEnv {
 final class ProdEnv extends AppEnv {
   const ProdEnv()
       : super(
-          apiBaseUrl: 'https://api.sleeppad.io',
-          wsBaseUrl: 'wss://api.sleeppad.io',
+          apiBaseUrl: 'https://api.sleeptech.me',
+          wsBaseUrl: 'wss://mqtt.sleeptech.me',
           isDev: false,
         );
 }

@@ -403,4 +403,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get weakSignal => 'Weak signal';
+
+  @override
+  String get only24GhzSupported =>
+      'This device uses 2.4GHz WiFi. Dual-band routers (same name for both bands) work fine. If connection fails, try a 2.4GHz-only network.';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi connection failed';
+
+  @override
+  String get serverUnreachable => 'Server unreachable';
+
+  @override
+  String get changeWifi => 'Change WiFi';
+
+  @override
+  String get changeWifiDescription =>
+      'To change WiFi, hold the button on your Sleep Tech device for 5 seconds until the LED blinks blue — it will restart in setup mode.';
+
+  @override
+  String get changeWifiContinue => 'Continue to setup';
 }

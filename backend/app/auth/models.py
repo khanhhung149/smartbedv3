@@ -26,7 +26,7 @@ class Token(BaseModel):
 
 
 class FcmTokenUpdate(BaseModel):
-    fcm_token: str = Field(min_length=1, max_length=4096)
+    fcm_token: str = Field(max_length=4096)  # empty string = clear token on logout
 
 
 class OtpVerifyRequest(BaseModel):

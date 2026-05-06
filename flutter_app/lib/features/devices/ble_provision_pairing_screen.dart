@@ -65,6 +65,7 @@ class _BleProvisionPairingScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(provisioningProvider);
 
+    final l10n = AppLocalizations.of(context)!;
     ref.listen<ProvisioningState>(provisioningProvider, (_, next) {
       if (next is ProvisioningSuccess) {
         context.pushReplacement('/devices/add/success', extra: next);
@@ -73,7 +74,7 @@ class _BleProvisionPairingScreenState
       } else if (next is ProvisioningWifiFailedRetryable) {
         _showRetrySheet(
           context,
-          title: 'WiFi connection failed',
+          title: l10n.wifiConnectionFailed,
           reason: "We couldn't connect to \"${next.lastSsid}\". Double-check "
               'the network name and password. The device is still waiting — '
               'no need to rescan.',
@@ -82,7 +83,7 @@ class _BleProvisionPairingScreenState
       } else if (next is ProvisioningMqttFailedRetryable) {
         _showRetrySheet(
           context,
-          title: 'Server unreachable',
+          title: l10n.serverUnreachable,
           reason: 'WiFi is connected but the server at '
               '${next.pairOut.mqttHost} is not responding. Check your server '
               'URL in Settings, or try different WiFi.',
