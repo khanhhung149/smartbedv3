@@ -30,7 +30,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushEnabled = true;
   bool _quietHours = false;
-  int _themeIndex = 2; // 0=System, 1=Light, 2=Dark (default Dark per spec)
   bool _loggingOut = false;
   String _appVersion = '';
 
@@ -118,14 +117,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             // Section 3: Appearance
             _SectionLabel(label: l10n.appearance),
             _GroupCard(children: [
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: _ThemeSegment(
-                  selected: _themeIndex,
-                  onChanged: (i) => setState(() => _themeIndex = i),
-                ),
-              ),
-              _DividerRow(),
               _TappableRow(
                 label: l10n.language,
                 onTap: () => _showLanguagePicker(context),
@@ -515,64 +506,6 @@ class _ServerUrlRow extends StatelessWidget {
           ),
         ),
       );
-}
-
-// ── Theme segment ─────────────────────────────────────────────────────────────
-
-class _ThemeSegment extends StatelessWidget {
-  const _ThemeSegment({required this.selected, required this.onChanged});
-  final int selected;
-  final ValueChanged<int> onChanged;
-
-  static const _labels = ['System', 'Light', 'Dark'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHighest,
-        borderRadius: AppRadius.fullBr,
-        border: Border.all(
-            color: AppColors.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: List.generate(_labels.length, (i) {
-          final isActive = i == selected;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? AppColors.surfaceContainer
-                      : Colors.transparent,
-                  borderRadius: AppRadius.fullBr,
-                  border: isActive
-                      ? Border.all(
-                          color: AppColors.outlineVariant.withValues(alpha: 0.3))
-                      : null,
-                ),
-                child: Text(
-                  _labels[i],
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: AppTextSize.sm,
-                    fontWeight: AppFontWeight.medium,
-                    color: isActive
-                        ? AppColors.primaryFixed
-                        : AppColors.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
 }
 
 // ── Logout card ───────────────────────────────────────────────────────────────
