@@ -97,7 +97,9 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_LOGI(TAG, "Connect to WiFi successful > connect MQTT");
         snprintf(buffer, sizeof(buffer), "%s://%s:443", s_config.mqtt_scheme, s_config.mqtt_broker);
-        mqtt_init(buffer, "sleeppad_test", s_config.mqtt_username, s_config.mqtt_password);
+        /* MQTT client_id MUST equal device_id — Mosquitto ACL enforces
+         * write sleeppad/%c/# so a mismatch silently drops publishes. */
+        mqtt_init(buffer, ble_get_device_id(), s_config.mqtt_username, s_config.mqtt_password);
     }
 }
 

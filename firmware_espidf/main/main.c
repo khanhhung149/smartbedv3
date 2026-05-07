@@ -17,12 +17,16 @@ void app_main(void)
     ble_init();
     wifi_init();
 
+    /* Per protocol spec: sleep pad publishes use device_id derived from
+     * efuse MAC inside ble_init() — mqtt topic must match ACL pattern. */
+    const char *device_id = ble_get_device_id();
+
 #ifdef MOCK_SLEEPPAD
-    sleep_pad_reader_init("MOCKPAD001", true);
-    ESP_LOGI("MAIN", "Mock Sleep Pad mode active");
+    sleep_pad_reader_init(device_id, true);
+    ESP_LOGI("MAIN", "Mock Sleep Pad mode active (device_id=%s)", device_id);
 #else
-    sleep_pad_reader_init("MOCKPAD001", false);
-    ESP_LOGI("MAIN", "Real UART Sleep Pad mode active");
+    sleep_pad_reader_init(device_id, false);
+    ESP_LOGI("MAIN", "Real UART Sleep Pad mode active (device_id=%s)", device_id);
 #endif
 
     ESP_LOGI("MAIN", "BLE initialization complete. Waiting for configuration...");

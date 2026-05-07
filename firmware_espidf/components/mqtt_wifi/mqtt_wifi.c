@@ -10,6 +10,7 @@
 #include <esp_bt_main.h>
 #include <esp_gap_ble_api.h>
 #include "connect_wifi.h"
+#include "ble.h"
 
 #include "mqtt_wifi.h"
 
@@ -103,9 +104,27 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     esp_mqtt_client_handle_t event_client = event->client;
     switch ((esp_mqtt_event_id_t)event_id)
     {
-    case MQTT_EVENT_CONNECTED:
+    case MQTT_EVENT_CONNECTED: {
         mqtt_connected = true;
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+
+        /* 1. Notify Flutter pairing app that provisioning is complete.
+         *    Flutter waits up to 60s for Status="connected" via BLE notify;
+         *    must fly out BEFORE we tear down the BLE stack below. */
+        ble_set_status(BLE_STATUS_CONNECTED);
+
+        /* 2. Publish retained "online" to sleeppad/{device_id}/status so the
+         *    backend marks this device online (Flutter then polls /devices/mine
+         *    until online=true, then exits the pairing screen). */
+        char topic[96];
+        snprintf(topic, sizeof(topic), "sleeppad/%s/status", ble_get_device_id());
+        mqtt_publish(event_client, topic, "online", 6 /* len */, 1 /* qos */, 1 /* retain */);
+
+        /* 3. Give iOS a moment to receive the BLE notify before we tear down
+         *    the radio. ~800ms is enough for the notify packet + connection
+         *    update to land on the central. */
+        vTaskDelay(pdMS_TO_TICKS(800));
+
         esp_err_t err = esp_ble_gap_stop_advertising();
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "esp_ble_gap_stop_advertising() returned %s", esp_err_to_name(err));
@@ -116,6 +135,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         // Subscribe to test topics for loopback verification
         mqtt_subscribe(event_client, "sleeppad/test", 0);
         break;
+    }
     case MQTT_EVENT_DISCONNECTED:
         mqtt_connected = false;
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
