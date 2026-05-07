@@ -3,6 +3,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:network_info_plus/network_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -44,6 +46,25 @@ class _BleProvisionWifiScreenState
     _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    _prefillCurrentSsid();
+  }
+
+  // Auto-fill the SSID the phone is currently connected to.
+  // Android requires ACCESS_FINE_LOCATION to read WiFi SSID (all API levels).
+  Future<void> _prefillCurrentSsid() async {
+    final status = await Permission.locationWhenInUse.request();
+    if (!status.isGranted) return;
+    try {
+      final ssid = await NetworkInfo().getWifiName();
+      if (ssid == null || ssid.isEmpty) return;
+      // Remove surrounding quotes that some platforms add (e.g. "\"MyWifi\"")
+      final clean = ssid.replaceAll('"', '');
+      if (mounted && _ssidController.text.isEmpty) {
+        setState(() => _ssidController.text = clean);
+      }
+    } catch (_) {
+      // Non-fatal — user can type manually
+    }
   }
 
   @override
@@ -114,7 +135,10 @@ class _BleProvisionWifiScreenState
                         height: 1.6,
                       ),
                     ),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
+                    // 2.4GHz warning banner
+                    _TwoFourGhzBanner(),
+                    const SizedBox(height: 24),
                     // SSID input
                     _GlassInput(
                       controller: _ssidController,
@@ -269,6 +293,39 @@ class _WifiHero extends StatelessWidget {
               Icons.wifi,
               color: AppColors.primary,
               size: 32,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TwoFourGhzBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFB300).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: Color(0xFFFFB300), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              AppLocalizations.of(context)!.only24GhzSupported,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFFFFB300),
+                height: 1.4,
+              ),
             ),
           ),
         ],

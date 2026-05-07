@@ -83,11 +83,23 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
 
     if topic.endswith("/status"):
         status = msg.payload.decode(errors="ignore").strip().lower()
-        if status == "offline":
-            try:
+        # Mark online + bump last_seen as soon as the device's MQTT session is up
+        # — even before any sec/min telemetry arrives. Otherwise a healthy chip
+        # with the sleep pad unplugged (or still booting) reads as "offline" /
+        # "last seen unknown" in the app despite an active broker session.
+        # Sec/min handlers refresh the same key + last_seen on every frame, so
+        # the TTL keeps rolling once telemetry starts.
+        try:
+            if status == "online":
+                await rds.set(online_key(device_id), "1", ex=_ONLINE_TTL_SECONDS)
+                await pool.execute(
+                    "UPDATE devices SET last_seen = $1 WHERE id = $2",
+                    datetime.now(tz=timezone.utc), device_id,
+                )
+            elif status == "offline":
                 await rds.delete(online_key(device_id))
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("redis delete failed: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("status update failed: %s", exc)
         return
 
     # Only accept data from paired devices (prevents orphan rows via spoofed topic).

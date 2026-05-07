@@ -41,8 +41,11 @@ final class DevEnv extends AppEnv {
 final class ProdEnv extends AppEnv {
   const ProdEnv()
       : super(
-          apiBaseUrl: 'https://api.sleeppad.io',
-          wsBaseUrl: 'wss://api.sleeppad.io',
+          apiBaseUrl: 'https://api.sleeptech.me',
+          // FastAPI WebSocket (`/ws/{deviceId}`) — same host as the REST API.
+          // NOT the MQTT broker WSS (`wss://mqtt.sleeptech.me/mqtt`) which is
+          // only for firmware → mosquitto. Confusing them yields HTTP 502.
+          wsBaseUrl: 'wss://api.sleeptech.me',
           isDev: false,
         );
 }

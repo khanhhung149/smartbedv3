@@ -99,3 +99,12 @@ volumes:
   postgres_data:
   redis_data:
   mosquitto_data:
+
+# Host ens19 MTU is 1450; default docker bridge defaults to 1500 which causes
+# TLS handshake stalls on outbound SMTP (and similar). Pin bridge MTU to 1450
+# so containers can reach external services like ocean.mxroute.com:465.
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1450"

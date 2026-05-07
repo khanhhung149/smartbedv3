@@ -1,116 +1,162 @@
 import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/api_client.dart';
 import '../../core/config/app_env.dart';
+import '../../firebase_options.dart';
 
-// FCM push notification service.
-//
-// Dev no-op design: when env.isDev is true, initialize() logs and returns early.
-// Firebase packages are NOT included in pubspec.yaml for this POC because
-// google-services.json / GoogleService-Info.plist are absent in dev.
-//
-// When Firebase project credentials are added in production:
-//   1. Add firebase_core, firebase_messaging, flutter_local_notifications to pubspec.yaml
-//   2. Add google-services.json (Android) and GoogleService-Info.plist (iOS)
-//   3. Uncomment the implementation below and remove the no-op guard.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  dev.log('[FCM] Background message: ${message.messageId}', name: 'FcmService');
+}
 
 class FcmService {
   FcmService._();
 
-  // ignore: prefer_final_fields — set to true when Firebase is wired in production
   static bool _initialized = false;
 
-  // Call once from main() after WidgetsFlutterBinding.ensureInitialized().
-  // In dev flavor: logs a message and returns immediately — no Firebase calls.
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
+  // Storage keys for local FCM token cache (Essen pattern)
+  static const _keyFcmToken = 'fcm_token';
+  static const _keyFcmSynced = 'fcm_token_synced';
+
   static Future<void> initialize(AppEnv env) async {
-    if (env.isDev) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+      if (env.isDev) {
+        dev.log('[FCM] Dev flavor — skipping permission + token upload.', name: 'FcmService');
+        return;
+      }
+
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      _initialized = true;
       dev.log(
-        '[FCM] Skipped in dev flavor — no Firebase credentials configured.',
+        '[FCM] Permission status: ${settings.authorizationStatus.name}',
         name: 'FcmService',
       );
+
+      // When FCM rotates the token: save locally, reset synced flag, re-upload.
+      messaging.onTokenRefresh.listen((token) async {
+        final cached = await _storage.read(key: _keyFcmToken);
+        if (cached != token) {
+          await _storage.write(key: _keyFcmToken, value: token);
+          await _storage.write(key: _keyFcmSynced, value: 'false');
+          await _sendToBackend(token, env);
+        }
+      });
+
+      FirebaseMessaging.onMessage.listen((msg) {
+        dev.log('[FCM] Foreground: ${msg.notification?.title}', name: 'FcmService');
+      });
+
+      dev.log('[FCM] Initialized', name: 'FcmService');
+    } catch (e, st) {
+      dev.log('[FCM] Init failed: $e', name: 'FcmService', error: e, stackTrace: st);
+    }
+  }
+
+  // Call after login. Skips upload if token hasn't changed since last sync.
+  // On iOS, APNs may not be ready at login time — skip and rely on onTokenRefresh.
+  static Future<void> syncAfterLogin(AppEnv env) async {
+    if (!_initialized) {
+      debugPrint('[FCM] syncAfterLogin skipped — not initialized');
+      return;
+    }
+
+    // Skip if already synced with the same token
+    final isSynced = await _storage.read(key: _keyFcmSynced) == 'true';
+    if (isSynced) {
+      debugPrint('[FCM] Token already synced — skipping');
       return;
     }
 
     try {
-      // Production implementation (requires Firebase credentials):
-      //
-      // await Firebase.initializeApp(
-      //   options: DefaultFirebaseOptions.currentPlatform,
-      // );
-      // final messaging = FirebaseMessaging.instance;
-      // await messaging.requestPermission(alert: true, badge: true, sound: true);
-      //
-      // final token = await messaging.getToken();
-      // if (token != null) await uploadToken(token, env);
-      // messaging.onTokenRefresh.listen((t) => uploadToken(t, env));
-      //
-      // FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-      //
-      // _initialized = true;
-      // dev.log('[FCM] Initialized successfully', name: 'FcmService');
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      debugPrint(
+        '[FCM] Notification permission: ${settings.authorizationStatus.name}',
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        debugPrint('[FCM] Notification permission denied — skipping token sync');
+        return;
+      }
 
-      dev.log(
-        '[FCM] Firebase not configured — running in no-op mode. '
-        'Add google-services.json and Firebase deps to enable push.',
-        name: 'FcmService',
-      );
-    } catch (e, st) {
-      // Graceful no-op: app continues to work without push notifications.
-      dev.log(
-        '[FCM] Initialization failed: $e',
-        name: 'FcmService',
-        error: e,
-        stackTrace: st,
-      );
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final apns = await FirebaseMessaging.instance.getAPNSToken();
+        if (apns == null) {
+          debugPrint('[FCM] APNs not ready — onTokenRefresh will upload when ready');
+          return;
+        }
+      }
+
+      debugPrint('[FCM] getToken() calling...');
+      final token = await FirebaseMessaging.instance.getToken();
+      debugPrint('[FCM] getToken() result: ${token == null ? "NULL" : token.isEmpty ? "EMPTY" : "OK (${token.substring(0, 20)}...)"}');
+
+      if (token == null || token.isEmpty) {
+        await _storage.write(key: _keyFcmSynced, value: 'false');
+        debugPrint('[FCM] No token available yet — backend upload skipped');
+        return;
+      }
+
+      // Only upload if token changed
+      final cached = await _storage.read(key: _keyFcmToken);
+      if (cached == token) {
+        // Token unchanged but wasn't marked synced — re-upload to be safe
+        debugPrint('[FCM] Token unchanged, re-uploading to ensure sync');
+      }
+
+      await _sendToBackend(token, env);
+      await _storage.write(key: _keyFcmToken, value: token);
+      await _storage.write(key: _keyFcmSynced, value: 'true');
+    } catch (e) {
+      debugPrint('[FCM] syncAfterLogin failed: $e');
     }
   }
 
-  // Upload FCM token to backend so server can push to this device.
-  // Called after login and on token refresh.
-  static Future<void> uploadToken(String token, AppEnv env) async {
-    if (!_initialized) return;
-    try {
-      final client = ApiClient(baseUrl: env.apiBaseUrl);
-      await client.dio.patch(
-        '/auth/fcm-token',
-        data: {'fcm_token': token},
-      );
-      dev.log('[FCM] Token uploaded', name: 'FcmService');
-    } on DioException catch (e) {
-      dev.log(
-        '[FCM] Token upload failed: ${e.response?.statusCode}',
-        name: 'FcmService',
-        error: e,
-      );
-      // Non-fatal: push may not work but app functions normally.
-    }
-  }
-
-  // Clear FCM token on logout so stale tokens are not stored server-side.
+  // Call on logout — clears backend token, resets local sync state.
   static Future<void> clearToken(AppEnv env) async {
     if (!_initialized) return;
     try {
+      final cached = await _storage.read(key: _keyFcmToken);
+      if (cached == null || cached.isEmpty) {
+        debugPrint('[FCM] No cached token to clear — skipping backend reset');
+        return;
+      }
+
       final client = ApiClient(baseUrl: env.apiBaseUrl);
       await client.dio.patch('/auth/fcm-token', data: {'fcm_token': ''});
+      await _storage.delete(key: _keyFcmToken);
     } on DioException catch (_) {
-      // Best-effort — ignore failures on logout path.
+      // Best-effort on logout — ignore failures.
+    } finally {
+      // Always reset sync state so next login re-registers the token
+      await _storage.write(key: _keyFcmSynced, value: 'false');
     }
   }
 
-  // Production foreground message handler (uncomment when Firebase is wired).
-  // static Future<void> _handleForegroundMessage(RemoteMessage message) async {
-  //   final data = message.data;
-  //   // Show local notification via flutter_local_notifications
-  //   dev.log('[FCM] Foreground message: ${message.messageId}', name: 'FcmService');
-  // }
+  static Future<void> _sendToBackend(String token, AppEnv env) async {
+    try {
+      final client = ApiClient(baseUrl: env.apiBaseUrl);
+      await client.dio.patch('/auth/fcm-token', data: {'fcm_token': token});
+      dev.log('[FCM] Token uploaded', name: 'FcmService');
+    } on DioException catch (e) {
+      dev.log('[FCM] Upload failed: ${e.response?.statusCode}', name: 'FcmService');
+    }
+  }
 }
-
-// Top-level background message handler — must be a top-level function, not a
-// class method. Required by firebase_messaging for background/terminated state.
-// Uncomment when Firebase deps are added:
-//
-// @pragma('vm:entry-point')
-// Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-//   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-//   dev.log('[FCM] Background message: ${message.messageId}', name: 'FcmService');
-// }

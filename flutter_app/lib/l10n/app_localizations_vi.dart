@@ -404,4 +404,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get weakSignal => 'Tín hiệu yếu';
+
+  @override
+  String get only24GhzSupported =>
+      'Thiết bị dùng WiFi 2.4GHz. Router 2 băng tần (cùng tên mạng) vẫn hoạt động bình thường. Nếu kết nối thất bại, hãy thử chọn mạng 2.4GHz riêng.';
+
+  @override
+  String get wifiConnectionFailed => 'Kết nối WiFi thất bại';
+
+  @override
+  String get serverUnreachable => 'Không thể kết nối máy chủ';
+
+  @override
+  String get changeWifi => 'Đổi WiFi';
+
+  @override
+  String get changeWifiDescription =>
+      'Để đổi WiFi, giữ nút trên thiết bị Sleep Tech 5 giây cho đến khi đèn LED nhấp nháy xanh — thiết bị sẽ khởi động lại ở chế độ cài đặt.';
+
+  @override
+  String get changeWifiContinue => 'Tiếp tục cài đặt';
 }
