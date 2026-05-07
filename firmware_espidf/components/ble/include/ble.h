@@ -1,6 +1,8 @@
 #ifndef BLE_H
 #define BLE_H
 
+#include <stdbool.h>
+
 /* Maximum payload sizes for configuration written over BLE. */
 #define BLE_WIFI_SSID_MAX_LEN        32
 #define BLE_WIFI_PASSWORD_MAX_LEN    64
@@ -35,8 +37,16 @@ extern ble_config_data_t s_config;
 void ble_init(void);
 const ble_config_data_t *ble_get_config(void);
 
-/* Returns the per-chip device_id (10 ASCII chars, NUL-terminated). */
+/* Returns the per-chip device_id (10 ASCII chars, NUL-terminated).
+ * Lazy: derives from efuse MAC on first call so callers may invoke this
+ * before ble_init() (e.g. main.c when deciding whether to skip BLE
+ * pairing because NVS already has WiFi creds). */
 const char *ble_get_device_id(void);
+
+/* True after ble_init() has been called and the BLE stack is up. Used
+ * by the MQTT shutdown path to skip BLE teardown when we boot directly
+ * from NVS-saved creds and never advertised in the first place. */
+bool ble_is_active(void);
 
 /* Update the Status characteristic and send a notify to the connected client.
  * Safe to call before any client has subscribed — only writes the attribute

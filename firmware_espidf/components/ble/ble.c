@@ -16,6 +16,7 @@
 
 #include "ble.h"
 #include "connect_wifi.h"
+#include "nvs_config.h"
 
 static const char *TAG = "BLE";
 
@@ -307,26 +308,32 @@ static void handle_write_value(uint16_t handle, const uint8_t *value, uint16_t l
 {
     if (handle == s_handle_table[IDX_SSID_VAL]) {
         copy_ble_value(s_config.wifi_ssid, sizeof(s_config.wifi_ssid), value, len);
+        nvs_config_save(NVS_KEY_SSID, s_config.wifi_ssid);
         flag_data_written[0] = true;
         ESP_LOGI(TAG, "Received WiFi SSID: %s", s_config.wifi_ssid);
     } else if (handle == s_handle_table[IDX_PASS_VAL]) {
         copy_ble_value(s_config.wifi_password, sizeof(s_config.wifi_password), value, len);
+        nvs_config_save(NVS_KEY_PASS, s_config.wifi_password);
         flag_data_written[1] = true;
         ESP_LOGI(TAG, "Received WiFi password (len=%u)", len);
     } else if (handle == s_handle_table[IDX_HOST_VAL]) {
         copy_ble_value(s_config.mqtt_broker, sizeof(s_config.mqtt_broker), value, len);
+        nvs_config_save(NVS_KEY_HOST, s_config.mqtt_broker);
         flag_data_written[2] = true;
         ESP_LOGI(TAG, "Received MQTT broker: %s", s_config.mqtt_broker);
     } else if (handle == s_handle_table[IDX_MUSER_VAL]) {
         copy_ble_value(s_config.mqtt_username, sizeof(s_config.mqtt_username), value, len);
+        nvs_config_save(NVS_KEY_USER, s_config.mqtt_username);
         flag_data_written[3] = true;
         ESP_LOGI(TAG, "Received MQTT username (len=%u)", len);
     } else if (handle == s_handle_table[IDX_MPASS_VAL]) {
         copy_ble_value(s_config.mqtt_password, sizeof(s_config.mqtt_password), value, len);
+        nvs_config_save(NVS_KEY_MPASS, s_config.mqtt_password);
         flag_data_written[4] = true;
         ESP_LOGI(TAG, "Received MQTT password (len=%u)", len);
     } else if (handle == s_handle_table[IDX_SCHEME_VAL]) {
         copy_ble_value(s_config.mqtt_scheme, sizeof(s_config.mqtt_scheme), value, len);
+        nvs_config_save(NVS_KEY_SCHEME, s_config.mqtt_scheme);
         flag_data_written[5] = true;
         ESP_LOGI(TAG, "Received MQTT scheme: %s", s_config.mqtt_scheme);
     } else if (handle == s_handle_table[IDX_STATUS_CCCD]) {
@@ -529,5 +536,13 @@ const ble_config_data_t *ble_get_config(void)
 
 const char *ble_get_device_id(void)
 {
+    if (s_device_id[0] == '\0') {
+        derive_device_id();
+    }
     return s_device_id;
+}
+
+bool ble_is_active(void)
+{
+    return s_ble_started;
 }

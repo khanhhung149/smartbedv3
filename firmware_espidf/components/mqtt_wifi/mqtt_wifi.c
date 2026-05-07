@@ -125,15 +125,16 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         /* 3. Give iOS a moment to receive the BLE notify before we tear down
          *    the radio. ~800ms is enough for the notify packet + connection
          *    update to land on the central. */
-        vTaskDelay(pdMS_TO_TICKS(800));
-
-        esp_err_t err = esp_ble_gap_stop_advertising();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "esp_ble_gap_stop_advertising() returned %s", esp_err_to_name(err));
+        if (ble_is_active()) {
+            vTaskDelay(pdMS_TO_TICKS(800));
+            esp_err_t err = esp_ble_gap_stop_advertising();
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "esp_ble_gap_stop_advertising() returned %s", esp_err_to_name(err));
+            }
+            esp_bluedroid_disable();
+            esp_bt_controller_disable();
+            esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
         }
-        esp_bluedroid_disable();
-        esp_bt_controller_disable();
-        esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
 
         /* Subscribe to the device's cmd topic so the backend can deliver
          * remote commands (currently only `factory_reset`). QoS 1 so a
