@@ -85,6 +85,12 @@ static const int WIFI_CONNECTED_BIT = BIT0;
 static bool s_connected = false;
 static int s_retry_num = 0;
 static bool got_ip = false;
+/* Counts consecutive STA_DISCONNECTED events that occurred without ever
+ * reaching IP_GOT_IP. Resets on first successful IP. After WIFI_FAIL_THRESHOLD
+ * we tell the BLE-paired app the SSID/password are wrong rather than letting
+ * Flutter's 60s pairing watchdog time out with no specific cause. */
+static int s_wifi_fail_count = 0;
+#define WIFI_FAIL_THRESHOLD 5
 static const char *TAG = "WIFI";
 
 static char buffer[512];
@@ -104,6 +110,18 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         case WIFI_EVENT_STA_DISCONNECTED:
             ESP_LOGI(TAG, "WiFi disconnected");
             xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+            if (!got_ip) {
+                /* Pairing-phase failure — try a few more times then surface to
+                 * the app over BLE. Auto-retry is on by default in IDF v5.x,
+                 * but we still call esp_wifi_connect() defensively. */
+                if (++s_wifi_fail_count >= WIFI_FAIL_THRESHOLD) {
+                    ESP_LOGW(TAG, "WiFi failed %d times — notifying app wifi_failed", s_wifi_fail_count);
+                    ble_set_status(BLE_STATUS_WIFI_FAILED);
+                    s_wifi_fail_count = 0; /* don't spam if user keeps retrying */
+                } else {
+                    esp_wifi_connect();
+                }
+            }
 
             wifi_mode_t mode;
             esp_wifi_get_mode(&mode);
@@ -147,6 +165,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
     {
         got_ip = true;
+        s_wifi_fail_count = 0;
         ESP_LOGI(TAG, "Got IP address");
         s_connected = true;
         s_retry_num = 0;

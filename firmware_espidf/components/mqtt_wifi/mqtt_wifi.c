@@ -19,6 +19,10 @@
 static const char *TAG = "MQTT_WIFI";
 static esp_mqtt_client_handle_t client = NULL;
 bool mqtt_connected = false;
+/* True once we've reached MQTT_EVENT_CONNECTED at least once. After that
+ * transient errors are normal (auto-reconnect handles it) and we don't
+ * spam the BLE client with mqtt_failed. */
+static bool s_mqtt_ever_connected = false;
 
 // ISRG Root X1 — Let's Encrypt's RSA root, valid until 2035-06-04.
 // We pin this single root cert instead of attaching the Mozilla CA bundle
@@ -108,6 +112,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
     case MQTT_EVENT_CONNECTED: {
         mqtt_connected = true;
+        s_mqtt_ever_connected = true;
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
 
         /* 1. Notify Flutter pairing app that provisioning is complete.
@@ -190,7 +195,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         break;
     }
     case MQTT_EVENT_ERROR:
-        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+        ESP_LOGW(TAG, "MQTT_EVENT_ERROR (ever_connected=%d)", s_mqtt_ever_connected);
+        if (!s_mqtt_ever_connected) {
+            /* First-time connect failed — surface to the BLE-paired app so
+             * Flutter shows "MQTT failed" instead of waiting 60s for a
+             * generic timeout. Most common causes: wrong host/scheme, broker
+             * down, ACL rejecting our client_id, TLS handshake failure
+             * (cert/SNI mismatch or stale clock). */
+            ble_set_status(BLE_STATUS_MQTT_FAILED);
+        }
         break;
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
