@@ -9,6 +9,8 @@
 #include <esp_bt_defs.h>
 #include <esp_bt_main.h>
 #include <esp_gap_ble_api.h>
+#include <esp_system.h>
+#include <nvs_flash.h>
 #include "connect_wifi.h"
 #include "ble.h"
 
@@ -132,8 +134,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         esp_bluedroid_disable();
         esp_bt_controller_disable();
         esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
-        // Subscribe to test topics for loopback verification
-        mqtt_subscribe(event_client, "sleeppad/test", 0);
+
+        /* Subscribe to the device's cmd topic so the backend can deliver
+         * remote commands (currently only `factory_reset`). QoS 1 so a
+         * retained cmd published while we were offline is delivered on
+         * reconnect. Per docs/protocols/ble-provisioning-and-mqtt-auth.md
+         * the broker ACL only allows %c (= device_id) under sleeppad/. */
+        char cmd_topic[96];
+        snprintf(cmd_topic, sizeof(cmd_topic), "sleeppad/%s/cmd", ble_get_device_id());
+        mqtt_subscribe(event_client, cmd_topic, 1);
         break;
     }
     case MQTT_EVENT_DISCONNECTED:
@@ -149,12 +158,36 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     case MQTT_EVENT_PUBLISHED:
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
         break;
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-        printf("Received topic: %.*s\r\n", event->topic_len, event->topic);
-        printf("Received data: %.*s\r\n", event->data_len, event->data);
-        ESP_LOGI(TAG, "Message received on %.*s (len=%d)", event->topic_len, event->topic, event->data_len);
+    case MQTT_EVENT_DATA: {
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA topic=%.*s data=%.*s",
+                 event->topic_len, event->topic, event->data_len, event->data);
+
+        /* Remote `factory_reset` on sleeppad/{device_id}/cmd — sent by backend
+         * when user removes the device from their account. We must:
+         *   1. Clear the retained cmd, otherwise a re-paired device with the
+         *      same MAC-derived device_id would loop-reset on every boot.
+         *   2. Wipe NVS so wifi/mqtt creds are forgotten.
+         *   3. Restart — boot path with empty NVS goes back to BLE pairing.
+         */
+        char cmd_topic[96];
+        snprintf(cmd_topic, sizeof(cmd_topic), "sleeppad/%s/cmd", ble_get_device_id());
+        int cmd_topic_len = (int)strlen(cmd_topic);
+        const char fr[] = "factory_reset";
+        const int fr_len = (int)sizeof(fr) - 1;
+
+        if (event->topic_len == cmd_topic_len &&
+            strncmp(event->topic, cmd_topic, cmd_topic_len) == 0 &&
+            event->data_len == fr_len &&
+            strncmp(event->data, fr, fr_len) == 0) {
+            ESP_LOGW(TAG, "factory_reset received — clearing retained cmd, wiping NVS, restarting");
+            esp_mqtt_client_publish(event_client, cmd_topic, "", 0, 1, 1);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            nvs_flash_erase();
+            vTaskDelay(pdMS_TO_TICKS(200));
+            esp_restart();
+        }
         break;
+    }
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
         break;
