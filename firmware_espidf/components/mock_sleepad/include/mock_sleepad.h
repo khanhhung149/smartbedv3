@@ -12,5 +12,5 @@ typedef enum {
 
 void mock_sleepad_init(const char* device_id);
 void mock_sleepad_tick(void (*feed_byte)(uint8_t));
-
+// void sleep_pad_task(void *arg);
 #endif

@@ -96,7 +96,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
         vTaskDelay(3000 / portTICK_PERIOD_MS);
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_LOGI(TAG, "Connect to WiFi successful > connect MQTT");
-        snprintf(buffer, sizeof(buffer), "%s://%s:1883", s_config.mqtt_scheme, s_config.mqtt_broker);
+        snprintf(buffer, sizeof(buffer), "%s://%s:443", s_config.mqtt_scheme, s_config.mqtt_broker);
         mqtt_init(buffer, "sleeppad_test", s_config.mqtt_username, s_config.mqtt_password);
     }
 }

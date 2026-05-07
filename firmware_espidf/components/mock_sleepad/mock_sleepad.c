@@ -4,6 +4,11 @@
 #include <esp_random.h>
 #include <esp_system.h>
 #include <stdint.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include "sleep_pad_parser.h"
+#include "mqtt_wifi.h"
+
 
 static const uint32_t T_NORMAL_END   = 120000U;
 static const uint32_t T_MOVEMENT_END = 180000U;
@@ -17,8 +22,33 @@ static uint32_t s_next_min_ms   = 0;
 static uint8_t  s_hr            = 60;
 static uint8_t  s_rr_x10        = 140;
 static uint8_t  s_serial        = 0;
+static void on_sec_data(const SleepPadSecData* d) {
+    // Publish to MQTT
+    char topic[64];
+    char data[128];
+    snprintf(topic, sizeof(topic), "sleeppad/%s/sec", s_device_id);
+    snprintf(data, sizeof(data), "{\"device_id\":\"%s\",\"ts\":%lu,\"status\":%u,\"heart_rate\":%u,\"resp_rate\":%.1f,\"sdata\":%u,\"pdata\":%u}",
+             s_device_id, d->timestamp, d->status, d->heart_rate, d->resp_rate, d->sdata, d->pdata);
+    mqtt_publish_data(topic, data);
+}
 
-static uint32_t mock_sleepad_now_ms(void)
+static void on_min_data(const SleepPadMinData* d) {
+    // Publish to MQTT
+    char topic[64];
+    char data[256];
+    snprintf(topic, sizeof(topic), "sleeppad/%s/min", s_device_id);
+    snprintf(data, sizeof(data), "{\"device_id\":\"%s\",\"ts\":%lu,\"status\":%u,\"heart_rate\":%u,\"resp_rate\":%.1f,\"movement\":%u,\"snore_count\":%u,\"resp_disorder\":%u,\"pthd\":%u,\"temp\":%.1f}",
+             s_device_id, d->timestamp, d->status, d->heart_rate, d->resp_rate, d->movement, d->snore_count, d->resp_disorder, d->pthd, d->temp / 10.0f);
+    mqtt_publish_data(topic, data);
+}
+
+static void on_idle(void) {
+    // Device idle - could send commands here
+}
+
+static SleepPadParser* s_parser = NULL;
+
+static uint32_t mock_sleepad_now_ms(void)  // Returns current time in milliseconds
 {
     return (uint32_t)(esp_timer_get_time() / 1000ULL);
 }
@@ -194,6 +224,12 @@ void mock_sleepad_init(const char* device_id)
     s_hr          = 60;
     s_rr_x10      = 140;
     s_serial      = 0;
+
+    // Create parser and set callbacks
+    s_parser = sleep_pad_parser_create();
+    if (s_parser != NULL) {
+        sleep_pad_parser_set_callbacks(s_parser, on_sec_data, on_min_data, on_idle);
+    }
 }
 
 void mock_sleepad_tick(void (*feed_byte)(uint8_t))
@@ -214,3 +250,23 @@ void mock_sleepad_tick(void (*feed_byte)(uint8_t))
         s_next_min_ms += 60000U;
     }
 }
+
+static void feed_func(uint8_t byte)
+{
+    if (s_parser != NULL) {
+        sleep_pad_parser_feed(s_parser, byte);
+    }
+}
+
+// void sleep_pad_task(void *arg)
+// {
+//     while (mqtt_connected==false)
+//     {
+//         vTaskDelay(pdMS_TO_TICKS(100)); // Wait for MQTT connection
+//     }
+    
+//     while (1) {
+//         mock_sleepad_tick(feed_func);
+//         vTaskDelay(pdMS_TO_TICKS(2000)); // Adjust the delay as needed
+//     }
+// }

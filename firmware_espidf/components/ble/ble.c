@@ -88,6 +88,10 @@ static const uint8_t s_desc_mqtt_scheme[] = "MQTT Scheme";
 
 static bool flag_data_written[6] = {0}; // Track if each characteristic has been written
 
+static uint8_t s_prep_write_buf[256];
+static uint16_t s_prep_write_len = 0;
+static uint16_t s_prep_write_handle = 0;
+
 static uint8_t s_adv_service_uuid128[16] = {
     0xfb, 0x34, 0x9b, 0x5f,
     0x80, 0x00,
@@ -450,7 +454,21 @@ static void ble_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         break;
 
     case ESP_GATTS_WRITE_EVT:
-        if (!param->write.is_prep) {
+        if (param->write.is_prep) {
+            if (param->write.handle != s_prep_write_handle) {
+                s_prep_write_len = 0;
+                s_prep_write_handle = param->write.handle;
+            }
+
+            if ((uint32_t)param->write.offset + param->write.len > sizeof(s_prep_write_buf)) {
+                ESP_LOGW(TAG, "Prep write overflow: handle=%d offset=%d len=%d",
+                         param->write.handle, param->write.offset, param->write.len);
+            } else {
+                memcpy(&s_prep_write_buf[param->write.offset], param->write.value, param->write.len);
+                uint16_t new_prep_len = param->write.offset + param->write.len;
+                s_prep_write_len = (new_prep_len > s_prep_write_len) ? new_prep_len : s_prep_write_len;
+            }
+        } else {
             handle_write_value(param->write.handle, param->write.value, param->write.len);
         }
 
@@ -462,6 +480,15 @@ static void ble_gatts_cb(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             esp_ble_gatts_send_response(s_gatts_if, param->write.conn_id, param->write.trans_id,
                                         ESP_GATT_OK, &rsp);
         }
+        break;
+
+    case ESP_GATTS_EXEC_WRITE_EVT:
+        if (param->exec_write.exec_write_flag == ESP_GATT_PREP_WRITE_EXEC &&
+            s_prep_write_handle != 0 && s_prep_write_len > 0) {
+            handle_write_value(s_prep_write_handle, s_prep_write_buf, s_prep_write_len);
+        }
+        s_prep_write_len = 0;
+        s_prep_write_handle = 0;
         break;
 
     default:
