@@ -230,6 +230,19 @@ void mqtt_init(const char *mqtt_address, const char *client_id, const char *user
     mqtt_cfg.network.timeout_ms = 15000;
     mqtt_cfg.network.reconnect_timeout_ms = 10000;
 
+    /* Last Will and Testament — broker auto-publishes when our connection
+     * drops without a clean disconnect. Backend's MQTT subscriber watches
+     * this topic to flip device online→offline in Redis (last_seen). The
+     * static buffer must outlive mqtt_init() because esp-mqtt holds the
+     * pointer for the lifetime of the client. */
+    static char s_lwt_topic[96];
+    snprintf(s_lwt_topic, sizeof(s_lwt_topic), "sleeppad/%s/status", client_id);
+    mqtt_cfg.session.last_will.topic    = s_lwt_topic;
+    mqtt_cfg.session.last_will.msg      = "offline";
+    mqtt_cfg.session.last_will.msg_len  = 7;
+    mqtt_cfg.session.last_will.qos      = 0;
+    mqtt_cfg.session.last_will.retain   = 1;
+
     client = esp_mqtt_client_init(&mqtt_cfg);
     if (client == NULL) {
         ESP_LOGE(TAG, "esp_mqtt_client_init failed");
