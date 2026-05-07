@@ -55,7 +55,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-        esp_ble_gap_stop_advertising();          // Stop BLE advertising when MQTT is connected
+        // Stop BLE advertising and disable Bluetooth completely
+        esp_ble_gap_stop_advertising();
+        printf("Stopped BLE advertising\r\n");
+        esp_bluedroid_disable();
+        esp_bt_controller_disable();
+        esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
         mqtt_subscribe(client, "sleeppad/test", 0);
         break;
     case MQTT_EVENT_DISCONNECTED:
