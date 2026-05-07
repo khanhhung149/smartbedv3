@@ -112,7 +112,7 @@ static bool connect_wifi(const String& ssid, const String& pass) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(clean_ssid.c_str(), clean_pass.c_str());
 
-    const unsigned long timeout_ms = 30000;
+    const unsigned long timeout_ms = 60000;
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED) {
         if (millis() - start >= timeout_ms) {
