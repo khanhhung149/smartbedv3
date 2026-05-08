@@ -9,17 +9,19 @@ import '../../shared/widgets/alert_bell_button.dart';
 // Translucent blur app bar for device detail screen — back button + bell.
 
 PreferredSizeWidget buildDeviceDetailAppBar(BuildContext context) {
+  final topInset = MediaQuery.of(context).padding.top;
+  final totalHeight = 64 + topInset;
   return PreferredSize(
-    preferredSize: const Size.fromHeight(64),
+    preferredSize: Size.fromHeight(totalHeight),
     child: ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 64,
+          height: totalHeight,
           color: const Color(0xB3101419),
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: SafeArea(
-            bottom: false,
+          padding: EdgeInsets.only(top: topInset, left: 4, right: 4),
+          child: SizedBox(
+            height: 64,
             child: Row(
               children: [
                 IconButton(

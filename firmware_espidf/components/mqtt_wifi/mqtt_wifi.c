@@ -233,11 +233,17 @@ void mqtt_init(const char *mqtt_address, const char *client_id, const char *user
     // ESP-IDF 5.x configuration with TLS verification
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.broker.address.uri = mqtt_address;
+    // mqtt_cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
     /* Best practice would be esp_crt_bundle_attach with the Mozilla bundle
      * (resilient to Let's Encrypt X1↔X2 rotation), but the full bundle adds
      * ~150 KB and we're already at ~3% free on the 1.5 MB app partition.
      * Keep the single ISRG Root X1 pin; revisit when partition is enlarged. */
-    mqtt_cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
+    if(strstr(mqtt_address, "mqtts://") == mqtt_address || strstr(mqtt_address, "wss://") == mqtt_address) {
+        mqtt_cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
+    }
+    else {
+        ESP_LOGW(TAG, "MQTT broker URI does not use TLS — skipping certificate attach");
+    }
     mqtt_cfg.credentials.client_id = client_id;
     if (username != NULL && strlen(username) > 0) {
         mqtt_cfg.credentials.username = username;

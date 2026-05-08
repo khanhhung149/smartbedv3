@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -52,28 +53,34 @@ final realtimeProvider =
       final uri = Uri.parse(
         '${ref.read(appEnvProvider).wsBaseUrl}/ws/$deviceId?token=$token',
       );
+      debugPrint('[WSS] Connecting → $uri');
       channel = WebSocketChannel.connect(uri);
       activeChannel = channel;
 
       await for (final raw in channel.stream) {
         if (cancelled) break;
         final json = jsonDecode(raw as String) as Map<String, dynamic>;
-        if (json['type'] == 'ping') continue; // keepalive — drop
+        if (json['type'] == 'ping') {
+          debugPrint('[WSS] ping received');
+          continue; // keepalive — drop
+        }
         // Reset backoff on first real frame of this connection.
         delaySeconds = 1;
+        debugPrint('[WSS] data frame: $json');
         yield RealtimeData.fromJson(json);
       }
 
       // Stream closed by server. Inspect close code to decide auth vs. retry.
       final closeCode = channel.closeCode;
+      debugPrint('[WSS] stream closed — code=$closeCode');
       if (closeCode == 1008 || closeCode == 4401 || closeCode == 4403) {
         throw const _WebSocketAuthFailure();
       }
     } on _WebSocketAuthFailure {
-      // Propagate so the UI can surface re-auth instead of silent looping.
+      debugPrint('[WSS] auth failure — stopping retry');
       rethrow;
-    } catch (_) {
-      // Transient — fall through to backoff + retry
+    } catch (e) {
+      debugPrint('[WSS] error: $e — retrying in ${delaySeconds}s');
     } finally {
       try {
         await channel?.sink.close();
@@ -83,6 +90,7 @@ final realtimeProvider =
 
     if (cancelled) return;
 
+    debugPrint('[WSS] reconnecting in ${delaySeconds}s…');
     // Exponential backoff, max 30s.
     await Future<void>.delayed(Duration(seconds: delaySeconds));
     delaySeconds = (delaySeconds * 2).clamp(1, 30);

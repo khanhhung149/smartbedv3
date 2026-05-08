@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/app_colors.dart';
 import '../../l10n/app_localizations.dart';
+import '../../shared/providers/app_env_provider.dart';
 import '../../shared/widgets/status_badge.dart';
 import '../data/models/realtime_data.dart';
 import '../data/providers/history_provider.dart';
@@ -147,6 +148,7 @@ class _HomeContentState extends ConsumerState<HomeContent> {
                   HomeStatusSection(
                     statusCode: _latest?.statusCode,
                     connection: connection,
+                    wsUrl: '${ref.read(appEnvProvider).wsBaseUrl}/ws/${widget.deviceId}',
                   ),
                   const SizedBox(height: 10),
                   HomeMetricsSection(

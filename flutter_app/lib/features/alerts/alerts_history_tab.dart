@@ -21,7 +21,7 @@ class AlertsHistoryTab extends StatelessWidget {
           child: Text('Failed to load history: $e',
               style: GoogleFonts.inter(color: AppColors.error))),
       data: (alerts) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 24),
         child: AlertHistoryList(alerts: alerts.cast()),
       ),
     );

@@ -25,6 +25,11 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
+    #ifdef CONFIG_CLEAR_NVS_ON_BOOT
+    ESP_LOGI(TAG, "Clearing NVS on boot");
+    nvs_flash_erase();
+    ret = nvs_flash_init();
+    #endif
     ESP_ERROR_CHECK(ret);
 
     /* device_id is MAC-derived — the call below also primes ble_get_device_id()
@@ -39,14 +44,19 @@ void app_main(void)
      * device previously and we're just rebooting), skip BLE entirely and
      * connect directly. wifi_connect_sta → IP_GOT_IP → mqtt_init.
      * Otherwise advertise over BLE so the app can provision us. */
-    if (nvs_config_load(&s_config)) {
-        ESP_LOGI(TAG, "Resuming with NVS creds (ssid=%s, scheme=%s, host=%s) device_id=%s",
-                 s_config.wifi_ssid, s_config.mqtt_scheme, s_config.mqtt_broker, device_id);
-        wifi_connect_sta(s_config.wifi_ssid, s_config.wifi_password);
-    } else {
-        ESP_LOGI(TAG, "No NVS creds — starting BLE provisioning (device_id=%s)", device_id);
-        ble_init();
-    }
+    
+     // comment to test
+    // if (nvs_config_load(&s_config)) {
+    //     ESP_LOGI(TAG, "Resuming with NVS creds (ssid=%s, scheme=%s, host=%s) device_id=%s",
+    //              s_config.wifi_ssid, s_config.mqtt_scheme, s_config.mqtt_broker, device_id);
+    //     wifi_connect_sta(s_config.wifi_ssid, s_config.wifi_password);
+    // } else {
+    //     ESP_LOGI(TAG, "No NVS creds — starting BLE provisioning (device_id=%s)", device_id);
+    //     ble_init();
+    // }
+
+    printf("Starting BLE provisioning (device_id=%s)\n", device_id); 
+    ble_init();
 
 #ifdef MOCK_SLEEPPAD
     sleep_pad_reader_init(device_id, true);
