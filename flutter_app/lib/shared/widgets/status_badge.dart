@@ -81,10 +81,12 @@ class StatusHero extends StatelessWidget {
     super.key,
     this.statusCode,
     this.connection = DeviceLinkState.connecting,
+    this.wsUrl,
   });
 
   final int? statusCode;
   final DeviceLinkState connection;
+  final String? wsUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -112,14 +114,39 @@ class StatusHero extends StatelessWidget {
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              cfg.label,
-              style: GoogleFonts.inter(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: cfg.color,
-                letterSpacing: -0.3,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  cfg.label,
+                  style: GoogleFonts.inter(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: cfg.color,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                if (wsUrl != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _ConnectionDot(connection: connection, small: true),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          wsUrl!,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
           // Connection dot (pulsing when connecting)
@@ -131,8 +158,9 @@ class StatusHero extends StatelessWidget {
 }
 
 class _ConnectionDot extends StatefulWidget {
-  const _ConnectionDot({required this.connection});
+  const _ConnectionDot({required this.connection, this.small = false});
   final DeviceLinkState connection;
+  final bool small;
 
   @override
   State<_ConnectionDot> createState() => _ConnectionDotState();
@@ -164,9 +192,10 @@ class _ConnectionDotState extends State<_ConnectionDot>
       animation: _ctrl,
       builder: (_, __) {
         final opacity = animates ? 0.4 + _ctrl.value * 0.6 : 1.0;
+        final size = widget.small ? 6.0 : 10.0;
         return Container(
-          width: 10,
-          height: 10,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: _dotColor.withValues(alpha: opacity),

@@ -8,16 +8,19 @@ class HomeStatusSection extends StatelessWidget {
     super.key,
     required this.statusCode,
     required this.connection,
+    this.wsUrl,
   });
 
   final int? statusCode;
   final DeviceLinkState connection;
+  final String? wsUrl;
 
   @override
   Widget build(BuildContext context) {
     return StatusHero(
       statusCode: statusCode,
       connection: connection,
+      wsUrl: wsUrl,
     );
   }
 }
