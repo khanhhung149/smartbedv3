@@ -60,7 +60,7 @@ class _DeviceDetailScreenState extends ConsumerState<DeviceDetailScreen> {
           onTap: (i) => _handleNavTap(context, i),
         ),
         body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 88, 24, 32),
+          padding: EdgeInsets.fromLTRB(24, 64 + MediaQuery.of(context).padding.top + 12, 24, MediaQuery.of(context).padding.bottom + 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
