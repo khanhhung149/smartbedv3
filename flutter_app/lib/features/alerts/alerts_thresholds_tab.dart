@@ -30,7 +30,7 @@ class AlertsThresholdsTab extends StatelessWidget {
           child: Text('Failed to load thresholds: $e',
               style: GoogleFonts.inter(color: AppColors.error))),
       data: (thresholds) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).padding.bottom + 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -51,7 +51,6 @@ class AlertsThresholdsTab extends StatelessWidget {
                   style: GoogleFonts.inter(
                       color: AppColors.error, fontSize: AppTextSize.sm)),
             ],
-            const SizedBox(height: 96), // space for sticky save button
           ],
         ),
       ),

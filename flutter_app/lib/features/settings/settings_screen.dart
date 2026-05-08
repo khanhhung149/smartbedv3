@@ -76,7 +76,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(context),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 88, 24, 32),
+        padding: EdgeInsets.fromLTRB(24, 64 + MediaQuery.of(context).padding.top + 12, 24, MediaQuery.of(context).padding.bottom + 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

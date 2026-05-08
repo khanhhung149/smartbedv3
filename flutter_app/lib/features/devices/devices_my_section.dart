@@ -80,13 +80,16 @@ class MyDeviceTile extends StatelessWidget {
                         )),
                     const SizedBox(height: 4),
                     Row(children: [
-                      Text(
-                        AppLocalizations.of(context)!.pairedOn(
-                          _formatPairedDate(device.pairedAt, Localizations.localeOf(context).languageCode),
-                        ),
-                        style: GoogleFonts.inter(
-                          fontSize: AppTextSize.xs,
-                          color: AppColors.onSurfaceVariant,
+                      Flexible(
+                        child: Text(
+                          AppLocalizations.of(context)!.pairedOn(
+                            _formatPairedDate(device.pairedAt, Localizations.localeOf(context).languageCode),
+                          ),
+                          style: GoogleFonts.inter(
+                            fontSize: AppTextSize.xs,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),

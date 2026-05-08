@@ -53,7 +53,7 @@ class _AlertsBodyState extends ConsumerState<AlertsBody> {
         appBar: buildAlertsAppBar(context),
         body: Column(
           children: [
-            const SizedBox(height: 72),
+            SizedBox(height: 64 + MediaQuery.of(context).padding.top),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
               child: AlertsSegmentedControl(
