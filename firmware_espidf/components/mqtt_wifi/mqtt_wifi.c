@@ -234,14 +234,35 @@ void mqtt_init(const char *mqtt_address, const char *client_id, const char *user
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.broker.address.uri = mqtt_address;
     // mqtt_cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
+    /* Best practice would be esp_crt_bundle_attach with the Mozilla bundle
+     * (resilient to Let's Encrypt X1↔X2 rotation), but the full bundle adds
+     * ~150 KB and we're already at ~3% free on the 1.5 MB app partition.
+     * Keep the single ISRG Root X1 pin; revisit when partition is enlarged. */
+    if(strstr(mqtt_address, "mqtts://") == mqtt_address || strstr(mqtt_address, "wss://") == mqtt_address) {
+        mqtt_cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
+    }
+    else {
+        ESP_LOGW(TAG, "MQTT broker URI does not use TLS — skipping certificate attach");
+    }
     mqtt_cfg.credentials.client_id = client_id;
     if (username != NULL && strlen(username) > 0) {
         mqtt_cfg.credentials.username = username;
         mqtt_cfg.credentials.authentication.password = password;
     }
-    mqtt_cfg.session.keepalive = 60;
-    mqtt_cfg.network.timeout_ms = 15000;
-    mqtt_cfg.network.reconnect_timeout_ms = 10000;
+    /* Tuning notes (best-practice for cold MQTT WSS over Cloudflare):
+     *   - timeout_ms 30s: TLS handshake on cold links (DNS warm-up + TCP
+     *     SYN retransmit + cert chain ~3 KB) routinely takes 10-25 s on
+     *     poor signal; 15 s default trips on first try, then auto-reconnect
+     *     succeeds — wasteful and confusing.
+     *   - reconnect_timeout_ms 3s: ESP-MQTT default is 10 s; we drop it so
+     *     a transient dropout recovers within a few seconds (UX matters
+     *     for the pairing flow, not just steady-state telemetry).
+     *   - keepalive 30s: half the default 60 s so the broker flips us
+     *     offline within ~45 s of a hard power loss instead of ~90 s. */
+    mqtt_cfg.session.keepalive            = 30;
+    mqtt_cfg.network.timeout_ms           = 30000;
+    mqtt_cfg.network.reconnect_timeout_ms = 3000;
+    mqtt_cfg.network.disable_auto_reconnect = false;
 
     /* Last Will and Testament — broker auto-publishes when our connection
      * drops without a clean disconnect. Backend's MQTT subscriber watches
