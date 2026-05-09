@@ -44,8 +44,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToLogin() => context.go('/login');
-  void _goToRegister() => context.go('/register');
-
   @override
   void dispose() {
     _controller.dispose();
@@ -89,7 +87,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   _SecondaryButton(
                     pageIndex: _currentPage,
                     onLogin: _goToLogin,
-                    onRegister: _goToRegister,
                   ),
                 ],
               ),
@@ -118,9 +115,7 @@ class _PaginationDots extends StatelessWidget {
       children: List.generate(count, (i) {
         final isActive = i == currentIndex;
         return Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: currentIndex == 2 ? 6 : 6,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: currentIndex == 2 ? 6 : 6),
           child: _dot(i, isActive),
         );
       }),
@@ -132,7 +127,7 @@ class _PaginationDots extends StatelessWidget {
     if (currentIndex == 2 && isActive) {
       return Container(
         width: 32, // w-8
-        height: 8,  // h-2
+        height: 8, // h-2
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.full),
           gradient: const LinearGradient(
@@ -172,13 +167,11 @@ class _PaginationDots extends StatelessWidget {
 
     // Slide 0 (sleep): w-2.5/h-2.5
     return Container(
-      width: 10,  // w-2.5
+      width: 10, // w-2.5
       height: 10, // h-2.5
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isActive
-            ? AppColors.primaryContainer
-            : const Color(0xFF1F2833),
+        color: isActive ? AppColors.primaryContainer : const Color(0xFF1F2833),
       ),
     );
   }
@@ -186,15 +179,10 @@ class _PaginationDots extends StatelessWidget {
 
 // Secondary CTA varies per page
 class _SecondaryButton extends StatelessWidget {
-  const _SecondaryButton({
-    required this.pageIndex,
-    required this.onLogin,
-    required this.onRegister,
-  });
+  const _SecondaryButton({required this.pageIndex, required this.onLogin});
 
   final int pageIndex;
   final VoidCallback onLogin;
-  final VoidCallback onRegister;
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +209,9 @@ class _SecondaryButton extends StatelessWidget {
         onPressed: onLogin,
         style: OutlinedButton.styleFrom(
           side: BorderSide(
-            color: AppColors.outline.withValues(alpha: 0.2), // border-outline/20
+            color: AppColors.outline.withValues(
+              alpha: 0.2,
+            ), // border-outline/20
             width: 1,
           ),
           shape: RoundedRectangleBorder(

@@ -49,19 +49,12 @@ GoRouter _buildRouter(String? initialToken) {
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
       ),
-      GoRoute(
-        path: '/login',
-        builder: (_, __) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (_, __) => const RegisterScreen(),
-      ),
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(
         path: '/verify-email',
-        builder: (context, state) => VerifyEmailScreen(
-          email: state.extra as String? ?? '',
-        ),
+        builder: (context, state) =>
+            VerifyEmailScreen(email: state.extra as String? ?? ''),
       ),
       GoRoute(
         path: '/forgot-password',
@@ -69,9 +62,8 @@ GoRouter _buildRouter(String? initialToken) {
       ),
       GoRoute(
         path: '/reset-password',
-        builder: (context, state) => ResetPasswordScreen(
-          email: state.extra as String? ?? '',
-        ),
+        builder: (context, state) =>
+            ResetPasswordScreen(email: state.extra as String? ?? ''),
       ),
       // ── Main tab routes — all 5 share MainShell with sliding content ──
       GoRoute(
@@ -114,10 +106,7 @@ GoRouter _buildRouter(String? initialToken) {
         path: '/devices',
         builder: (_, __) => const MainShell(initialIndex: 3),
       ),
-      GoRoute(
-        path: '/devices/add',
-        builder: (_, __) => const BleScanScreen(),
-      ),
+      GoRoute(path: '/devices/add', builder: (_, __) => const BleScanScreen()),
       GoRoute(
         path: '/devices/add/wifi',
         builder: (context, state) {
@@ -156,9 +145,8 @@ GoRouter _buildRouter(String? initialToken) {
       // unauthenticated users hit /login first.
       GoRoute(
         path: '/share/accept/:shareId',
-        builder: (context, state) => _ShareAcceptHandler(
-          shareId: state.pathParameters['shareId']!,
-        ),
+        builder: (context, state) =>
+            _ShareAcceptHandler(shareId: state.pathParameters['shareId']!),
       ),
       // ── Settings ─────────────────────────────────────────────────────────
       GoRoute(
@@ -166,10 +154,7 @@ GoRouter _buildRouter(String? initialToken) {
         builder: (_, __) => const MainShell(initialIndex: 4),
       ),
       // Redirect bare root to onboarding
-      GoRoute(
-        path: '/',
-        redirect: (_, __) => '/onboarding',
-      ),
+      GoRoute(path: '/', redirect: (_, __) => '/onboarding'),
     ],
   );
 }
@@ -291,8 +276,7 @@ class _ShareAcceptHandlerState extends ConsumerState<_ShareAcceptHandler> {
       backgroundColor: AppColors.background,
       body: Center(
         child: _error != null
-            ? Text(_error!,
-                style: const TextStyle(color: AppColors.error))
+            ? Text(_error!, style: const TextStyle(color: AppColors.error))
             : const CircularProgressIndicator(
                 color: AppColors.primaryContainer,
                 strokeWidth: 2,

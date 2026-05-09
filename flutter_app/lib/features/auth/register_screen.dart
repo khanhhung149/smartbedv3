@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../l10n/app_localizations.dart';
+import '../../shared/widgets/auth_logo.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
 import 'auth_repository_impl.dart' show AuthException;
@@ -91,120 +91,104 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Header section — gap-4
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Symbols.vital_signs,
-                        size: 24,
-                        color: AppColors.primaryContainer,
-                        weight: 600,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Sleep Tech',
+                  const AuthLogo(),
+                  const SizedBox(height: 16),
+                  Builder(
+                    builder: (ctx) {
+                      final l10n = AppLocalizations.of(ctx)!;
+                      return Text(
+                        l10n.createYourAccount,
                         style: GoogleFonts.inter(
-                          fontSize: 28,
-                          fontWeight: AppFontWeight.bold,
-                          color: AppColors.primaryContainer,
+                          fontSize: AppTextSize.xl2,
+                          fontWeight: AppFontWeight.semiBold,
+                          color: AppColors.onSurface,
                           letterSpacing: -0.5,
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 16),
-                  Builder(builder: (ctx) {
-                    final l10n = AppLocalizations.of(ctx)!;
-                    return Text(
-                      l10n.createYourAccount,
-                      style: GoogleFonts.inter(
-                        fontSize: AppTextSize.xl2,
-                        fontWeight: AppFontWeight.semiBold,
-                        color: AppColors.onSurface,
-                        letterSpacing: -0.5,
-                      ),
-                    );
-                  }),
 
                   const SizedBox(height: 48),
 
-                  Builder(builder: (ctx) {
-                    final l10n = AppLocalizations.of(ctx)!;
-                    return Column(
-                      children: [
-                        StitchTextField(
-                          controller: _emailCtrl,
-                          placeholder: l10n.emailAddress,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                        ),
-                        const SizedBox(height: 20),
-                        StitchTextField(
-                          controller: _passCtrl,
-                          placeholder: l10n.password,
-                          obscureText: true,
-                          showToggle: true,
-                          textInputAction: TextInputAction.next,
-                        ),
-                        const SizedBox(height: 20),
-                        StitchTextField(
-                          controller: _confirmCtrl,
-                          placeholder: l10n.confirmPassword,
-                          obscureText: true,
-                          showToggle: true,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _submit(),
-                        ),
-
-                        if (_errorMsg != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            _errorMsg!,
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.sm,
-                              color: AppColors.error,
-                            ),
+                  Builder(
+                    builder: (ctx) {
+                      final l10n = AppLocalizations.of(ctx)!;
+                      return Column(
+                        children: [
+                          StitchTextField(
+                            controller: _emailCtrl,
+                            placeholder: l10n.emailAddress,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                           ),
-                        ],
+                          const SizedBox(height: 20),
+                          StitchTextField(
+                            controller: _passCtrl,
+                            placeholder: l10n.password,
+                            obscureText: true,
+                            showToggle: true,
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 20),
+                          StitchTextField(
+                            controller: _confirmCtrl,
+                            placeholder: l10n.confirmPassword,
+                            obscureText: true,
+                            showToggle: true,
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _submit(),
+                          ),
 
-                        const SizedBox(height: 24),
-
-                        PrimaryButton(
-                          label: l10n.createAccount,
-                          onPressed: _submit,
-                          isLoading: _loading,
-                        ),
-
-                        const SizedBox(height: 48),
-
-                        RichText(
-                          text: TextSpan(
-                            style: GoogleFonts.inter(
-                              fontSize: AppTextSize.sm,
-                              fontWeight: AppFontWeight.medium,
-                              color: AppColors.onSurfaceVariant,
+                          if (_errorMsg != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _errorMsg!,
+                              style: GoogleFonts.inter(
+                                fontSize: AppTextSize.sm,
+                                color: AppColors.error,
+                              ),
                             ),
-                            children: [
-                              TextSpan(text: l10n.alreadyHaveAccount),
-                              WidgetSpan(
-                                child: GestureDetector(
-                                  onTap: () => context.go('/login'),
-                                  child: Text(
-                                    l10n.logIn,
-                                    style: GoogleFonts.inter(
-                                      fontSize: AppTextSize.sm,
-                                      fontWeight: AppFontWeight.medium,
-                                      color: AppColors.primaryContainer,
+                          ],
+
+                          const SizedBox(height: 24),
+
+                          PrimaryButton(
+                            label: l10n.createAccount,
+                            onPressed: _submit,
+                            isLoading: _loading,
+                          ),
+
+                          const SizedBox(height: 48),
+
+                          RichText(
+                            text: TextSpan(
+                              style: GoogleFonts.inter(
+                                fontSize: AppTextSize.sm,
+                                fontWeight: AppFontWeight.medium,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                              children: [
+                                TextSpan(text: l10n.alreadyHaveAccount),
+                                WidgetSpan(
+                                  child: GestureDetector(
+                                    onTap: () => context.go('/login'),
+                                    child: Text(
+                                      l10n.logIn,
+                                      style: GoogleFonts.inter(
+                                        fontSize: AppTextSize.sm,
+                                        fontWeight: AppFontWeight.medium,
+                                        color: AppColors.primaryContainer,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  }),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),

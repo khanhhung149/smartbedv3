@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../shared/providers/app_env_provider.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../../shared/widgets/auth_logo.dart';
 import '../../shared/services/fcm_service.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/stitch_text_field.dart';
@@ -94,35 +94,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 32),
-                        Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Symbols.monitoring,
-                                size: 24,
-                                color: AppColors.primary,
-                                fill: 1,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Sleep Tech',
-                                style: GoogleFonts.inter(
-                                  fontSize: 28,
-                                  fontWeight: AppFontWeight.bold,
-                                  color: AppColors.primary,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        const Center(child: AuthLogo()),
                         const SizedBox(height: 64),
 
-                        Padding(
-                          padding: const EdgeInsets.only(left: 2),
+                        Center(
                           child: Text(
                             l10n.welcomeBack,
+                            textAlign: TextAlign.center,
                             style: GoogleFonts.inter(
                               fontSize: AppTextSize.xl3,
                               fontWeight: AppFontWeight.medium,

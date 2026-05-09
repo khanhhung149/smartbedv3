@@ -250,6 +250,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get monitorSleepTagline => 'Monitor sleep,\nwithout wearables';
 
   @override
+  String get onboardingSleepSubtitle =>
+      'A sensor under the mattress tracks heart rate, breathing, and sleep quality silently through the night.';
+
+  @override
   String get giveWifi => 'Give your Sleep Tech WiFi';
 
   @override
@@ -273,7 +277,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sharingSubtitle =>
-      'Invite family members by email. They see the same sleep data in real time.';
+      'Invite family members by email. They see the same realtime data and alerts you do.';
 
   @override
   String get sendInvite => 'Send invite';
@@ -300,7 +304,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get alertsSubtitle =>
-      'Set personalized thresholds. Get a notification the moment something changes.';
+      'Set personalized thresholds. Get a notification the moment vitals drift outside your safe range.';
 
   @override
   String get activeNotificationsEnabled => 'Active notifications enabled';

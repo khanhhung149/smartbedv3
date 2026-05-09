@@ -554,6 +554,12 @@ abstract class AppLocalizations {
   /// **'Monitor sleep,\nwithout wearables'**
   String get monitorSleepTagline;
 
+  /// No description provided for @onboardingSleepSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A sensor under the mattress tracks heart rate, breathing, and sleep quality silently through the night.'**
+  String get onboardingSleepSubtitle;
+
   /// No description provided for @giveWifi.
   ///
   /// In en, this message translates to:
@@ -599,7 +605,7 @@ abstract class AppLocalizations {
   /// No description provided for @sharingSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Invite family members by email. They see the same sleep data in real time.'**
+  /// **'Invite family members by email. They see the same realtime data and alerts you do.'**
   String get sharingSubtitle;
 
   /// No description provided for @sendInvite.
@@ -647,7 +653,7 @@ abstract class AppLocalizations {
   /// No description provided for @alertsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Set personalized thresholds. Get a notification the moment something changes.'**
+  /// **'Set personalized thresholds. Get a notification the moment vitals drift outside your safe range.'**
   String get alertsSubtitle;
 
   /// No description provided for @activeNotificationsEnabled.

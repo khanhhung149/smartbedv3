@@ -251,6 +251,10 @@ class AppLocalizationsVi extends AppLocalizations {
       'Theo dõi giấc ngủ,\nkhông cần đeo thiết bị';
 
   @override
+  String get onboardingSleepSubtitle =>
+      'Cảm biến đặt dưới nệm sẽ theo dõi nhịp tim, nhịp thở và chất lượng giấc ngủ một cách êm ái suốt đêm.';
+
+  @override
   String get giveWifi => 'Kết nối WiFi cho Sleep Tech';
 
   @override
@@ -274,7 +278,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get sharingSubtitle =>
-      'Mời thành viên gia đình qua email. Họ xem cùng dữ liệu giấc ngủ theo thời gian thực.';
+      'Mời thành viên gia đình qua email. Họ sẽ thấy cùng dữ liệu thời gian thực và cảnh báo như bạn.';
 
   @override
   String get sendInvite => 'Gửi lời mời';
@@ -301,7 +305,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get alertsSubtitle =>
-      'Đặt ngưỡng cá nhân. Nhận thông báo ngay khi có thay đổi.';
+      'Đặt ngưỡng cá nhân. Nhận thông báo ngay khi chỉ số sinh hiệu vượt ra ngoài vùng an toàn của bạn.';
 
   @override
   String get activeNotificationsEnabled => 'Thông báo đang bật';

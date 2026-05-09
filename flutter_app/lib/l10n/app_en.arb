@@ -116,6 +116,7 @@
   "setupSleepPad": "Setup Sleep Tech",
   "sleepPadReady": "Sleep Tech is ready",
   "monitorSleepTagline": "Monitor sleep,\nwithout wearables",
+  "onboardingSleepSubtitle": "A sensor under the mattress tracks heart rate, breathing, and sleep quality silently through the night.",
   "giveWifi": "Give your Sleep Tech WiFi",
   "wifiDescription": "Your Sleep Tech will use this network to send data to the cloud.",
   "networkName": "Network Name (SSID)",
@@ -124,7 +125,7 @@
   "pairingDuration": "This usually takes 10–30 seconds",
 
   "sharingTitle": "Share peace of mind",
-  "sharingSubtitle": "Invite family members by email. They see the same sleep data in real time.",
+  "sharingSubtitle": "Invite family members by email. They see the same realtime data and alerts you do.",
   "sendInvite": "Send invite",
   "pendingInvites": "PENDING INVITES",
   "noDevicesShared": "No devices shared with you.",
@@ -138,7 +139,7 @@
   "alerts": "Alerts",
   "alertDetail": "Alert Detail",
   "knowIfSomethingOff": "Know if something's off",
-  "alertsSubtitle": "Set personalized thresholds. Get a notification the moment something changes.",
+  "alertsSubtitle": "Set personalized thresholds. Get a notification the moment vitals drift outside your safe range.",
   "activeNotificationsEnabled": "Active notifications enabled",
 
   "sleepHistory": "Sleep History",

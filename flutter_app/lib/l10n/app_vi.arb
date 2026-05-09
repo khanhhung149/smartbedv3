@@ -116,6 +116,7 @@
   "setupSleepPad": "Cài đặt Sleep Tech",
   "sleepPadReady": "Sleep Tech đã sẵn sàng",
   "monitorSleepTagline": "Theo dõi giấc ngủ,\nkhông cần đeo thiết bị",
+  "onboardingSleepSubtitle": "Cảm biến đặt dưới nệm sẽ theo dõi nhịp tim, nhịp thở và chất lượng giấc ngủ một cách êm ái suốt đêm.",
   "giveWifi": "Kết nối WiFi cho Sleep Tech",
   "wifiDescription": "Sleep Tech sẽ dùng mạng này để gửi dữ liệu lên đám mây.",
   "networkName": "Tên mạng (SSID)",
@@ -124,7 +125,7 @@
   "pairingDuration": "Thường mất 10–30 giây",
 
   "sharingTitle": "Chia sẻ sự an tâm",
-  "sharingSubtitle": "Mời thành viên gia đình qua email. Họ xem cùng dữ liệu giấc ngủ theo thời gian thực.",
+  "sharingSubtitle": "Mời thành viên gia đình qua email. Họ sẽ thấy cùng dữ liệu thời gian thực và cảnh báo như bạn.",
   "sendInvite": "Gửi lời mời",
   "pendingInvites": "LỜI MỜI CHỜ XỬ LÝ",
   "noDevicesShared": "Chưa có thiết bị nào được chia sẻ với bạn.",
@@ -138,7 +139,7 @@
   "alerts": "Cảnh báo",
   "alertDetail": "Chi tiết cảnh báo",
   "knowIfSomethingOff": "Biết ngay khi có bất thường",
-  "alertsSubtitle": "Đặt ngưỡng cá nhân. Nhận thông báo ngay khi có thay đổi.",
+  "alertsSubtitle": "Đặt ngưỡng cá nhân. Nhận thông báo ngay khi chỉ số sinh hiệu vượt ra ngoài vùng an toàn của bạn.",
   "activeNotificationsEnabled": "Thông báo đang bật",
 
   "sleepHistory": "Lịch sử giấc ngủ",
