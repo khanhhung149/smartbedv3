@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 import asyncpg
 import redis.asyncio as redis
@@ -9,14 +10,23 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
 
 from auth.service import decode_access_token
-from data.models import HistoryPoint, HistoryRange, HistoryResponse, RealtimeData
-from data.service import get_history, get_latest_sec, user_can_access_device
+from data.models import (
+    HistoryPoint,
+    HistoryRange,
+    HistoryResponse,
+    RealtimeData,
+    SyncDataResponse,
+    SyncSleepPadPoint,
+    SyncWatchPoint,
+)
+from data.service import get_history, get_latest_sec, get_sync_data, user_can_access_device
 from database import get_db_pool_from_request
 from dependencies import get_current_user_id
 
@@ -52,6 +62,28 @@ async def history(
     return HistoryResponse(
         range=range,
         points=[HistoryPoint(**r) for r in rows],
+    )
+
+
+@router.get("/data/sync", response_model=SyncDataResponse)
+async def sync_data(
+    from_time: datetime = Query(alias="from"),
+    to_time: datetime = Query(alias="to"),
+    user_id=Depends(get_current_user_id),
+    pool: asyncpg.Pool = Depends(get_db_pool_from_request),
+) -> SyncDataResponse:
+    if from_time.tzinfo is None:
+        from_time = from_time.replace(tzinfo=timezone.utc)
+    if to_time.tzinfo is None:
+        to_time = to_time.replace(tzinfo=timezone.utc)
+    if from_time > to_time:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "from must be before to")
+    sleep_pad, smart_watch = await get_sync_data(pool, user_id, from_time, to_time)
+    return SyncDataResponse(
+        from_time=from_time,
+        to_time=to_time,
+        sleep_pad=[SyncSleepPadPoint(**row) for row in sleep_pad],
+        smart_watch=[SyncWatchPoint(**row) for row in smart_watch],
     )
 
 

@@ -1,5 +1,6 @@
 """TimescaleDB queries for data endpoints."""
 
+import json
 from uuid import UUID
 
 import asyncpg
@@ -69,3 +70,53 @@ async def get_history(
     """
     rows = await pool.fetch(sql, device_id)
     return [dict(r) for r in rows]
+
+
+async def get_sync_data(
+    pool: asyncpg.Pool,
+    user_id: UUID,
+    from_time,
+    to_time,
+) -> tuple[list[dict], list[dict]]:
+    """Return sleep pad and smart watch data for the same user-owned/shared window."""
+    sleep_rows = await pool.fetch(
+        """
+        SELECT m.time, m.device_id, m.status, m.heart_rate, m.resp_rate,
+               m.movement, m.snore_count, m.resp_disorder, m.pthd, m.temp
+        FROM min_data m
+        JOIN devices d ON d.id = m.device_id
+        LEFT JOIN device_shares s
+          ON s.device_id = d.id
+          AND s.shared_with_id = $1
+          AND s.accepted = TRUE
+        WHERE m.time >= $2
+          AND m.time <= $3
+          AND d.device_type = 'sleep_pad'
+          AND (d.owner_id = $1 OR s.id IS NOT NULL)
+        ORDER BY m.time ASC
+        """,
+        user_id,
+        from_time,
+        to_time,
+    )
+    watch_rows = await pool.fetch(
+        """
+        SELECT time, received_at, device_id, type, hash, raw_data, batch_hash, meta
+        FROM watch_data
+        WHERE user_id = $1
+          AND time >= $2
+          AND time <= $3
+        ORDER BY time ASC
+        """,
+        user_id,
+        from_time,
+        to_time,
+    )
+    watch_result = []
+    for row in watch_rows:
+        item = dict(row)
+        for key in ("raw_data", "meta"):
+            if isinstance(item.get(key), str):
+                item[key] = json.loads(item[key])
+        watch_result.append(item)
+    return [dict(r) for r in sleep_rows], watch_result
