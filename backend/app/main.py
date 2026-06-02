@@ -24,6 +24,8 @@ from fcm import init_fcm
 from mqtt.subscriber import run_subscriber
 from redis_client import redis_lifespan
 from sharing.router import router as sharing_router
+from watch.router import router as watch_router
+from watch.worker import run_watch_data_worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -54,7 +56,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             run_alert_engine(pool, app.state.redis, stop_event),
             name="alert-engine",
         )
-        stack.push_async_callback(_stop_tasks, stop_event, [mqtt_task, alerts_task])
+        watch_task = asyncio.create_task(
+            run_watch_data_worker(pool, app.state.redis, stop_event),
+            name="watch-data-worker",
+        )
+        stack.push_async_callback(_stop_tasks, stop_event, [mqtt_task, alerts_task, watch_task])
 
         yield
 
@@ -96,6 +102,7 @@ app.include_router(data_router)
 app.include_router(alerts_router)
 app.include_router(sharing_router)
 app.include_router(contact_router)
+app.include_router(watch_router)
 
 
 @app.get("/health")

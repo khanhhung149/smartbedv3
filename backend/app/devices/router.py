@@ -17,6 +17,14 @@ from redis_client import get_redis_from_request
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
+VALID_DEVICE_TYPES = {"sleep_pad", "smart_watch"}
+
+
+def _validate_device_type(device_type: str | None) -> str | None:
+    if device_type is not None and device_type not in VALID_DEVICE_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid device_type")
+    return device_type
+
 
 def _mqtt_scheme_from_domain(domain: str) -> str:
     """Infer scheme Flutter should tell ESP32 to use. wss:// → wss, ws:// → tcp-ws, else tcp."""
@@ -67,11 +75,17 @@ async def pair(
 
 @router.get("/mine", response_model=list[DeviceOut])
 async def list_mine(
+    device_type: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
     pool: asyncpg.Pool = Depends(get_db_pool_from_request),
     rds: redis.Redis = Depends(get_redis_from_request),
 ) -> list[DeviceOut]:
-    rows = await list_user_devices(pool, rds, user_id)
+    rows = await list_user_devices(
+        pool,
+        rds,
+        user_id,
+        _validate_device_type(device_type),
+    )
     return [DeviceOut(**row) for row in rows]
 
 
@@ -86,26 +100,33 @@ async def remove(
 
     Side effects:
     - DB cascade deletes thresholds, alerts, and shares (FKs ON DELETE CASCADE).
-    - Publishes a retained `factory_reset` command to `sleeppad/{id}/cmd` so
-      the physical device wipes its NVS and restarts into BLE provisioning
-      mode — ready to be re-paired by any account.  Retained flag guarantees
-      offline devices also receive the reset on next reconnect.
+    - Sleep pads publish a retained `factory_reset` command to
+      `sleeppad/{id}/cmd` so the physical device wipes its NVS and restarts
+      into BLE provisioning mode. Smart watches only remove server records.
     """
-    deleted = await remove_device(pool, rds, user_id, device_id)
-    if not deleted:
+    deleted_device_type = await remove_device(pool, rds, user_id, device_id)
+    if deleted_device_type is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
     # Fire-and-forget publish; DB change is authoritative either way.
-    await publish_device_cmd(device_id, "factory_reset", retain=True)
+    if deleted_device_type == "sleep_pad":
+        await publish_device_cmd(device_id, "factory_reset", retain=True)
 
 
 @router.get("/{device_id}/status", response_model=DeviceStatus)
 async def device_status(
     device_id: str,
+    device_type: str | None = None,
     user_id: UUID = Depends(get_current_user_id),
     pool: asyncpg.Pool = Depends(get_db_pool_from_request),
     rds: redis.Redis = Depends(get_redis_from_request),
 ) -> DeviceStatus:
-    row = await get_device_status(pool, rds, user_id, device_id)
+    row = await get_device_status(
+        pool,
+        rds,
+        user_id,
+        device_id,
+        _validate_device_type(device_type),
+    )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
     return DeviceStatus(**row)

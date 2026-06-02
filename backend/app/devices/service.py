@@ -59,16 +59,21 @@ async def warm_paired_cache(pool: asyncpg.Pool, rds: redis.Redis) -> int:
 
 
 async def list_user_devices(
-    pool: asyncpg.Pool, rds: redis.Redis, user_id: UUID
+    pool: asyncpg.Pool,
+    rds: redis.Redis,
+    user_id: UUID,
+    device_type: str | None = None,
 ) -> list[dict]:
     rows = await pool.fetch(
         """
-        SELECT id AS device_id, name, paired_at, last_seen
+        SELECT id AS device_id, device_type, name, paired_at, last_seen
         FROM devices
         WHERE owner_id = $1
+          AND ($2::text IS NULL OR device_type = $2)
         ORDER BY paired_at ASC
         """,
         user_id,
+        device_type,
     )
     result: list[dict] = []
     for row in rows:
@@ -78,13 +83,19 @@ async def list_user_devices(
 
 
 async def get_device_status(
-    pool: asyncpg.Pool, rds: redis.Redis, user_id: UUID, device_id: str
+    pool: asyncpg.Pool,
+    rds: redis.Redis,
+    user_id: UUID,
+    device_id: str,
+    device_type: str | None = None,
 ) -> dict | None:
     row = await pool.fetchrow(
-        "SELECT id AS device_id, last_seen FROM devices "
-        "WHERE id = $1 AND owner_id = $2",
+        "SELECT id AS device_id, device_type, last_seen FROM devices "
+        "WHERE id = $1 AND owner_id = $2 "
+        "AND ($3::text IS NULL OR device_type = $3)",
         device_id,
         user_id,
+        device_type,
     )
     if row is None:
         return None
@@ -102,21 +113,24 @@ async def _is_online(rds: redis.Redis, device_id: str) -> bool:
 
 async def remove_device(
     pool: asyncpg.Pool, rds: redis.Redis, owner_id: UUID, device_id: str
-) -> bool:
+) -> str | None:
     """Delete device row (cascade removes alerts/thresholds/shares via FK).
-    Returns True if deleted, False if not owned by caller or not found.
-    Caller is expected to publish the retained factory_reset MQTT command
-    separately so the physical device wipes its NVS."""
-    result = await pool.execute(
-        "DELETE FROM devices WHERE id = $1 AND owner_id = $2",
+    Returns deleted device_type, or None if not owned by caller or not found.
+    Caller decides which device types need physical reset side effects."""
+    row = await pool.fetchrow(
+        """
+        DELETE FROM devices
+        WHERE id = $1 AND owner_id = $2
+        RETURNING device_type
+        """,
         device_id,
         owner_id,
     )
-    deleted = result.endswith(" 1")
-    if deleted:
-        try:
-            await rds.srem(PAIRED_DEVICES_KEY, device_id)
-            await rds.delete(online_key(device_id))
-        except Exception:
-            pass
-    return deleted
+    if row is None:
+        return None
+    try:
+        await rds.srem(PAIRED_DEVICES_KEY, device_id)
+        await rds.delete(online_key(device_id))
+    except Exception:
+        pass
+    return row["device_type"]

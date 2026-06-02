@@ -12,6 +12,7 @@ class DevicePair(BaseModel):
 
 class DeviceOut(BaseModel):
     device_id: str
+    device_type: str = "sleep_pad"
     name: str | None
     paired_at: datetime
     last_seen: datetime | None
@@ -33,5 +34,6 @@ class DevicePairOut(DeviceOut):
 
 class DeviceStatus(BaseModel):
     device_id: str
+    device_type: str = "sleep_pad"
     online: bool
     last_seen: datetime | None
