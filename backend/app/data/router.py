@@ -1,6 +1,7 @@
 """Data endpoints — realtime + history REST + WebSocket stream."""
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -26,9 +27,17 @@ from data.models import (
     SyncSleepPadPoint,
     SyncWatchPoint,
 )
-from data.service import get_history, get_latest_sec, get_sync_data, user_can_access_device
+from data.service import (
+    get_history,
+    get_latest_sec,
+    get_sync_data,
+    get_user_device_ids,
+    get_watch_snapshot,
+    user_can_access_device,
+)
 from database import get_db_pool_from_request
 from dependencies import get_current_user_id
+from redis_client import online_key
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +94,182 @@ async def sync_data(
         sleep_pad=[SyncSleepPadPoint(**row) for row in sleep_pad],
         smart_watch=[SyncWatchPoint(**row) for row in smart_watch],
     )
+
+
+# ── /ws/user — user-keyed combined stream (sleep pad + watch) ──────────────────
+# NOTE: must be registered BEFORE /ws/{device_id}; Starlette matches routes in
+# definition order, so the literal /ws/user would otherwise be captured by the
+# /ws/{device_id} path param (device_id="user").
+
+
+def _merge_pad_frame(pad: dict, frame: dict) -> None:
+    """Merge a sec/min frame into the running pad snapshot (last-known wins).
+
+    sec frames carry hr/rr/status; min frames add movement/snore/temp. Missing
+    fields preserve the previous value so the UI never blanks between frame types.
+    """
+    pad["device_id"] = frame.get("device_id", pad.get("device_id"))
+    if frame.get("heart_rate") is not None:
+        pad["hr"] = frame["heart_rate"]
+    if frame.get("resp_rate") is not None:
+        pad["rr"] = frame["resp_rate"]
+    if frame.get("temp") is not None:
+        pad["temp"] = frame["temp"]
+    if frame.get("movement") is not None:
+        pad["movement"] = frame["movement"]
+    if frame.get("snore_count") is not None:
+        pad["snore"] = frame["snore_count"]
+    if frame.get("status") is not None:
+        pad["status"] = frame["status"]
+
+
+async def _pad_online(rds: redis.Redis, device_ids: list[str]) -> bool:
+    """True if any of the user's sleep pads has a live online flag in Redis."""
+    for d in device_ids:
+        try:
+            if await rds.get(online_key(d)):
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+    return False
+
+
+def _watch_payload(snapshot: dict | None, watch_ids: list[str]) -> dict | None:
+    """Watch slice of the combined payload.
+
+    Falls back to a metrics-empty object when the user owns a watch but has no
+    synced data yet — so the Home status row still shows "Watch · Not synced"
+    instead of hiding the device entirely.
+    """
+    if snapshot:
+        return snapshot
+    if watch_ids:
+        return {
+            "device_id": watch_ids[0],
+            "synced_at": None,
+            "spo2": None,
+            "steps": None,
+            "systolic": None,
+            "diastolic": None,
+        }
+    return None
+
+
+def _build_combined(pad: dict | None, watch: dict | None, pad_online: bool) -> str:
+    pad_out = None
+    if pad and pad.get("device_id"):
+        pad_out = {
+            "device_id": pad.get("device_id"),
+            "online": pad_online,
+            "hr": pad.get("hr"),
+            "rr": pad.get("rr"),
+            "temp": pad.get("temp"),
+            "movement": pad.get("movement"),
+            "snore": pad.get("snore"),
+            "status": pad.get("status"),
+        }
+    return json.dumps(
+        {
+            "type": "combined",
+            "ts": int(datetime.now(tz=timezone.utc).timestamp()),
+            "pad": pad_out,
+            "watch": watch,
+        },
+        separators=(",", ":"),
+    )
+
+
+@router.websocket("/ws/user")
+async def websocket_user(
+    websocket: WebSocket,
+    token: str | None = None,
+) -> None:
+    """Combined realtime stream for the authenticated user.
+
+    Fans in all owned/shared sleep_pad realtime channels and attaches the latest
+    smartwatch snapshot (SpO2, steps, blood pressure). Auth via ?token=... JWT.
+    """
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="missing token")
+        return
+    try:
+        user_id = decode_access_token(token)
+    except ValueError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="invalid token")
+        return
+
+    pool: asyncpg.Pool = websocket.app.state.db_pool
+    rds: redis.Redis = websocket.app.state.redis
+
+    ids = await get_user_device_ids(pool, user_id)
+    pad_ids = ids["sleep_pad"]
+    watch_ids = ids["watch"]
+
+    await websocket.accept()
+
+    # Seed the pad device id so an offline pad (no frames yet) still surfaces in
+    # the status row as "Sleep Pad · Offline" rather than disappearing.
+    pad: dict = {"device_id": pad_ids[0]} if pad_ids else {}
+    watch = _watch_payload(await get_watch_snapshot(pool, user_id), watch_ids)
+    pad_online = await _pad_online(rds, pad_ids)
+
+    pubsub = rds.pubsub()
+    channels = [f"realtime:{d}" for d in pad_ids]
+    try:
+        if channels:
+            await pubsub.subscribe(*channels)
+
+        # Initial frame so the client renders immediately on connect.
+        await websocket.send_text(_build_combined(pad or None, watch, pad_online))
+
+        while True:
+            msg = (
+                await pubsub.get_message(ignore_subscribe_messages=True, timeout=30)
+                if channels
+                else None
+            )
+            if msg is None:
+                # Heartbeat: refresh slow-moving state (watch snapshot, pad online).
+                watch = _watch_payload(await get_watch_snapshot(pool, user_id), watch_ids)
+                pad_online = await _pad_online(rds, pad_ids)
+                try:
+                    await websocket.send_text('{"type":"ping"}')
+                    await websocket.send_text(
+                        _build_combined(pad or None, watch, pad_online)
+                    )
+                except WebSocketDisconnect:
+                    break
+                if not channels:
+                    # No pad channels to await — sleep before next heartbeat.
+                    await asyncio.sleep(30)
+                continue
+
+            data = msg.get("data")
+            if data is None:
+                continue
+            if isinstance(data, bytes):
+                data = data.decode()
+            try:
+                frame = json.loads(data)
+            except (TypeError, ValueError):
+                continue
+            _merge_pad_frame(pad, frame)
+            pad_online = True  # a frame just arrived from a pad
+            try:
+                await websocket.send_text(_build_combined(pad, watch, pad_online))
+            except WebSocketDisconnect:
+                break
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ws/user error user=%s: %s", user_id, exc)
+    finally:
+        try:
+            if channels:
+                await pubsub.unsubscribe(*channels)
+            await pubsub.aclose()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @router.websocket("/ws/{device_id}")
