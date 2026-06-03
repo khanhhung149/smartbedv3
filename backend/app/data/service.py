@@ -98,9 +98,12 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
         "device_id": None,
         "synced_at": None,
         "spo2": None,
+        "spo2_at": None,
         "steps": None,
+        "steps_at": None,
         "systolic": None,
         "diastolic": None,
+        "bp_at": None,
     }
     latest_time = None
     for row in rows:
@@ -108,19 +111,24 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
         if isinstance(raw, str):
             raw = json.loads(raw)
         snap["device_id"] = snap["device_id"] or row["device_id"]
+        # Per-metric measurement time (UTC ISO) — client converts to local.
+        row_at = row["time"].isoformat() if row["time"] else None
         if latest_time is None or row["time"] > latest_time:
             latest_time = row["time"]
         if row["type"] == "combined":
             spo2 = _num(raw.get("bloodOxygen"))
             snap["spo2"] = int(spo2) if spo2 else None
+            snap["spo2_at"] = row_at
         elif row["type"] == "step":
             steps = _num(raw.get("step"))
             snap["steps"] = int(steps) if steps is not None else None
+            snap["steps_at"] = row_at
         elif row["type"] == "blood_pressure":
             sys = _num(raw.get("systolicBloodPressure"))
             dia = _num(raw.get("diastolicBloodPressure"))
             snap["systolic"] = int(sys) if sys else None
             snap["diastolic"] = int(dia) if dia else None
+            snap["bp_at"] = row_at
     snap["synced_at"] = latest_time.isoformat() if latest_time else None
     return snap
 

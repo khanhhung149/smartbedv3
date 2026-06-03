@@ -107,18 +107,26 @@ def _merge_pad_frame(pad: dict, frame: dict) -> None:
 
     sec frames carry hr/rr/status; min frames add movement/snore/temp. Missing
     fields preserve the previous value so the UI never blanks between frame types.
+    Records a per-field receive timestamp (UTC ISO) so the client can show when
+    each metric was last updated; only refreshed when the field actually arrives.
     """
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
     pad["device_id"] = frame.get("device_id", pad.get("device_id"))
     if frame.get("heart_rate") is not None:
         pad["hr"] = frame["heart_rate"]
+        pad["hr_at"] = now_iso
     if frame.get("resp_rate") is not None:
         pad["rr"] = frame["resp_rate"]
+        pad["rr_at"] = now_iso
     if frame.get("temp") is not None:
         pad["temp"] = frame["temp"]
+        pad["temp_at"] = now_iso
     if frame.get("movement") is not None:
         pad["movement"] = frame["movement"]
+        pad["movement_at"] = now_iso
     if frame.get("snore_count") is not None:
         pad["snore"] = frame["snore_count"]
+        pad["snore_at"] = now_iso
     if frame.get("status") is not None:
         pad["status"] = frame["status"]
 
@@ -148,9 +156,12 @@ def _watch_payload(snapshot: dict | None, watch_ids: list[str]) -> dict | None:
             "device_id": watch_ids[0],
             "synced_at": None,
             "spo2": None,
+            "spo2_at": None,
             "steps": None,
+            "steps_at": None,
             "systolic": None,
             "diastolic": None,
+            "bp_at": None,
         }
     return None
 
@@ -162,10 +173,15 @@ def _build_combined(pad: dict | None, watch: dict | None, pad_online: bool) -> s
             "device_id": pad.get("device_id"),
             "online": pad_online,
             "hr": pad.get("hr"),
+            "hr_at": pad.get("hr_at"),
             "rr": pad.get("rr"),
+            "rr_at": pad.get("rr_at"),
             "temp": pad.get("temp"),
+            "temp_at": pad.get("temp_at"),
             "movement": pad.get("movement"),
+            "movement_at": pad.get("movement_at"),
             "snore": pad.get("snore"),
+            "snore_at": pad.get("snore_at"),
             "status": pad.get("status"),
         }
     return json.dumps(
