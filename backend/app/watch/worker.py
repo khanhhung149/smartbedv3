@@ -89,6 +89,15 @@ async def _handle_job(pool: asyncpg.Pool, rds: redis.Redis, raw_job: str) -> Non
         await _mark_watch_seen(pool, rds, device_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("watch seen update failed device=%s: %s", device_id, exc)
+
+    # Notify any open /ws/user stream for this user so it pushes the fresh watch
+    # snapshot immediately instead of waiting for the periodic refresh.
+    if inserted > 0:
+        try:
+            await rds.publish(f"watch_update:{user_id}", "1")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("watch update publish failed user=%s: %s", user_id, exc)
+
     logger.info(
         "watch job processed device=%s total=%d inserted=%d skipped=%d",
         device_id,

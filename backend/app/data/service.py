@@ -104,6 +104,10 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
         "systolic": None,
         "diastolic": None,
         "bp_at": None,
+        "hrv": None,
+        "hrv_at": None,
+        "blood_glucose": None,
+        "glucose_at": None,
     }
     latest_time = None
     for row in rows:
@@ -119,6 +123,12 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
             spo2 = _num(raw.get("bloodOxygen"))
             snap["spo2"] = int(spo2) if spo2 else None
             snap["spo2_at"] = row_at
+            hrv = _num(raw.get("hrv"))
+            snap["hrv"] = int(hrv) if hrv else None
+            snap["hrv_at"] = row_at
+            glucose = _num(raw.get("bloodGlucose"))
+            snap["blood_glucose"] = glucose if glucose else None
+            snap["glucose_at"] = row_at
         elif row["type"] == "step":
             steps = _num(raw.get("step"))
             snap["steps"] = int(steps) if steps is not None else None

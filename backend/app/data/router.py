@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 import asyncpg
@@ -162,6 +163,10 @@ def _watch_payload(snapshot: dict | None, watch_ids: list[str]) -> dict | None:
             "systolic": None,
             "diastolic": None,
             "bp_at": None,
+            "hrv": None,
+            "hrv_at": None,
+            "blood_glucose": None,
+            "glucose_at": None,
         }
     return None
 
@@ -230,23 +235,36 @@ async def websocket_user(
     pad_online = await _pad_online(rds, pad_ids)
 
     pubsub = rds.pubsub()
-    channels = [f"realtime:{d}" for d in pad_ids]
+    pad_channels = [f"realtime:{d}" for d in pad_ids]
+    # Per-user channel the watch worker publishes to after ingesting new data —
+    # lets us push the fresh watch snapshot immediately instead of waiting.
+    watch_channel = f"watch_update:{user_id}"
+    all_channels = [*pad_channels, watch_channel]
+
+    # Cap watch-snapshot staleness even when the pad streams continuously (a
+    # pad emits ~1 frame/s, so the 30s heartbeat branch would otherwise never
+    # run and the watch snapshot would only load once at connect).
+    last_watch_refresh = time.monotonic()
+    refresh_interval = 10  # seconds
+
     try:
-        if channels:
-            await pubsub.subscribe(*channels)
+        await pubsub.subscribe(*all_channels)
 
         # Initial frame so the client renders immediately on connect.
         await websocket.send_text(_build_combined(pad or None, watch, pad_online))
 
         while True:
-            msg = (
-                await pubsub.get_message(ignore_subscribe_messages=True, timeout=30)
-                if channels
-                else None
+            msg = await pubsub.get_message(
+                ignore_subscribe_messages=True, timeout=30
             )
+            now = time.monotonic()
+
             if msg is None:
-                # Heartbeat: refresh slow-moving state (watch snapshot, pad online).
-                watch = _watch_payload(await get_watch_snapshot(pool, user_id), watch_ids)
+                # Heartbeat: refresh slow-moving state + keep WS alive.
+                watch = _watch_payload(
+                    await get_watch_snapshot(pool, user_id), watch_ids
+                )
+                last_watch_refresh = now
                 pad_online = await _pad_online(rds, pad_ids)
                 try:
                     await websocket.send_text('{"type":"ping"}')
@@ -255,11 +273,27 @@ async def websocket_user(
                     )
                 except WebSocketDisconnect:
                     break
-                if not channels:
-                    # No pad channels to await — sleep before next heartbeat.
-                    await asyncio.sleep(30)
                 continue
 
+            channel = msg.get("channel")
+            if isinstance(channel, bytes):
+                channel = channel.decode()
+
+            if channel == watch_channel:
+                # Watch just synced new data — refresh + push immediately.
+                watch = _watch_payload(
+                    await get_watch_snapshot(pool, user_id), watch_ids
+                )
+                last_watch_refresh = now
+                try:
+                    await websocket.send_text(
+                        _build_combined(pad or None, watch, pad_online)
+                    )
+                except WebSocketDisconnect:
+                    break
+                continue
+
+            # Pad realtime frame.
             data = msg.get("data")
             if data is None:
                 continue
@@ -271,6 +305,12 @@ async def websocket_user(
                 continue
             _merge_pad_frame(pad, frame)
             pad_online = True  # a frame just arrived from a pad
+            # Refresh the watch snapshot periodically while pad frames flow.
+            if now - last_watch_refresh >= refresh_interval:
+                watch = _watch_payload(
+                    await get_watch_snapshot(pool, user_id), watch_ids
+                )
+                last_watch_refresh = now
             try:
                 await websocket.send_text(_build_combined(pad, watch, pad_online))
             except WebSocketDisconnect:
@@ -281,8 +321,7 @@ async def websocket_user(
         logger.warning("ws/user error user=%s: %s", user_id, exc)
     finally:
         try:
-            if channels:
-                await pubsub.unsubscribe(*channels)
+            await pubsub.unsubscribe(*all_channels)
             await pubsub.aclose()
         except Exception:  # noqa: BLE001
             pass
