@@ -106,10 +106,12 @@ async def sync_data(
 def _merge_pad_frame(pad: dict, frame: dict) -> None:
     """Merge a sec/min frame into the running pad snapshot (last-known wins).
 
-    sec frames carry hr/rr/status; min frames add movement/snore/temp. Missing
-    fields preserve the previous value so the UI never blanks between frame types.
-    Records a per-field receive timestamp (UTC ISO) so the client can show when
-    each metric was last updated; only refreshed when the field actually arrives.
+    sec frames carry hr/rr/status; min frames add movement/snore. Ambient
+    temperature + humidity arrive on a separate /temp frame (env_temp/humidity).
+    Missing fields preserve the previous value so the UI never blanks between
+    frame types. Records a per-field receive timestamp (UTC ISO) so the client
+    can show when each metric was last updated; only refreshed when the field
+    actually arrives.
     """
     now_iso = datetime.now(tz=timezone.utc).isoformat()
     pad["device_id"] = frame.get("device_id", pad.get("device_id"))
@@ -119,9 +121,13 @@ def _merge_pad_frame(pad: dict, frame: dict) -> None:
     if frame.get("resp_rate") is not None:
         pad["rr"] = frame["resp_rate"]
         pad["rr_at"] = now_iso
-    if frame.get("temp") is not None:
-        pad["temp"] = frame["temp"]
+    # Ambient temperature from the /temp topic (NOT MinData.temp body temp).
+    if frame.get("env_temp") is not None:
+        pad["temp"] = frame["env_temp"]
         pad["temp_at"] = now_iso
+    if frame.get("humidity") is not None:
+        pad["humidity"] = frame["humidity"]
+        pad["humidity_at"] = now_iso
     if frame.get("movement") is not None:
         pad["movement"] = frame["movement"]
         pad["movement_at"] = now_iso
@@ -183,6 +189,8 @@ def _build_combined(pad: dict | None, watch: dict | None, pad_online: bool) -> s
             "rr_at": pad.get("rr_at"),
             "temp": pad.get("temp"),
             "temp_at": pad.get("temp_at"),
+            "humidity": pad.get("humidity"),
+            "humidity_at": pad.get("humidity_at"),
             "movement": pad.get("movement"),
             "movement_at": pad.get("movement_at"),
             "snore": pad.get("snore"),

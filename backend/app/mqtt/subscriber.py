@@ -17,6 +17,7 @@ Design notes:
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -25,7 +26,7 @@ import asyncpg
 import redis.asyncio as redis
 
 from config import get_settings
-from mqtt.parser import device_id_from_topic, parse_min, parse_sec
+from mqtt.parser import device_id_from_topic, parse_env, parse_min, parse_sec
 from redis_client import PAIRED_DEVICES_KEY, online_key
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ async def run_subscriber(pool: asyncpg.Pool, rds: redis.Redis, stop: asyncio.Eve
                 backoff = 1
                 await client.subscribe("sleeppad/+/sec")
                 await client.subscribe("sleeppad/+/min")
+                await client.subscribe("sleeppad/+/temp")
                 await client.subscribe("sleeppad/+/status")
                 async for msg in client.messages:
                     if stop.is_set():
@@ -123,8 +125,30 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
         await _insert_min(pool, now, payload)
         await _mark_online(pool, rds, device_id, now)
         # Also forward min frames to the realtime channel so the app can show
-        # the fields only present in min (movement, snore_count, temp).
+        # the fields only present in min (movement, snore_count).
+        # NOTE: MinData.temp is body temp (currently 0); ambient temperature
+        # comes from the /temp topic below and is what the app displays.
         await rds.publish(f"realtime:{device_id}", payload.model_dump_json())
+    elif topic.endswith("/temp"):
+        payload = parse_env(msg.payload)
+        if payload is None or payload.device_id != device_id:
+            return
+        await _mark_online(pool, rds, device_id, now)
+        # Forward ambient temp + humidity on the realtime channel using distinct
+        # keys so they don't collide with MinData.temp (body temp). /ws/user maps
+        # env_temp → pad.temp and humidity → pad.humidity.
+        await rds.publish(
+            f"realtime:{device_id}",
+            json.dumps(
+                {
+                    "device_id": device_id,
+                    "ts": payload.ts,
+                    "env_temp": payload.temp,
+                    "humidity": payload.humi,
+                },
+                separators=(",", ":"),
+            ),
+        )
 
 
 async def _is_paired(pool: asyncpg.Pool, rds: redis.Redis, device_id: str) -> bool:

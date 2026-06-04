@@ -3,6 +3,7 @@
 Topics:
   sleeppad/{device_id}/sec    → SecData (0x85 per-second frame)
   sleeppad/{device_id}/min    → MinData (0x86 per-minute frame)
+  sleeppad/{device_id}/temp   → EnvData (ambient temperature + humidity)
   sleeppad/{device_id}/status → online/offline LWT (raw string)
 """
 
@@ -34,6 +35,18 @@ class MinDataPayload(BaseModel):
     temp: float = Field(ge=0, le=60)
 
 
+class EnvDataPayload(BaseModel):
+    """Ambient environment frame on sleeppad/{id}/temp — room temp + humidity.
+
+    Distinct from MinData.temp (body temperature, currently always 0); this is
+    the sensor's surrounding temperature shown as the Home "Temperature".
+    """
+    device_id: str = Field(min_length=1, max_length=32)
+    ts: int = Field(ge=0)
+    temp: float = Field(ge=-50, le=100)   # ambient °C
+    humi: float = Field(ge=0, le=100)     # relative humidity %
+
+
 def device_id_from_topic(topic: str) -> str | None:
     """Extract device_id from 'sleeppad/{id}/sec' or 'sleeppad/{id}/min'."""
     parts = topic.split("/")
@@ -56,5 +69,12 @@ def parse_sec(raw: bytes | str) -> SecDataPayload | None:
 def parse_min(raw: bytes | str) -> MinDataPayload | None:
     try:
         return MinDataPayload.model_validate_json(raw)
+    except ValidationError:
+        return None
+
+
+def parse_env(raw: bytes | str) -> EnvDataPayload | None:
+    try:
+        return EnvDataPayload.model_validate_json(raw)
     except ValidationError:
         return None
