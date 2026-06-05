@@ -77,21 +77,24 @@ def _num(value) -> float | None:
 
 
 async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
-    """Latest smartwatch snapshot for a user: spo2, steps, blood pressure.
+    """Latest smartwatch snapshot for a user: spo2, hrv, glucose, blood pressure
+    (latest reading) + steps (today's running total).
 
-    Pulls the most recent record per relevant type from watch_data. Returns None
-    when the user has no watch data yet.
+    Steps records are per-bucket deltas, so the watch shows the daily SUM (reset
+    at local midnight). We sum the most recent local day instead of taking the
+    last bucket. Other metrics keep "latest reading" semantics.
     """
     rows = await pool.fetch(
         """
         SELECT DISTINCT ON (type) type, device_id, time, raw_data
         FROM watch_data
-        WHERE user_id = $1 AND type IN ('combined', 'step', 'blood_pressure')
+        WHERE user_id = $1 AND type IN ('combined', 'blood_pressure')
         ORDER BY type, time DESC
         """,
         user_id,
     )
-    if not rows:
+    steps, steps_at, step_device = await _steps_today(pool, user_id)
+    if not rows and steps is None:
         return None
 
     snap: dict = {
@@ -109,7 +112,12 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
         "blood_glucose": None,
         "glucose_at": None,
     }
-    latest_time = None
+    # Steps = today's running total (summed daily deltas).
+    snap["steps"] = steps
+    snap["steps_at"] = steps_at
+    snap["device_id"] = step_device
+
+    latest_time = steps_at and _parse_iso(steps_at)
     for row in rows:
         raw = row["raw_data"]
         if isinstance(raw, str):
@@ -129,10 +137,6 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
             glucose = _num(raw.get("bloodGlucose"))
             snap["blood_glucose"] = glucose if glucose else None
             snap["glucose_at"] = row_at
-        elif row["type"] == "step":
-            steps = _num(raw.get("step"))
-            snap["steps"] = int(steps) if steps is not None else None
-            snap["steps_at"] = row_at
         elif row["type"] == "blood_pressure":
             sys = _num(raw.get("systolicBloodPressure"))
             dia = _num(raw.get("diastolicBloodPressure"))
@@ -141,6 +145,51 @@ async def get_watch_snapshot(pool: asyncpg.Pool, user_id: UUID) -> dict | None:
             snap["bp_at"] = row_at
     snap["synced_at"] = latest_time.isoformat() if latest_time else None
     return snap
+
+
+# Day boundary for the daily step total. The NOTT watch resets steps at local
+# midnight; sum the deltas for that local day. Product is VN-based.
+_STEP_DAY_TZ = "Asia/Ho_Chi_Minh"
+
+
+async def _steps_today(
+    pool: asyncpg.Pool, user_id: UUID
+) -> tuple[int | None, str | None, str | None]:
+    """Sum step deltas for the most recent local day → (steps, at_iso, device_id)."""
+    row = await pool.fetchrow(
+        """
+        WITH s AS (
+            SELECT (raw_data->>'step')::int AS step,
+                   time,
+                   device_id,
+                   (time AT TIME ZONE $2)::date AS local_day
+            FROM watch_data
+            WHERE user_id = $1
+              AND type = 'step'
+              AND raw_data->>'step' ~ '^[0-9]+$'
+        )
+        SELECT SUM(step)::bigint AS total,
+               MAX(time) AS at,
+               (array_agg(device_id ORDER BY time DESC))[1] AS device_id
+        FROM s
+        WHERE local_day = (SELECT MAX(local_day) FROM s)
+        """,
+        user_id,
+        _STEP_DAY_TZ,
+    )
+    if row is None or row["total"] is None:
+        return None, None, None
+    at = row["at"].isoformat() if row["at"] else None
+    return int(row["total"]), at, row["device_id"]
+
+
+def _parse_iso(value: str):
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 async def get_latest_sec(pool: asyncpg.Pool, device_id: str) -> dict | None:
