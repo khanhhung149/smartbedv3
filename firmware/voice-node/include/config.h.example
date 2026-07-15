@@ -1,0 +1,12 @@
+// Copy file này thành config.h rồi điền giá trị thật.
+// config.h ĐÃ bị .gitignore — không bao giờ commit credentials.
+#pragma once
+
+#define WIFI_SSID       "ten-wifi"
+#define WIFI_PASS       "mat-khau-wifi"
+
+// Máy chạy backend Golang (WebSocket server nhận audio), theo contract Phase 2:
+// PCM 16-bit 16kHz mono little-endian, đường dẫn /api/voice/stream.
+#define BACKEND_WS_HOST "192.168.1.50"
+#define BACKEND_WS_PORT 8080
+#define BACKEND_WS_PATH "/api/voice/stream"

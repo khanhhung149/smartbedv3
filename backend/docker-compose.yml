@@ -1,0 +1,33 @@
+# Backend presence + AC control.
+# Chạy:  cp .env.example .env  (điền giá trị)  →  docker compose up -d --build
+#
+# Broker Mosquitto chạy riêng (firmware/mqtt/). Backend reach broker qua host:
+#   trong .env đặt MQTT_HOST=host.docker.internal (Docker Desktop) hoặc IP LAN của máy chạy broker.
+services:
+  backend:
+    build: .
+    container_name: home-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - asr
+
+  # Service ASR self-host (faster-whisper). Không expose port ra host — backend gọi nội bộ
+  # qua network compose (http://asr:9000/transcribe), audio không rời LAN/host.
+  asr:
+    build: ../asr
+    container_name: home-asr
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: ${ASR_MODEL:-small}
+    volumes:
+      # Cache model HuggingFace (faster-whisper tải về /root/.cache/huggingface trong container
+      # chạy bằng root) — tránh tải lại model "small" mỗi lần recreate container.
+      - asr-model-cache:/root/.cache/huggingface
+
+volumes:
+  asr-model-cache:

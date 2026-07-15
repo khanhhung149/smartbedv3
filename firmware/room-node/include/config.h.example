@@ -1,0 +1,12 @@
+// Copy file này thành config.h rồi điền giá trị thật.
+// config.h ĐÃ bị .gitignore — không bao giờ commit credentials.
+#pragma once
+
+#define WIFI_SSID       "ten-wifi"
+#define WIFI_PASS       "mat-khau-wifi"
+
+#define MQTT_HOST       "192.168.1.50"   // IP máy chạy Mosquitto broker
+#define MQTT_PORT       1883
+#define MQTT_USER       "homeuser"        // user tạo bằng mosquitto_passwd
+#define MQTT_PASS       "mat-khau-mqtt"
+#define MQTT_CLIENT_ID  "room-node"       // phải duy nhất trên broker
