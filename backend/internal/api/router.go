@@ -9,6 +9,7 @@ import (
 
 	"github.com/hung/home-backend/internal/config"
 	"github.com/hung/home-backend/internal/statemachine"
+	"github.com/hung/home-backend/internal/store"
 	"github.com/hung/home-backend/internal/voice"
 )
 
@@ -24,13 +25,21 @@ type Publisher interface {
 	Connected() bool
 }
 
+// EventLister — nguồn lịch sử event cho GET /api/events (store.Store thỏa mãn).
+// Cho phép nil: khi không cấu hình được DB, backend vẫn chạy và /api/events trả 503
+// thay vì chết hẳn — presence/AC/voice không phụ thuộc lịch sử.
+type EventLister interface {
+	List(limit int, before int64) ([]store.Event, error)
+}
+
 type API struct {
 	sp  StateProvider
 	pub Publisher
+	ev  EventLister
 }
 
-func NewRouter(sp StateProvider, pub Publisher, hub *Hub) http.Handler {
-	a := &API{sp: sp, pub: pub}
+func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.Handler {
+	a := &API{sp: sp, pub: pub, ev: ev}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
@@ -47,6 +56,7 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub) http.Handler {
 	r.Get("/healthz", a.health)
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/state", a.getState)
+		r.Get("/events", a.getEvents)
 		r.Post("/ac", a.postAC)
 		r.Post("/ac/learn", a.postACLearn)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)

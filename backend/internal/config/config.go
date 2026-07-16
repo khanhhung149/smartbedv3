@@ -19,6 +19,7 @@ type Config struct {
 	ExitTimeout time.Duration // presence=false giữ đủ lâu → coi là ra
 
 	HTTPAddr string
+	DBPath   string // file SQLite lưu lịch sử event; rỗng = tắt lịch sử
 }
 
 func Load() (Config, error) {
@@ -31,6 +32,7 @@ func Load() (Config, error) {
 		EnterWindow:  time.Duration(getenvInt("ENTER_WINDOW_S", 15)) * time.Second,
 		ExitTimeout:  time.Duration(getenvInt("EXIT_TIMEOUT_S", 60)) * time.Second,
 		HTTPAddr:     getenv("HTTP_ADDR", ":8080"),
+		DBPath:       getenv("DB_PATH", "/data/home.db"),
 	}
 	if c.MQTTHost == "" || c.MQTTUser == "" || c.MQTTPass == "" {
 		return c, fmt.Errorf("MQTT_HOST, MQTT_USER, MQTT_PASS là bắt buộc")

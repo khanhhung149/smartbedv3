@@ -39,7 +39,7 @@ func do(t *testing.T, h http.Handler, method, path, body string) *httptest.Respo
 
 func TestGetState(t *testing.T) {
 	sp := fakeSP{snap: statemachine.Snapshot{Present: true, Occupied: true, ACDesired: true, LastACCmd: "on"}}
-	h := NewRouter(sp, &fakePub{}, nil)
+	h := NewRouter(sp, &fakePub{}, nil, nil)
 	w := do(t, h, "GET", "/api/state", "")
 	if w.Code != 200 {
 		t.Fatalf("code=%d", w.Code)
@@ -53,7 +53,7 @@ func TestGetState(t *testing.T) {
 
 func TestPostACValid(t *testing.T) {
 	pub := &fakePub{}
-	h := NewRouter(fakeSP{}, pub, nil)
+	h := NewRouter(fakeSP{}, pub, nil, nil)
 	w := do(t, h, "POST", "/api/ac", `{"cmd":"on"}`)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
@@ -65,7 +65,7 @@ func TestPostACValid(t *testing.T) {
 
 func TestPostACInvalid(t *testing.T) {
 	pub := &fakePub{}
-	h := NewRouter(fakeSP{}, pub, nil)
+	h := NewRouter(fakeSP{}, pub, nil, nil)
 	w := do(t, h, "POST", "/api/ac", `{"cmd":"banana"}`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("cmd sai phải 400, got %d", w.Code)
@@ -77,7 +77,7 @@ func TestPostACInvalid(t *testing.T) {
 
 func TestPostACLearnValid(t *testing.T) {
 	pub := &fakePub{}
-	h := NewRouter(fakeSP{}, pub, nil)
+	h := NewRouter(fakeSP{}, pub, nil, nil)
 	w := do(t, h, "POST", "/api/ac/learn", `{"button":"off"}`)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("code=%d", w.Code)
@@ -88,7 +88,7 @@ func TestPostACLearnValid(t *testing.T) {
 }
 
 func TestHealth(t *testing.T) {
-	h := NewRouter(fakeSP{}, &fakePub{connected: true}, nil)
+	h := NewRouter(fakeSP{}, &fakePub{connected: true}, nil, nil)
 	w := do(t, h, "GET", "/healthz", "")
 	if w.Code != 200 {
 		t.Fatalf("code=%d", w.Code)

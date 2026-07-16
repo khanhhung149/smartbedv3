@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -26,6 +27,40 @@ func (a *API) health(w http.ResponseWriter, _ *http.Request) {
 // GET /api/state
 func (a *API) getState(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, a.sp.Snapshot())
+}
+
+// GET /api/events?limit=&before=  — lịch sử event, mới nhất trước.
+// before = id của event cuối trang trước (phân trang tiếp trang).
+func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
+	if a.ev == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "lịch sử chưa bật (DB_PATH chưa cấu hình)"})
+		return
+	}
+	limit, err := atoiParam(r, "limit")
+	if err != nil {
+		badRequest(w, "limit phải là số")
+		return
+	}
+	before, err := atoiParam(r, "before")
+	if err != nil {
+		badRequest(w, "before phải là số")
+		return
+	}
+	evs, err := a.ev.List(int(limit), before)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "đọc lịch sử lỗi: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": evs})
+}
+
+// atoiParam đọc query param dạng số. Vắng mặt → 0 (store tự áp default/bỏ qua).
+func atoiParam(r *http.Request, name string) (int64, error) {
+	v := r.URL.Query().Get(name)
+	if v == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(v, 10, 64)
 }
 
 type acReq struct {

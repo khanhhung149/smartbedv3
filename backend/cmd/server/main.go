@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/hung/home-backend/internal/events"
 	"github.com/hung/home-backend/internal/mqttclient"
 	"github.com/hung/home-backend/internal/statemachine"
+	"github.com/hung/home-backend/internal/store"
 )
 
 func main() {
@@ -32,6 +34,29 @@ func main() {
 		ExitTimeout: cfg.ExitTimeout,
 	})
 
+	// Lịch sử event. DB hỏng KHÔNG chặn khởi động: presence/AC/voice vẫn phải chạy,
+	// chỉ mất /api/events (trả 503). Đây là tính năng phụ, không phải đường sống của hệ.
+	var st *store.Store
+	if cfg.DBPath != "" {
+		var err error
+		if st, err = store.Open(cfg.DBPath); err != nil {
+			slog.Warn("không mở được DB lịch sử, chạy tiếp không có lịch sử", "path", cfg.DBPath, "err", err)
+			st = nil
+		} else {
+			slog.Info("lịch sử event", "db", cfg.DBPath)
+			defer st.Close()
+		}
+	}
+	// record ghi 1 event, nuốt lỗi thành log — không được làm hỏng luồng MQTT.
+	record := func(kind, value, source string, ts int64) {
+		if st == nil {
+			return
+		}
+		if err := st.Append(store.Event{TS: ts, Kind: kind, Value: value, Source: source}); err != nil {
+			slog.Warn("ghi lịch sử lỗi", "kind", kind, "err", err)
+		}
+	}
+
 	hub := api.NewHub()
 
 	var client *mqttclient.Client
@@ -44,6 +69,7 @@ func main() {
 			return
 		}
 		slog.Info("published ac_cmd", "cmd", *cmd)
+		record(store.KindACCmd, *cmd, "backend", time.Now().Unix())
 	}
 
 	// Push snapshot lên WS khi bất kỳ trường nào đổi (Snapshot comparable).
@@ -64,11 +90,13 @@ func main() {
 		mqttclient.Handlers{
 			OnMotion: func(m events.Motion) {
 				slog.Info("motion", "ts", m.TS)
+				record(store.KindMotion, strconv.FormatBool(m.Motion), "voice-node", m.TS)
 				publish(machine.OnMotion(m.TS, time.Now()))
 				broadcastIfChanged()
 			},
 			OnPresence: func(p events.Presence) {
 				slog.Info("presence", "present", p.Present, "ts", p.TS)
+				record(store.KindPresence, strconv.FormatBool(p.Present), "room-node", p.TS)
 				publish(machine.OnPresence(p.Present, p.TS, time.Now()))
 				broadcastIfChanged()
 			},
@@ -81,7 +109,13 @@ func main() {
 	defer stop()
 
 	// HTTP API (Phase 3) — machine thỏa StateProvider, client thỏa Publisher.
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouter(machine, client, hub)}
+	// ev phải là interface nil THẬT khi không có store: gán thẳng con trỏ nil vào tham số
+	// interface sẽ tạo interface non-nil (có type, không có value) → handler check nil hụt.
+	var ev api.EventLister
+	if st != nil {
+		ev = st
+	}
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouter(machine, client, hub, ev)}
 	go func() {
 		slog.Info("HTTP API", "addr", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

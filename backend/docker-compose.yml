@@ -13,6 +13,10 @@ services:
       - "8080:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      # Lịch sử event (SQLite). Volume riêng để dữ liệu sống qua recreate container —
+      # state machine giữ trạng thái trong RAM, đây là chỗ duy nhất còn dấu vết đã xảy ra.
+      - home-data:/data
     depends_on:
       - asr
 
@@ -31,3 +35,4 @@ services:
 
 volumes:
   asr-model-cache:
+  home-data:
