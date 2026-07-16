@@ -1,263 +1,147 @@
 # Codebase Summary
 
-## Project Structure Overview
+> Cập nhật: 2026-07-16. Phản ánh kiến trúc 2-node fusion-tại-board + voice→ASR.
+
+## Project Structure
 
 ```
 project-root/
-├── backend/           # Go REST API + state machine (874 LOC, 11 files)
-├── firmware/          # PlatformIO ESP32 firmware (520 LOC across 2 nodes)
-├── docs/             # Technical documentation (this file, system-wiring.md, etc.)
-├── plans/            # Implementation phases and decision logs
-├── .gitignore        # VCS configuration
-├── .repomixignore    # Codebase indexing exclusions
-├── README.md         # Project overview (root level)
-└── (stuffs/)         # NOT part of this project; ignore in documentation
+├── backend/      # Go: MQTT + state machine + REST/WS + voice endpoint
+├── asr/          # Python FastAPI + faster-whisper (self-host ASR)
+├── firmware/     # PlatformIO ESP32: room-node, voice-node, door-node (retired), mqtt/
+├── docs/         # Tài liệu kỹ thuật
+├── plans/        # Log pha + quyết định (gitignored trừ template)
+├── README.md
+└── .gitignore
 ```
 
 ## Backend (Go)
 
-**Location**: `backend/`  
-**LOC**: ~874 across 11 files  
-**Framework**: Chi router + paho MQTT client  
-**Go version**: 1.24  
-**Status**: ✅ All phases complete; end-to-end verified against simulated MQTT
+**Location**: `backend/` · **Framework**: Chi router + paho MQTT + coder/websocket + log/slog · **Module**: `github.com/hung/home-backend`
+**Status**: ✅ Code-complete, build/vet/test xanh (state machine + voice command). E2E audio thật: ⏳.
 
-### Directory Layout
 ```
 backend/
-├── cmd/
-│   └── server/
-│       └── main.go          # Entry point: config load, MQTT wire-up, HTTP server
+├── cmd/server/main.go            # bootstrap: config, MQTT, router, HTTP server
 ├── internal/
 │   ├── api/
-│   │   ├── handler.go       # Chi router + REST endpoints
-│   │   ├── ws.go            # WebSocket hub for state broadcasts
-│   │   └── interface.go     # StateProvider/Publisher interfaces (test decoupling)
-│   ├── config/
-│   │   └── config.go        # Env var parsing (MQTT_*, HTTP_*, timing params)
-│   ├── events/
-│   │   └── events.go        # MQTT payload structs (Motion, Presence)
-│   ├── mqttclient/
-│   │   └── client.go        # Paho wrapper: connect, subscribe, publish, reconnect
-│   └── statemachine/
-│       ├── machine.go       # Occupancy logic (Enter/Exit, debounce, AC commands)
-│       └── machine_test.go  # 6/6 tests passing
-├── Dockerfile                # Multi-stage: golang:1.24 → distroless
-└── docker-compose.yml        # Service definition + .env_file reference
+│   │   ├── router.go             # Chi router; group /api gồm ws + voice/stream
+│   │   ├── handlers.go           # REST: /healthz, /api/state, /api/ac, /api/ac/learn
+│   │   ├── handlers_test.go
+│   │   ├── ws.go                 # WebSocket hub broadcast state
+│   │   └── ws_test.go
+│   ├── config/config.go          # env parse: MQTT_*, HTTP_*, timing + LoadVoice() (ASR_*)
+│   ├── events/events.go          # struct payload MQTT (Motion, Presence)
+│   ├── mqttclient/client.go      # paho wrapper: connect/sub/pub/reconnect, PublishACCmd()
+│   ├── statemachine/
+│   │   ├── machine.go            # Idle/Occupied/ExitWait (Phase 2)
+│   │   └── machine_test.go
+│   └── voice/                    # ⭐ MỚI (Phase 2 voice)
+│       ├── stream.go             # WS /api/voice/stream: utteranceBuffer, read-deadline VAD, WAV
+│       ├── asr_client.go         # POST multipart WAV → ASR_URL
+│       ├── command.go            # ParseVietCommand(text) → "on"/"off"
+│       └── command_test.go       # 9 case pass
+├── Dockerfile                    # multi-stage → distroless
+├── docker-compose.yml            # backend + service asr (+ volume cache model)
+└── .env.example
 ```
 
-### Key Modules
+### Voice pipeline (internal/voice)
+- `stream.go`: nhận WS binary PCM 16k mono 16-bit LE → `utteranceBuffer.feed()`; kết thúc câu bằng **read-deadline `ASR_SILENCE_MS`** mỗi `conn.Read`; flush câu cuối khi client đóng; byte cap `ASR_MAX_UTTER_MS`; dựng WAV header.
+- `asr_client.go`: POST multipart WAV tới `ASR_URL`, nhận text.
+- `command.go`: chuẩn hoá + bỏ dấu, match "bật/tắt" + "điều hòa/điều hoà/máy lạnh" → phát `home/room/ac_cmd`.
 
-| Module | Responsibility | Key Types |
-|--------|-----------------|-----------|
-| `cmd/server/main.go` | Bootstrap: config load, MQTT client init, state machine wiring, HTTP server start, graceful shutdown on signal | — |
-| `internal/config` | Environment variable parsing, validation, defaults (MQTT_HOST, MQTT_PORT, HTTP_ADDR, timing params) | `Config` struct |
-| `internal/events` | MQTT JSON payload definitions | `Motion`, `Presence` structs |
-| `internal/mqttclient` | Paho MQTT client wrapper, auto-reconnect, subscription management, publish with timeout | `Client` |
-| `internal/statemachine` | Occupancy logic: tick-based state machine (Idle → Occupied → Idle), debounce, enter/exit windows, AC command emission | `Machine`, `State`, `Config` |
-| `internal/api/handler` | Chi REST router: `/healthz`, `/api/state`, `/api/ac`, `/api/ac/learn` | `Handler` |
-| `internal/api/ws` | WebSocket hub: broadcasts state snapshot on change | `Hub`, `Client` |
+### API
+| Method | Path | Status |
+|--------|------|--------|
+| GET | `/healthz` | ✅ |
+| GET | `/api/state` | ✅ |
+| POST | `/api/ac` | ✅ |
+| POST | `/api/ac/learn` | ✅ |
+| GET | `/api/ws` | ✅ |
+| GET | `/api/voice/stream` | ✅ (chưa E2E audio thật) |
 
-### API Endpoints
+### Config env
+`MQTT_HOST/PORT/USER/PASS`, `HTTP_ADDR` (`:8080`), `ENTER_WINDOW_S` (15), `EXIT_TIMEOUT_S` (60), `ASR_URL`, `ASR_SILENCE_MS`, `ASR_MAX_UTTER_MS`, `VOICE_SAMPLE_RATE` (16000).
 
-| Method | Path | Purpose | Status |
-|--------|------|---------|--------|
-| GET | `/healthz` | Liveness check (MQTT connection status) | ✅ Implemented |
-| GET | `/api/state` | Returns current occupancy state + AC status | ✅ Implemented |
-| POST | `/api/ac` | Command AC on/off: `{"cmd":"on"/"off"}` | ✅ Implemented |
-| POST | `/api/ac/learn` | Trigger IR learn mode: `{"button":"on"/"off"}` | ✅ Implemented |
-| GET | `/ws` | WebSocket: subscribe to state changes | ✅ Implemented |
+---
 
-### Configuration (Environment Variables)
+## ASR service (Python)
 
-| Variable | Default | Required | Purpose |
-|----------|---------|----------|---------|
-| `MQTT_HOST` | — | Yes | Broker hostname/IP |
-| `MQTT_PORT` | 1883 | No | Broker port |
-| `MQTT_USER` | — | Yes | Auth username |
-| `MQTT_PASS` | — | Yes | Auth password |
-| `MQTT_CLIENT_ID` | `home-backend` | No | Client identifier |
-| `ENTER_WINDOW_S` | 15 | No | Seconds to infer enter (motion within window) |
-| `EXIT_TIMEOUT_S` | 60 | No | Seconds to infer exit (no presence) |
-| `HTTP_ADDR` | `:8080` | No | Listen address:port |
+**Location**: `asr/` · faster-whisper self-host.
 
-### State Machine Logic
+```
+asr/
+├── app.py           # FastAPI: WhisperModel(small, cpu, int8); POST /transcribe (multipart WAV); GET /healthz
+├── requirements.txt
+└── Dockerfile
+```
 
-**States**: `Idle`, `Occupied`, `ExitWait`
-
-**Transitions**:
-- `Idle` → `Occupied`: presence=true AND motion within `ENTER_WINDOW_S`
-- `Occupied` → `ExitWait`: presence=false (start timer)
-- `ExitWait` → `Idle`: exit timer expires (continuous absence for `EXIT_TIMEOUT_S`)
-- AC command emitted only on state change (no redundant publishes)
-
-### Testing
-
-- **Test file**: `internal/statemachine/machine_test.go`
-- **Coverage**: 6 scenario tests, all passing (enter, exit, debounce, flicker handling)
-- **Approach**: Table-driven with scenario names (not generic test numbers)
-- **Verification**: End-to-end tested against real Mosquitto broker with simulated `mosquitto_pub` events
-
-### Deployment
-
-- **Docker**: Multi-stage build (compile in golang:1.24, runtime in distroless)
-- **Docker Compose**: Service runs with `env_file .env` (secrets not in git)
-- **Net**: `host.docker.internal` to reach Mosquitto on host machine
+Chạy như 1 container cạnh backend (docker-compose `asr`). Audio không rời LAN. Model `small` là mặc định; hạ `tiny` nếu CPU chậm.
 
 ---
 
 ## Firmware (PlatformIO)
 
-**Location**: `firmware/`  
-**LOC**: ~520 across 2 independent node projects (no shared library)  
-**Board**: lolin_s2_mini (Wemos S2 Mini, ESP32-S2)  
-**Framework**: Arduino with PlatformIO  
-**Status**: ⏳ Code complete, compiles clean; NOT yet flashed/verified on real hardware
+**Location**: `firmware/` · 3 project độc lập (không lib chung).
 
-### Directory Layout
 ```
 firmware/
-├── door-node/
-│   ├── src/
-│   │   └── main.cpp         # PIR motion sensor + MQTT publish
-│   ├── include/
-│   │   └── config.h.example # WIFI/MQTT secrets template
-│   └── platformio.ini       # Build config for lolin_s2_mini
-├── room-node/
-│   ├── src/
-│   │   └── main.cpp         # LD2410 radar + IR learn/send + MQTT
-│   ├── include/
-│   │   └── config.h.example # WIFI/MQTT secrets template
-│   └── platformio.ini       # Build config for lolin_s2_mini
-└── mqtt/
-    ├── docker-compose.yml   # Mosquitto broker (eclipse-mosquitto:2)
-    └── README.md            # MQTT topic contract + test commands
+├── room-node/     # board lolin_s2_mini (ESP32-S2), -DARDUINO_USB_CDC_ON_BOOT=1
+│   └── src/main.cpp   # radar → presence + IR learn/blast + MQTT + [hb] heartbeat (radar-only)
+├── voice-node/    # board esp32dev (WROOM-32)
+│   └── src/main.cpp   # INMP441 I2S + VAD + stream WS PCM 16k + MQTT PIR→motion
+├── door-node/     # ⚠️ NGHỈ HƯU (tham chiếu ISR PIR); không flash cho MVP 1 phòng
+└── mqtt/          # cấu hình Mosquitto (passwd.example)
 ```
 
-### Node 1: Door (PIR Motion Sensor)
+### Room node — `firmware/room-node/src/main.cpp`
+**Board**: Wemos S2 Mini (ESP32-S2). **Status**: ✅ **Nghiệm thu HW 2026-07-16** (radar → presence chạy đúng). Radar-only (PIR đã dời sang voice-node).
 
-**File**: `firmware/door-node/src/main.cpp` (~112 LOC)
+| Thành phần | Chân | Vai trò |
+|-----------|------|---------|
+| LD2410 radar | GPIO16 (OUT digital), UART GPIO33/18 (để dành) | Presence; poll 200ms |
+| IR receiver TSOP | GPIO15 | Học mã IR (cửa sổ 15s) — ⏳ chưa có phần cứng |
+| IR blaster | GPIO5 → transistor | Phát mã IR đã học — ⏳ chưa có phần cứng |
+| NVS | — | Lưu mã IR "on"/"off" (namespace `ac_codes`) |
 
-| Component | Pin | Purpose |
-|-----------|-----|---------|
-| PIR Sensor | GPIO7 | Interrupt + debounce 2000ms |
-| MQTT Client | — | Publish to `home/door/motion` |
+- Pub `home/room/presence` (theo **radar**, retain). KHÔNG còn pub `home/door/motion` (PIR đã dời đi).
+- Sub `home/room/ac_cmd` → `sendAC()`; `home/room/ac_learn` → `startLearn()`.
+- Debug: `[hb]` heartbeat mỗi `STATUS_HEARTBEAT_MS`=2000 in `radar/occupied/sinceRadarHigh/wifi/mqtt`; chờ USB-CDC lúc boot để không mất log (đặc thù S2).
+- Tham số presence: `PRESENCE_HOLD_MS`=1500 (ENTER radar giữ), `RADAR_DEBOUNCE_MS`=3000 (EXIT radar im).
+- Deps: `crankyoldgit/IRremoteESP8266`, `256dpi/MQTT`.
 
-**Publish Contract**:
-- Topic: `home/door/motion`
-- QoS: 1
-- Retain: false
-- Payload: `{"ts": 1234567890, "motion": true}`
-- Frequency: On change (GPIO7 edge trigger)
+### Voice node — `firmware/voice-node/src/main.cpp`
+**Board**: ESP32-WROOM-32 (`esp32dev`). **Status**: ✅ build pass (audio + MQTT + PIR), ⏳ chưa hàn mic + tune VAD + verify PIR.
 
-**Dependencies**:
-- 256dpi/MQTT@^2.5 (chosen over PubSubClient for robust QoS1 support)
+| Thành phần | Chân | Vai trò |
+|-----------|------|---------|
+| INMP441 SCK/WS/SD | GPIO26 / 25 / 34 | I2S mic (SD input-only) |
+| INMP441 L/R | GND | Kênh trái |
+| **PIR** | **GPIO27** (`INPUT_PULLDOWN`, interrupt RISING) | Chuyển động → pub `home/door/motion` |
 
-### Node 2: Room (LD2410 Radar + IR Control)
+- Audio: I2S RX 16kHz slot 32-bit → `raw >> 16` PCM16; VAD RMS > `VAD_THRESHOLD` (placeholder 800) → stream WS `/api/voice/stream`; im `SILENCE_MS` → ngừng gửi.
+- **MQTT** (`256dpi/MQTT`, client id `voice-node`): PIR cạnh lên → `publishMotion()` → `home/door/motion` (throttle 1s). MQTT chạy song song audio (WROOM 2 nhân).
+- WiFi/WS/MQTT reconnect. Deps: `links2004/WebSockets` + `256dpi/MQTT` + I2S driver.
 
-**File**: `firmware/room-node/src/main.cpp` (~246 LOC)
-
-| Component | Pin | Purpose |
-|-----------|-----|---------|
-| LD2410 Radar | GPIO16 (digital out) + UART (GPIO33/18) | Presence detection, polling every 200ms |
-| IR Receiver | GPIO15 | TSOP38238 IR sensor for learn mode (15s window) |
-| IR Blaster | GPIO5 → transistor | Send learned IR codes to AC |
-| NVS Storage | — | Persist learned codes per key ("on"/"off") |
-
-**Publish Contract**:
-- Topic: `home/room/presence`
-- QoS: 1
-- Retain: true
-- Payload: `{"ts": 1234567890, "present": true}`
-- Frequency: On change (polling detects state transition)
-
-**Subscribe Contract**:
-- Topic: `home/room/ac_cmd` — Backend commands: `{"cmd": "on"/"off"}` → decode + sendAC(key)
-- Topic: `home/room/ac_learn` — Backend triggers: `{"button": "on"/"off"}` → startLearn(key)
-
-**IR Learning**:
-- Triggered by `ac_learn` MQTT message
-- 15-second window: capture raw IR from user's AC remote
-- Store in NVS Preferences (per key: "on", "off")
-- No sync to backend (explicit MVP decision; revisit for multi-room support)
-
-**Dependencies**:
-- crankyoldgit/IRremoteESP8266@^2.8.6 (for raw IR capture/replay)
-- 256dpi/MQTT@^2.5 (same as door node)
-
-### MQTT Broker
-
-**Location**: `firmware/mqtt/`
-
-**Service**: Eclipse Mosquitto 2 via Docker
-
-**Configuration**:
-- Auth required: `allow_anonymous false`
-- Credentials: Read from env (injected via docker-compose)
-- TLS: Disabled (LAN-only MVP; must add before internet exposure)
-- Topics: Documented in `firmware/mqtt/README.md`
-
-**Test Commands**:
-```bash
-mosquitto_pub -h localhost -u user -P pass -t home/door/motion -m '{"ts":1234,"motion":true}'
-mosquitto_sub -h localhost -u user -P pass -t home/room/presence
-```
-
-### Secrets & Configuration
-
-Each node has:
-- `include/config.h.example` (checked in): template with placeholder values
-- `include/config.h` (gitignored): actual secrets (WIFI_SSID, WIFI_PASS, MQTT_HOST/PORT/USER/PASS)
-
-### Known Issues & Blockers
-
-| Issue | Impact | Status |
-|-------|--------|--------|
-| GPIO7 bootstrap check | May conflict with ESP32-S2 boot-strapping; must verify before soldering door-node PIR | ⏳ Pending hardware check |
-| LD2410 UART parsing | Currently MVP uses digital pin only; full UART parsing deferred | ⏳ Deferred to phase 2 |
-| No hardware flash test | Code compiles clean but untested on real S2 Mini | ⏳ Pending hardware |
+### Secrets
+Mỗi node: `include/config.h.example` (check-in) + `include/config.h` (gitignore, WiFi/MQTT/backend host thật).
 
 ---
 
 ## Shared Patterns
 
-### Language & Naming Conventions
+| Mục | Quy ước |
+|-----|---------|
+| Định danh code | English (camelCase hàm, SCREAMING_SNAKE_CASE hằng) |
+| Comment/log | Tiếng Việt (firmware), English (Go) |
+| Go test | table-driven, tên scenario (không đánh số chung chung) |
+| Firmware | không unit test; verify qua serial `[hb]` + MQTT |
 
-| Aspect | Convention | Rationale |
-|--------|-----------|-----------|
-| Code identifiers | English (camelCase for functions, SCREAMING_SNAKE_CASE for constants) | Cross-language consistency, maintainability |
-| Comments & logs | Vietnamese (in firmware), English (in Go) | Matches developer's native language and Go ecosystem norm |
-| File names | kebab-case (Go internal packages), no special rules (firmware .cpp) | Project consistency |
-
-### No Shared Firmware Library
-
-Each node (door, room) is a standalone PlatformIO project. Rationale:
-- Different sensor sets (PIR vs. radar vs. IR)
-- Simpler dependency management per node
-- Easier to flash/debug independently
-- Acceptable duplication for MVP (MQTT client, WiFi init)
-
-### Error Handling
-
-- **Go**: slog structured logging (not shown in this summary but present in code)
-- **Firmware**: Serial print for debugging; MQTT reconnect loop on broker failure
-
-### Testing Strategy
-
-- **Go**: Table-driven unit tests with scenario names; state machine fully tested
-- **Firmware**: No unit tests yet (depends on hardware; integration test via MQTT expected)
+**Không lib firmware chung**: mỗi node standalone (sensor khác nhau, flash/debug độc lập, chấp nhận trùng WiFi/MQTT init cho MVP).
 
 ---
 
-## Summary Statistics
-
-| Component | LOC | Files | Status |
-|-----------|-----|-------|--------|
-| Backend (Go) | ~874 | 11 | ✅ Code-complete, end-to-end verified |
-| Firmware (both nodes) | ~520 | 2 | ⏳ Code-complete, hardware pending |
-| Documentation | — | This file + system-wiring.md | ⏳ Expanding |
-| **Total** | **~1394** | **13+** | **⏳ MVP code-complete** |
-
 ## Next Steps
 
-See [`docs/project-roadmap.md`](./project-roadmap.md) for detailed phase tracking and open action items.
+Xem [`project-roadmap.md`](./project-roadmap.md). Việc gần nhất (phần cứng): hàn lại radar OUT→GPIO16 + gỡ khỏi USB-C; nối PIR; hàn INMP441 + tune VAD; E2E voice.

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,12 +15,12 @@ const (
 	bytesPerSample = 2 // PCM 16-bit
 	channels       = 1 // mono
 
-	// energyThreshold — ngưỡng biên độ trung bình |sample int16| coi là "có tiếng nói".
-	// VAD năng lượng đơn giản (không dùng model), đủ cho MVP; xem risk assessment ở plan
-	// (dễ cắt câu sai nơi ồn — tune theo mic thực tế qua thử nghiệm, chưa cần cấu hình hóa).
-	energyThreshold = 500
-
 	asrTimeout = 10 * time.Second
+
+	// silenceCheckInterval — nhịp kiểm tra "đã im lặng đủ lâu chưa" để cắt utterance.
+	// Tách khỏi conn.Read vì coder/websocket ĐÓNG kết nối nếu context của Read hết hạn —
+	// không thể dùng read-deadline để dò im lặng mà vẫn giữ WS mở.
+	silenceCheckInterval = 100 * time.Millisecond
 )
 
 // ACPublisher — interface tối giản publish lệnh AC (mqttclient.Client thỏa mãn qua PublishACCmd;
@@ -57,11 +56,12 @@ func NewHandler(pub ACPublisher, cfg Config) *Handler {
 // ServeHTTP — GET /api/voice/stream: nhận PCM 16-bit 16kHz mono LE qua WS binary frame.
 //
 // Kiến trúc voice node: VAD chạy TRÊN DEVICE — node chỉ gửi frame khi có tiếng, NGỪNG gửi khi
-// im lặng. Vì vậy backend không thể chỉ dựa vào "chunk mới tới" để phát hiện hết câu (sẽ không
-// bao giờ nhận được frame im lặng). Thay vào đó mỗi lần đọc dùng read-deadline = SilenceMS: nếu
-// không có frame mới trong khoảng đó, coi như node đã ngừng gửi vì hết câu -> flush utterance
-// đang gom. Trần MaxUtterMS (wall-clock) + trần byte vẫn giữ để chặn buffer phình vô hạn nếu
-// node gửi liên tục nhanh hơn SilenceMS hoặc nhanh hơn thời gian thực.
+// im lặng (nhưng GIỮ WS mở). Backend gom mọi frame nhận được vào utterance hiện tại; điểm hết câu
+// là "không có frame mới trong SilenceMS". KHÔNG thể dùng read-deadline (context.WithTimeout cho
+// conn.Read) để dò im lặng: coder/websocket đóng kết nối khi context Read hết hạn. Thay vào đó
+// đọc trong goroutine riêng bằng context nền (chỉ lỗi khi kết nối đóng thật), còn vòng chính dùng
+// ticker định kỳ để phát hiện khoảng lặng và flush utterance. Trần MaxUtterMS + trần byte vẫn giữ
+// để chặn buffer phình vô hạn.
 //
 // Build WAV, gọi ASR, parse lệnh tiếng Việt rồi publish home/room/ac_cmd. Lỗi ASR/publish -> log
 // rồi bỏ qua, KHÔNG đóng kết nối WS (voice node tiếp tục stream được).
@@ -78,37 +78,51 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	buf := newUtteranceBuffer(h.cfg)
 	silenceLimit := time.Duration(h.cfg.SilenceMS) * time.Millisecond
 
-	for {
-		readCtx, cancel := context.WithTimeout(ctx, silenceLimit)
-		msgType, data, err := conn.Read(readCtx)
-		timedOut := errors.Is(readCtx.Err(), context.DeadlineExceeded)
-		cancel()
-
-		if err != nil {
-			// Không có frame mới trong SilenceMS mà ctx cha (kết nối) vẫn còn sống -> KHÔNG phải
-			// đóng kết nối, mà là node đã ngừng gửi vì im lặng (VAD trên device) -> hết câu.
-			if timedOut && ctx.Err() == nil {
-				if pcm := buf.reset(); len(pcm) > 0 {
-					h.handleUtterance(ctx, pcm)
-				}
-				continue
+	// Đọc frame trong goroutine với context nền (kết nối) — conn.Read chỉ lỗi khi WS đóng thật,
+	// không bao giờ vì read-deadline (nên WS không bị đóng lúc im lặng).
+	frames := make(chan []byte, 16)
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for {
+			msgType, data, err := conn.Read(ctx)
+			if err != nil {
+				return
 			}
-			// Kết nối đóng thật (client rớt / lỗi mạng / server shutdown) -> flush câu dở dang
-			// lần cuối rồi thoát. Dùng context.Background() làm cha vì r.Context() có thể đã hủy;
-			// handleUtterance tự bọc timeout riêng (asrTimeout) nên vẫn có giới hạn thời gian.
+			if msgType != websocket.MessageBinary || len(data) == 0 {
+				continue // node chỉ được kỳ vọng gửi binary PCM
+			}
+			select {
+			case frames <- data:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(silenceCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case data := <-frames:
+			if utterance, cut := buf.feed(data, time.Now()); cut {
+				h.handleUtterance(ctx, utterance)
+			}
+		case <-ticker.C:
+			// Hết câu = im lặng (không frame mới) đủ SilenceMS trong khi đang gom.
+			if utterance, cut := buf.flushIfSilent(time.Now(), silenceLimit); cut {
+				h.handleUtterance(ctx, utterance)
+			}
+		case <-readDone:
+			// Kết nối đóng thật -> flush câu dở dang lần cuối. context.Background() vì r.Context()
+			// có thể đã hủy; handleUtterance tự bọc asrTimeout nên vẫn có giới hạn.
 			if pcm := buf.reset(); len(pcm) > 0 {
 				h.handleUtterance(context.Background(), pcm)
 			}
 			return
-		}
-
-		if msgType != websocket.MessageBinary || len(data) == 0 {
-			continue // bỏ qua frame text/rỗng (node chỉ được kỳ vọng gửi binary PCM)
-		}
-
-		utterance, cut := buf.feed(data, time.Now())
-		if cut {
-			h.handleUtterance(ctx, utterance)
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -157,36 +171,29 @@ func newUtteranceBuffer(cfg Config) *utteranceBuffer {
 	return &utteranceBuffer{cfg: cfg}
 }
 
-// feed nạp 1 chunk PCM 16-bit LE. Trả về (utterance, true) khi phát hiện hết câu — buffer tự
-// reset sau khi trả để sẵn sàng utterance kế tiếp. Chưa đủ điều kiện cắt -> (nil, false).
-// Lưu ý: cắt câu theo "im lặng" chủ yếu xảy ra ở ServeHTTP (read-deadline, vì node ngừng gửi
-// khi im lặng nên feed() không nhận được chunk im để tự phát hiện) — feed() chỉ còn giữ điều
-// kiện MaxUtterMS/trần byte làm lưới an toàn thứ hai, và kiểm tra năng lượng chunk phòng khi
-// node vẫn lọt vài frame năng lượng thấp.
+// feed nạp 1 chunk PCM 16-bit LE nhận được. Vì node đã tự VAD (chỉ gửi khi có tiếng), mọi frame
+// tới đây đều là tiếng nói -> gom hết, cập nhật lastVoice. Trả về (utterance, true) khi chạm trần
+// MaxUtterMS hoặc trần byte (lưới an toàn); điểm hết-câu-theo-im-lặng do flushIfSilent lo.
 func (b *utteranceBuffer) feed(chunk []byte, now time.Time) ([]byte, bool) {
-	loud := chunkEnergy(chunk) >= energyThreshold
-
-	if loud {
-		if !b.talking {
-			b.talking = true
-			b.startedAt = now
-			b.pcm = b.pcm[:0]
-		}
-		b.lastVoice = now
-	}
-
 	if !b.talking {
-		return nil, false // im lặng trước khi có tiếng nói — bỏ, không giữ buffer vô ích
+		b.talking = true
+		b.startedAt = now
+		b.pcm = b.pcm[:0]
 	}
-
+	b.lastVoice = now
 	b.pcm = append(b.pcm, chunk...)
 
-	silenceLimit := time.Duration(b.cfg.SilenceMS) * time.Millisecond
 	maxLimit := time.Duration(b.cfg.MaxUtterMS) * time.Millisecond
-	silence := now.Sub(b.lastVoice)
-	total := now.Sub(b.startedAt)
+	if now.Sub(b.startedAt) >= maxLimit || len(b.pcm) >= b.maxUtterBytes() {
+		return b.reset(), true
+	}
+	return nil, false
+}
 
-	if (!loud && silence >= silenceLimit) || total >= maxLimit || len(b.pcm) >= b.maxUtterBytes() {
+// flushIfSilent trả về (utterance, true) nếu đang gom mà không có frame mới trong silenceLimit —
+// nghĩa là node đã ngừng gửi vì hết câu. Gọi định kỳ từ ticker ở ServeHTTP (không dựa read-deadline).
+func (b *utteranceBuffer) flushIfSilent(now time.Time, silenceLimit time.Duration) ([]byte, bool) {
+	if b.talking && len(b.pcm) > 0 && now.Sub(b.lastVoice) >= silenceLimit {
 		return b.reset(), true
 	}
 	return nil, false
@@ -210,24 +217,6 @@ func (b *utteranceBuffer) maxUtterBytes() int {
 	const safetyFactor = 2
 	bytesPerMS := b.cfg.SampleRate * bytesPerSample * channels / 1000
 	return b.cfg.MaxUtterMS * bytesPerMS * safetyFactor
-}
-
-// chunkEnergy tính biên độ trung bình tuyệt đối các sample int16 LE trong chunk — heuristic VAD
-// đơn giản (YAGNI, chưa cần model VAD phức tạp).
-func chunkEnergy(chunk []byte) int {
-	n := len(chunk) / bytesPerSample
-	if n == 0 {
-		return 0
-	}
-	var sum int64
-	for i := 0; i < n; i++ {
-		s := int16(binary.LittleEndian.Uint16(chunk[i*2 : i*2+2]))
-		if s < 0 {
-			s = -s
-		}
-		sum += int64(s)
-	}
-	return int(sum / int64(n))
 }
 
 // buildWAV bọc pcm (16-bit mono LE) bằng header WAV chuẩn 44 byte — tự viết, không cần lib ngoài.

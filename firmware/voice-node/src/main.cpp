@@ -17,7 +17,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include <MQTT.h>
 #include <driver/i2s.h>
+#include <sys/time.h>
 #include <math.h>
 
 #include "config.h"
@@ -26,6 +28,16 @@
 static const uint8_t PIN_I2S_SCK = 26;  // BCLK, output từ ESP
 static const uint8_t PIN_I2S_WS  = 25;  // LRCL/WS, output từ ESP
 static const uint8_t PIN_I2S_SD  = 34;  // DOUT từ mic, input-only trên WROOM-32
+
+// PIR chuyển từ room-node sang đây (quyết định 2026-07-16): fusion PIR+radar dời
+// về backend. Chân GPIO27 an toàn (không strapping, hỗ trợ pulldown + interrupt).
+//   IN (OUT tín hiệu PIR) -> GPIO27     5V -> 5V/VIN     GND -> GND
+//   ⚠️ Đo áp OUT trước: 3.3V cắm thẳng; 5V phải chia áp trước GPIO27 (max 3.3V).
+static const uint8_t PIN_PIR = 27;
+
+// ---- MQTT ----
+static const char    *TOPIC_MOTION = "home/door/motion";  // giữ nguyên contract Phase 2
+static const uint32_t MOTION_PUBLISH_THROTTLE_MS = 1000;   // chống flood khi PIR kích liên tục
 
 static const i2s_port_t I2S_PORT     = I2S_NUM_0;
 static const uint32_t   SAMPLE_RATE  = 16000;   // đúng contract backend
@@ -37,10 +49,19 @@ static const size_t I2S_READ_SAMPLES = 256;
 // VAD năng lượng: ngưỡng RMS cố định, CẦN TUNE thực địa (phụ thuộc mic, gain,
 // tiếng ồn nền quạt/AC — xem risk trong plan). im lặng SILENCE_MS liên tục
 // mới coi là hết câu, tránh cắt giữa câu do ngắt quãng ngắn.
-static const float    VAD_THRESHOLD = 800.0f;
+// Sau khi nâng gain (MIC_SHIFT=11), biên độ ~32x so với >>16 cũ -> RMS nền ~160-1200, tiếng nói
+// ~4800-8000. Ngưỡng 2500 tách tiếng nói khỏi nhiễu nền + giảm gửi đoạn gần-im (bớt ảo giác ASR).
+static const float    VAD_THRESHOLD = 2500.0f;
 static const uint32_t SILENCE_MS    = 800;
 
+// MIC_SHIFT: INMP441 để tín hiệu ~2% full-scale khi >>16 -> whisper đoán mò. >>11 đẩy lên ~50-67%
+// full-scale (kèm clamp chống tràn int16). Giảm shift = to hơn nhưng dễ clip; tăng = nhỏ hơn.
+static const uint8_t  MIC_SHIFT     = 11;
+
 WebSocketsClient webSocket;
+
+WiFiClient  net;              // TCP riêng cho MQTT (WebSocket dùng client nội bộ của lib)
+MQTTClient  mqtt(256);        // buffer nhỏ — chỉ publish motion payload ngắn
 
 static int32_t i2sRawBuf[I2S_READ_SAMPLES];  // dữ liệu thô từ I2S (32-bit slot)
 static int16_t pcmBuf[I2S_READ_SAMPLES];     // PCM16 sau khi hạ bit, gửi thẳng qua WS
@@ -48,6 +69,23 @@ static int16_t pcmBuf[I2S_READ_SAMPLES];     // PCM16 sau khi hạ bit, gửi th
 bool     streaming   = false;  // đang trong một utterance -> có gửi frame
 uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng
 uint32_t lastLogMs   = 0;      // throttle log Serial, tránh spam mỗi ~16ms
+
+volatile bool motionFlag = false;  // set trong ISR PIR, tiêu thụ trong loop() — KHÔNG gọi MQTT trong ISR
+uint32_t lastMotionPublishMs   = 0;
+bool     firstMotionPublishDone = false;
+
+// ISR: chỉ set cờ. Client MQTT không interrupt-safe.
+void IRAM_ATTR onMotion() {
+  motionFlag = true;
+}
+
+// ---- Thời gian epoch (ms) cho payload; 0 nếu NTP chưa sync ----
+uint64_t epochMs() {
+  struct timeval tv;
+  gettimeofday(&tv, nullptr);
+  if (tv.tv_sec < 100000) return 0;
+  return (uint64_t)tv.tv_sec * 1000ULL + tv.tv_usec / 1000ULL;
+}
 
 // ---- WiFi: kết nối + tự thử lại, không treo loop khi mất mạng ----
 void connectWiFi() {
@@ -63,13 +101,37 @@ void connectWiFi() {
   Serial.println(WiFi.status() == WL_CONNECTED ? " OK" : " FAIL (thử lại sau)");
 }
 
+// ---- MQTT: kết nối broker, tự thử lại (không chặn quá lâu để không nghẽn audio) ----
+void connectMQTT() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (mqtt.connected()) return;
+  Serial.print("MQTT: nối broker");
+  for (uint8_t i = 0; i < 3 && !mqtt.connected(); i++) {
+    if (mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS)) break;
+    Serial.print(".");
+    delay(500);
+    if (WiFi.status() != WL_CONNECTED) { Serial.println(" mất WiFi"); return; }
+  }
+  Serial.println(mqtt.connected() ? " OK" : " FAIL (thử lại sau)");
+}
+
+// ---- Publish home/door/motion khi PIR có cạnh lên (retain=false, QoS1) ----
+void publishMotion() {
+  char payload[64];
+  snprintf(payload, sizeof(payload), "{\"ts\":%llu,\"motion\":true}",
+           (unsigned long long)epochMs());
+  bool ok = mqtt.connected() &&
+            mqtt.publish(TOPIC_MOTION, payload, false /*retain*/, 1 /*qos*/);
+  Serial.printf("PUB %s %s -> %s\n", TOPIC_MOTION, payload, ok ? "ok" : "fail");
+}
+
 // ---- Init I2S RX: 16kHz, slot 32-bit, mono kênh trái (INMP441 L/R->GND) ----
 void setupI2S() {
   i2s_config_t i2sConfig = {
       .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
       .sample_rate = SAMPLE_RATE,
       .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // INMP441 xuất 24-bit trong khung 32-bit
-      .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,   // mono, đúng kênh trái đã chọn qua L/R->GND
+      .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,  // INMP441 L/R->GND đẩy slot trái; driver I2S legacy ESP32 đảo LEFT/RIGHT -> phải chọn ONLY_RIGHT mới đọc đúng (nếu vẫn 0.0 thử lại ONLY_LEFT + kiểm hàn SD/SCK/WS)
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
       .dma_buf_count = 8,
@@ -130,12 +192,19 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+  pinMode(PIN_PIR, INPUT_PULLDOWN);  // PIR đẩy HIGH chủ động; pulldown giữ LOW khi chưa nối
+  attachInterrupt(digitalPinToInterrupt(PIN_PIR), onMotion, RISING);
+
   connectWiFi();
+  configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC epoch cho ts motion
   setupI2S();
 
   webSocket.begin(BACKEND_WS_HOST, BACKEND_WS_PORT, BACKEND_WS_PATH);
   webSocket.onEvent(onWsEvent);
   webSocket.setReconnectInterval(3000);  // tự thử lại mỗi 3s nếu rớt kết nối
+
+  mqtt.begin(MQTT_HOST, MQTT_PORT, net);
+  connectMQTT();
 }
 
 void loop() {
@@ -143,6 +212,20 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   webSocket.loop();  // bơm sự kiện WS + xử lý reconnect nội bộ của lib
+
+  if (!mqtt.connected()) connectMQTT();
+  mqtt.loop();  // keepalive MQTT (i2s_read timeout 200ms đảm bảo gọi đủ thường)
+
+  // Tiêu thụ cờ PIR (ISR set) — nơi an toàn duy nhất để gọi MQTT.
+  if (motionFlag) {
+    motionFlag = false;
+    bool outsideThrottle = now - lastMotionPublishMs >= MOTION_PUBLISH_THROTTLE_MS;
+    if (!firstMotionPublishDone || outsideThrottle) {
+      lastMotionPublishMs = now;
+      firstMotionPublishDone = true;
+      publishMotion();
+    }
+  }
 
   // Đọc I2S có timeout — không dùng portMAX_DELAY để tránh treo loop nếu
   // mic/driver có vấn đề; timeout hết thì bỏ qua vòng này, thử lại vòng sau.
@@ -155,7 +238,10 @@ void loop() {
   // là cách đơn giản nhất để có PCM16 hợp lệ (tune lại nếu âm lượng sai lệch
   // thực địa — xem risk trong plan).
   for (size_t i = 0; i < samples; i++) {
-    pcmBuf[i] = (int16_t)(i2sRawBuf[i] >> 16);
+    int32_t s = i2sRawBuf[i] >> MIC_SHIFT;   // khuếch đại so với >>16 để whisper nghe rõ
+    if (s > 32767) s = 32767;                // clamp chống tràn int16 khi tiếng to
+    else if (s < -32768) s = -32768;
+    pcmBuf[i] = (int16_t)s;
   }
 
   float rms = computeRms(pcmBuf, samples);

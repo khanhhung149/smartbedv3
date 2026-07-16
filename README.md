@@ -1,230 +1,118 @@
-# ESP32 Home Presence Detection + Automatic AC Control
+# ESP32 Home Presence Detection + Auto AC + Voice
 
-A distributed IoT system for detecting room occupancy (motion + presence sensors) and automatically controlling air conditioning via infrared learning.
+Hệ IoT phân tán: phát hiện hiện diện bằng **fusion PIR (voice-node) + radar (room-node), gộp ở backend**, tự điều khiển điều hòa qua IR học được, và **ra lệnh giọng nói tiếng Việt** qua ASR self-host.
 
-**Status**: MVP code-complete (firmware compiles, backend verified); hardware integration pending.
+**Status** (2026-07-16): Room node radar → presence đã **nghiệm thu phần cứng**. Backend + ASR + voice-node (audio+MQTT+PIR) code-complete, build/test xanh; voice E2E + PIR thật + IR + hàn lại radar còn chờ.
 
-## Quick Start
-
-### Architecture
+## Kiến trúc
 
 ```
-┌─ Firmware (2x ESP32-S2)
-│  ├─ Door Node: PIR motion sensor
-│  └─ Room Node: LD2410 radar + IR learning/blaster
-│
-├─ MQTT Broker (Mosquitto, authenticated)
-│
-└─ Go Backend: REST API + WebSocket + state machine
+Room node (S2 Mini) ── home/room/presence (radar) ──┐
+  IR learn/blast ◄── home/room/ac_cmd ──────────────┤
+Voice node (WROOM-32) ─ home/door/motion (PIR) ──────┼─ Mosquitto ─ Go backend (FUSE) ─ REST/WS
+                     └─ WebSocket audio ─────────────┼──────────→ /api/voice/stream
+                                                      └──────────→ asr (faster-whisper) → ac_cmd
 ```
 
-See [`docs/system-architecture.md`](./docs/system-architecture.md) for detailed diagram and data flow.
-
-### Current Phase
-
-**Phase 1 & 2** (MVP):
-- ✅ Firmware code written and compiles clean
-- ✅ Go backend code written, unit tests passing, end-to-end verified against simulated MQTT
-- ⏳ Awaiting hardware verification of ESP32-S2 nodes (GPIO7 safety check required before soldering)
-
-**Phase 3 & 4** (Future):
-- Voice node with ASR (deferred, provider decision pending)
-- Flutter mobile app (not started)
+Chi tiết: [`docs/system-architecture.md`](./docs/system-architecture.md).
 
 ## Directory Map
 
-| Directory | Purpose |
-|-----------|---------|
-| `backend/` | Go REST API, state machine, MQTT client (~874 LOC, 11 files) |
-| `firmware/` | PlatformIO projects for door and room nodes (~520 LOC, 2 nodes) + Mosquitto broker config |
-| `docs/` | Technical documentation (this README, architecture, roadmap, standards) |
-| `plans/` | Implementation phase logs and decision records |
+| Thư mục | Nội dung |
+|---------|----------|
+| `backend/` | Go: MQTT + state machine + REST/WS + `internal/voice/` (endpoint audio) |
+| `asr/` | Python FastAPI + faster-whisper (ASR self-host) |
+| `firmware/` | PlatformIO: `room-node` (active), `voice-node` (active), `door-node` (retired), `mqtt/` |
+| `docs/` | Tài liệu kỹ thuật |
+| `plans/` | Log pha + quyết định (gitignored) |
 
 ## Documentation
 
-Start here based on your needs:
-
-| Document | For | Contents |
-|----------|-----|----------|
-| [`docs/project-overview-pdr.md`](./docs/project-overview-pdr.md) | Product leads | Problem statement, scope, key decisions, success metrics |
-| [`docs/system-architecture.md`](./docs/system-architecture.md) | System designers | Architecture diagram, MQTT contract, data flows, REST API |
-| [`docs/codebase-summary.md`](./docs/codebase-summary.md) | New developers | Code structure, entry points, module responsibilities |
-| [`docs/code-standards.md`](./docs/code-standards.md) | Contributors | Naming conventions, Go/firmware patterns, testing strategy |
-| [`docs/project-roadmap.md`](./docs/project-roadmap.md) | Project managers | Phase status, open action items, blocking issues |
-| [`docs/system-wiring.md`](./docs/system-wiring.md) | Hardware integrators | Pin diagrams, sensor wiring, MQTT topics (Vietnamese) |
+| Doc | Cho | Nội dung |
+|-----|-----|----------|
+| [`docs/project-overview-pdr.md`](./docs/project-overview-pdr.md) | Product | Vấn đề, scope, quyết định, metrics |
+| [`docs/system-architecture.md`](./docs/system-architecture.md) | Designer | Sơ đồ, MQTT/voice contract, fusion, API |
+| [`docs/codebase-summary.md`](./docs/codebase-summary.md) | Dev mới | Cấu trúc code, module, file thật |
+| [`docs/code-standards.md`](./docs/code-standards.md) | Contributor | Quy ước đặt tên, pattern, test |
+| [`docs/project-roadmap.md`](./docs/project-roadmap.md) | PM | Trạng thái pha, việc còn treo |
+| [`docs/system-wiring.md`](./docs/system-wiring.md) | Phần cứng | Pinout, đấu nối, cảnh báo điện |
 
 ## Setup
 
-### Backend (Go)
-
+### Backend + ASR
 ```bash
 cd backend
-
-# Build locally
-go build ./cmd/server
-
-# Or via Docker
-docker-compose up -d
-
-# Check health
+docker compose up            # backend (:8080) + asr (faster-whisper)
 curl http://localhost:8080/healthz
-curl http://localhost:8080/api/state
 ```
+Config qua env (xem `.env.example`; `ASR_URL`, `MQTT_*`, timing).
 
-**Requirements**: Go 1.24+ or Docker  
-**Config**: Environment variables (see [`docs/codebase-summary.md`](./docs/codebase-summary.md#configuration-environment-variables))
-
-### Firmware (ESP32)
-
+### Broker
 ```bash
-cd firmware
-
-# Door node
-cd door-node
-pio run -t upload  # Requires PlatformIO CLI + USB serial connection
-
-# Room node
-cd ../room-node
-pio run -t upload
+docker ps | grep home-mqtt   # Mosquitto :1883 (auth homeuser/homepass123)
 ```
 
-**Requirements**: PlatformIO CLI + Wemos S2 Mini boards + sensors  
-**Secrets**: Copy `include/config.h.example` to `config.h`, fill in WiFi/MQTT credentials
-
-### MQTT Broker
-
+### Firmware
 ```bash
-cd firmware/mqtt
-docker-compose up -d
-
-# Verify
-mosquitto_sub -h localhost -u test -P test -t '$SYS/#'
+# Room node (S2 Mini) — vào bootloader tay: giữ nút 0, tap RST, thả 0
+cd firmware/room-node && pio run -e lolin_s2_mini -t upload
+# Voice node (WROOM-32)
+cd firmware/voice-node && pio run -e esp32dev -t upload
 ```
+Secrets: copy `include/config.h.example` → `config.h`, điền WiFi/MQTT/backend host.
 
-**Status**: Mosquitto 2 with authentication, no TLS (LAN-only MVP).
-
-## API Examples
-
-```bash
-# Get occupancy state
-curl http://localhost:8080/api/state
-# {"state":"occupied","present":true,"ac_on":true,...}
-
-# Turn AC on (manual override)
-curl -X POST http://localhost:8080/api/ac -H "Content-Type: application/json" -d '{"cmd":"on"}'
-
-# Initiate IR learning for AC "on" button
-curl -X POST http://localhost:8080/api/ac/learn -H "Content-Type: application/json" -d '{"button":"on"}'
-
-# WebSocket for real-time updates
-wscat -c ws://localhost:8080/ws
-# Will receive state updates on every change
-```
+> WSL: nạp qua `usbipd` (attach board vào WSL). S2 Mini native-USB CDC — xem serial bằng `pio device monitor` (`cat` không đọc được vì cần DTR). Log `[hb]` in trạng thái mỗi 2s.
 
 ## MQTT Topics
 
-| Topic | Direction | Purpose |
-|-------|-----------|---------|
-| `home/door/motion` | Door → Backend | PIR motion events |
-| `home/room/presence` | Room → Backend | LD2410 presence state (retained) |
-| `home/room/ac_cmd` | Backend → Room | AC on/off commands |
-| `home/room/ac_learn` | Backend → Room | Trigger IR learning window |
+| Topic | Hướng | Retain | Nội dung |
+|-------|-------|--------|----------|
+| `home/room/presence` | Room → Backend | ✅ | presence theo radar (backend fuse thêm motion) |
+| `home/door/motion` | Voice node (PIR) → Backend | — | cạnh lên PIR (GPIO27) |
+| `home/room/ac_cmd` | Backend → Room | — | AC on/off (voice hoặc REST) |
+| `home/room/ac_learn` | Backend → Room | — | mở học IR 15s |
 
-See [`docs/system-architecture.md`](./docs/system-architecture.md#mqtt-topic-contract) for full details.
+Xem live: `docker exec -it home-mqtt mosquitto_sub -u homeuser -P homepass123 -t 'home/#' -v`
 
-## Development
-
-### Code Conventions
-
-- **Backend (Go)**: Idiomatic Go, interfaces at point of use, table-driven tests
-- **Firmware (C++)**: English identifiers, Vietnamese comments, camelCase functions, SCREAMING_SNAKE_CASE constants
-
-See [`docs/code-standards.md`](./docs/code-standards.md) for full style guide.
-
-### Testing
+## API
 
 ```bash
-# Backend
-cd backend
-go test ./...  # 6/6 state machine tests passing
-
-# Firmware
-cd firmware/door-node
-pio run        # Compile check (no unit tests yet; integration test via MQTT)
+curl http://localhost:8080/api/state
+curl -X POST http://localhost:8080/api/ac -H 'Content-Type: application/json' -d '{"cmd":"on"}'
+curl -X POST http://localhost:8080/api/ac/learn -H 'Content-Type: application/json' -d '{"button":"on"}'
+# WebSocket state:  ws://localhost:8080/api/ws
+# WebSocket audio:  ws://localhost:8080/api/voice/stream  (PCM 16k mono 16-bit LE)
 ```
 
-### Contributing
-
-1. Read [`docs/code-standards.md`](./docs/code-standards.md) before coding
-2. Adhere to naming conventions and patterns documented there
-3. Add tests for new behavior (Go) or verify MQTT output (firmware)
-4. Update `docs/` if behavior, API, or architecture changed
-5. Follow commit messages: descriptive, no AI references
+## Testing
+```bash
+cd backend && go test ./...     # state machine + 9 case parse lệnh voice
+cd firmware/room-node && pio run -e lolin_s2_mini   # compile check
+```
 
 ## Current Blockers
 
-| Blocker | Impact | Status |
-|---------|--------|--------|
-| **GPIO7 safety check on ESP32-S2** | Phase 1 hardware | Door node PIR wiring pending boot-pin verification |
-| **Real hardware flash test** | Phase 1 & 2 integration | Firmware untested on actual boards |
-| **Timing parameter tuning** | Phase 2 accuracy | Enter/exit windows (15s/60s) need real-world validation |
-| **ASR provider decision** | Phase 3 blocking | Voice node architecture depends on Whisper vs. cloud ASR choice |
+| Blocker | Ảnh hưởng | Trạng thái |
+|---------|-----------|-----------|
+| Mối hàn radar OUT→GPIO16 chập chờn + đè cổng USB-C | Độ ổn định presence | ⏳ Hàn lại + gỡ khỏi USB-C |
+| PIR dời sang voice-node (GPIO27) — chưa verify, con cũ nghi hỏng (cắm ngược nóng) | Fusion đủ 2 cảm biến | ⏳ Đo áp + đấu đúng chữ in / thay con |
+| Mic INMP441 chưa hàn + VAD chưa tune | Voice node | ⏳ Hàn + tune `VAD_THRESHOLD` |
+| E2E voice chưa chạy | Luồng voice→AC | ⏳ `docker compose up` + nói thử |
 
-See [`docs/project-roadmap.md`](./docs/project-roadmap.md) for detailed phase status and action items.
-
-## Security Notes
-
-🔒 **Current (MVP/LAN-only)**:
-- MQTT auth: Username/password (no TLS)
-- REST API: No auth (LAN-only assumption)
-- CORS: Wide open (intentional MVP)
-- IR codes: Stored locally on room node only
-
-⚠️ **Before internet exposure**:
-- [ ] Add TLS/mTLS to MQTT broker
-- [ ] Add API authentication (tokens or OAuth)
-- [ ] Tighten CORS to specific frontend origin
-- [ ] Add rate limiting to REST endpoints
-
-## Known Limitations
-
-- Single room (no multi-room support yet)
-- No event history (in-memory state only; SQLite deferred as YAGNI)
-- No firmware OTA updates (manual USB flash only)
-- Voice control deferred (Phase 3, not started)
-- Mobile app deferred (Phase 4, not started)
-
-## Troubleshooting
-
-| Issue | Check | Fix |
-|-------|-------|-----|
-| Backend can't connect to Mosquitto | `docker ps \| grep mosquitto` | Ensure `docker-compose up -d` in `firmware/mqtt/` |
-| Room node not receiving ac_cmd | `mosquitto_sub -t 'home/room/ac_cmd'` | Check room node MQTT subscription code |
-| IR blaster not firing | Test GPIO5 directly with LED | Verify transistor driver circuit and NVS storage |
-| PIR not triggering | Check GPIO7 with multimeter | Confirm no boot-strap conflict |
-
-More at [`docs/system-architecture.md#monitoring--troubleshooting`](./docs/system-architecture.md#monitoring--troubleshooting).
+## Security (MVP / LAN-only)
+🔒 MQTT auth (no TLS) · REST/WS no auth (LAN) · **audio không rời LAN** (ASR self-host) · IR codes chỉ local NVS.
+⚠️ Trước internet: TLS/mTLS MQTT, auth API, siết CORS, rate-limit.
 
 ## Roadmap
 
-| Phase | Status | Timeline |
-|-------|--------|----------|
-| 1: Two-node presence + AC (firmware) | ✅ Code done, ⏳ HW pending | Q3 2026 |
-| 2: Go backend | ✅ Code done, ✅ verified | Q3 2026 |
-| 3: Voice node + ASR | 🔴 Deferred | Q3 2026+ (decision pending) |
-| 4: Flutter app | 🔴 Not started | Q4 2026+ |
+| Phase | Trạng thái |
+|-------|-----------|
+| 1: Presence + AC (room node radar-only, fusion ở backend) | ✅ Code + **HW nghiệm thu** (radar); ⏳ IR + hàn lại radar |
+| 2: Go backend + voice endpoint + ASR | ✅ Code + test xanh; ⏳ E2E audio |
+| 3: Voice node (WROOM-32 + INMP441) | ✅ Firmware build; ⏳ hàn mic + tune + E2E |
+| 4: Flutter app | 🔴 Chưa bắt đầu |
 
-See [`docs/project-roadmap.md`](./docs/project-roadmap.md) for details.
-
-## Author
-
-Solo IoT project by Vietnamese engineer. Code identifiers in English; firmware comments in Vietnamese (intentional convention documented in [`docs/code-standards.md`](./docs/code-standards.md)).
-
-## License
-
-(To be determined; project currently undeclared)
+Chi tiết: [`docs/project-roadmap.md`](./docs/project-roadmap.md).
 
 ---
-
-**Last updated**: 2026-07-14  
-**Next review**: After Phase 1 hardware verification
+**Last updated**: 2026-07-16

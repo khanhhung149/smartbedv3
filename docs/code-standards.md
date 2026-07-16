@@ -55,7 +55,7 @@ Define interfaces in the package that **uses** them, not in the package that imp
 
 **Example**:
 ```go
-// In internal/api/handler.go
+// In internal/api/handlers.go
 type StateProvider interface {
     GetState() (*state.State, error)
 }
@@ -175,19 +175,19 @@ Document all GPIO assignments in a header comment block at top of `main.cpp`:
 
 ```cpp
 // ============================================
-// ESP32-S2 (Wemos S2 Mini) Pin Assignment
+// ESP32-S2 (Wemos S2 Mini) — Room node Pin Assignment
 // ============================================
-// GPIO7  — PIR motion sensor (input, pull-up)
 // GPIO16 — LD2410 radar digital out (input)
 // GPIO5  — IR blaster control (output → transistor)
 // GPIO15 — IR receiver (input, TSOP38238)
 // UART   — GPIO33(TX), GPIO18(RX) for LD2410 UART (if used)
+// (PIR đã dời sang voice-node WROOM-32 GPIO27 — fusion ở backend)
 // ============================================
 ```
 
 ### MQTT & Networking
 
-- **Client ID**: Unique per node, set in `config.h` (e.g., `MQTT_CLIENT_ID "home-door-node"`)
+- **Client ID**: Unique per node, set in `config.h` (e.g., `MQTT_CLIENT_ID "home-room-node"`, `"home-voice-node"`)
 - **Payload format**: Hand-built JSON using `snprintf` (no JSON library to save space)
   ```cpp
   char payload[64];
@@ -214,7 +214,7 @@ Document all GPIO assignments in a header comment block at top of `main.cpp`:
   #define MQTT_PORT 1883
   #define MQTT_USER "user"
   #define MQTT_PASS "password"
-  #define MQTT_CLIENT_ID "home-door-node"
+  #define MQTT_CLIENT_ID "home-room-node"
   ```
 - **Real file**: Copy template to `config.h`, edit with real values, add to `.gitignore`
 - **Never commit** `config.h` or any file with credentials

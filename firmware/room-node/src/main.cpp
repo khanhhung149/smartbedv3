@@ -1,9 +1,11 @@
-// Room node — Wemos S2 Mini (ESP32-S2)  [phần cứng thật: LD2410 + PIR gắn trên S2 Mini]
-// (1) Đọc radar presence + PIR chuyển động -> fuse tại board -> publish home/room/presence (retain).
+// Room node — Wemos S2 Mini (ESP32-S2)  [phần cứng thật: LD2410 radar trên S2 Mini]
+// (1) Đọc radar presence -> publish home/room/presence (retain). CHỈ radar.
 // (2) Học mã IR từ remote điều hòa thật, lưu NVS, phát lại khi có lệnh.
 //
-// Gộp door-node cũ vào đây cho MVP 1 phòng (không flash node PIR riêng nữa;
-// firmware/door-node/src/main.cpp giữ lại chỉ để tham chiếu logic ISR).
+// PIR đã DỜI sang voice-node (WROOM-32) — quyết định 2026-07-16: fusion PIR+radar
+// chuyển về backend (state machine gộp home/door/motion + home/room/presence).
+// Room-node giờ chỉ lo radar -> presence + điều khiển IR. Xem plan
+// plans/260716-1433-relocate-pir-to-voice-node-backend-fusion/.
 //
 // Wiring thật (HLK-LD2410 -> S2 Mini):
 //   LD2410 VCC -> S2 Mini VBUS (5V)     LD2410 GND -> S2 Mini GND
@@ -11,18 +13,14 @@
 //   LD2410 TX  -> S2 Mini GPIO33   LD2410 RX -> S2 Mini GPIO18
 //     (UART để dành parse frame LD2410 sau — MVP chỉ đọc OUT digital, chưa init UART)
 //
-//   PIR mini: +5V -> VBUS, GND -> GND, OUT -> S2 Mini GPIO7 (input, interrupt RISING)
-//     ⚠️ đo mức HIGH trước khi hàn cố định — xem docs/system-wiring.md
-//
 //   IR Receiver TSOP: VCC->3V3, GND->GND, OUT->S2 Mini GPIO15 (chỉ dùng lúc học)
 //   IR Blaster: S2 Mini GPIO5 -> R220 -> Base transistor (S8050/2N2222),
 //               Emitter->GND, Collector->IR LED cathode, LED anode->R68->5V
 //
 // Topic:
 //   publish   home/room/presence  {"ts":<unix_ms>,"present":true|false}  QoS1 retain
-//             — "present" là occupied đã fuse PIR+radar, không phải radar thô
-//   publish   home/door/motion    {"ts":<unix_ms>,"motion":true}         QoS1, retain=false
-//             — theo cạnh lên PIR, để backend/tuning quan sát riêng
+//             — "present" là occupied theo RADAR (enter khi radar giữ đủ lâu,
+//               exit sau debounce). Backend fuse thêm motion từ voice-node.
 //   subscribe home/room/ac_cmd    {"cmd":"on"|"off"}    -> phát IR
 //   subscribe home/room/ac_learn  {"button":"on"|"off"} -> vào chế độ học IR
 //
@@ -43,21 +41,18 @@
 
 // ---- Phần cứng (S2 Mini) ----
 static const uint8_t  PIN_PRESENCE = 16;   // LD2410 OUT (presence digital)
-static const uint8_t  PIN_PIR      = 7;    // PIR OUT (chuyển động, cạnh lên) — chân door-node cũ
 static const uint16_t PIN_IR_RECV  = 15;   // TSOP OUT (chỉ dùng lúc học)
 static const uint16_t PIN_IR_SEND  = 5;    // IR LED driver
 
 // ---- Topic ----
 static const char *TOPIC_PRESENCE = "home/room/presence";
-static const char *TOPIC_MOTION   = "home/door/motion";
 static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
 static const char *TOPIC_AC_LEARN = "home/room/ac_learn";
 
-// ---- Fusion presence: tham số tune sau khi verify thực tế ----
-static const uint32_t PRESENCE_HOLD_MS  = 1500;   // radar giữ HIGH liên tục bấy lâu -> tự vào dù không có PIR
-static const uint32_t RADAR_DEBOUNCE_MS = 3000;   // radar rớt HIGH trong khoảng này vẫn coi "còn thấy" (chống rung)
-static const uint32_t EXIT_TIMEOUT_MS   = 60000;  // cả PIR lẫn radar im liên tục bấy lâu mới coi là ra khỏi phòng
-static const uint32_t MOTION_PUBLISH_THROTTLE_MS = 1000;  // giới hạn tần suất publish home/door/motion
+// ---- Presence theo radar: tham số tune sau khi verify thực tế ----
+static const uint32_t PRESENCE_HOLD_MS  = 1500;   // radar giữ HIGH liên tục bấy lâu -> vào (occupied)
+static const uint32_t RADAR_DEBOUNCE_MS = 3000;   // radar rớt HIGH trong khoảng này vẫn coi "còn thấy" (chống rung) -> ra sau đó
+static const uint32_t STATUS_HEARTBEAT_MS = 2000; // nhịp in trạng thái ra Serial để bench-test (đặt 0 để tắt)
 
 // ---- IR ----
 static const uint16_t kCaptureBufferSize = 1024;  // đủ cho khung điều hòa dài
@@ -76,29 +71,17 @@ MQTTClient mqtt(512);
 
 static uint16_t rawBuf[kCaptureBufferSize];  // dùng chung cho load & send
 
-// ---- Trạng thái fusion presence (PIR + radar) ----
-bool     occupied = false;         // trạng thái fused hiện đang publish ra MQTT
-volatile bool motionFlag = false;  // set trong ISR PIR, tiêu thụ trong loop() — không gọi MQTT trong ISR
+// ---- Trạng thái presence (chỉ radar) ----
+bool     occupied = false;         // trạng thái hiện đang publish ra MQTT (radar-based)
 uint32_t lastPollMs = 0;           // nhịp đọc radar 200ms
-
-uint32_t lastMotionMs   = 0;       // lần cuối PIR có cạnh lên
-bool     motionEverSeen = false;   // false -> chưa từng có PIR, không tính "còn mới" cho lastMotionMs=0
 
 uint32_t radarFirstHighMs = 0;     // 0 = radar đang LOW; >0 = mốc bắt đầu chuỗi HIGH hiện tại
 uint32_t lastRadarHighMs  = 0;     // lần cuối radar đọc HIGH
 bool     radarEverHigh    = false; // false -> chưa từng thấy radar HIGH, không tính "còn mới" cho lastRadarHighMs=0
 
-uint32_t lastMotionPublishMs   = 0;
-bool     firstMotionPublishDone = false;
-
 bool     learning = false;
 char     learnKey[4] = {0};   // "on" / "off"
 uint32_t learnUntilMs = 0;
-
-// ISR: chỉ set cờ. KHÔNG gọi MQTT trong ISR (client không interrupt-safe).
-void IRAM_ATTR onMotion() {
-  motionFlag = true;
-}
 
 // ---- Tiện ích thời gian ----
 uint64_t epochMs() {
@@ -131,15 +114,6 @@ void publishPresence(bool present) {
   Serial.printf("PUB %s %s -> %s\n", TOPIC_PRESENCE, payload, ok ? "ok" : "fail");
 }
 
-void publishMotion() {
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"ts\":%llu,\"motion\":true}",
-           (unsigned long long)epochMs());
-  bool ok = mqtt.connected() &&
-            mqtt.publish(TOPIC_MOTION, payload, false /*retain*/, 1 /*qos*/);
-  Serial.printf("PUB %s %s -> %s\n", TOPIC_MOTION, payload, ok ? "ok" : "fail");
-}
-
 void connectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (mqtt.connected()) return;
@@ -157,7 +131,7 @@ void connectMQTT() {
   mqtt.subscribe(TOPIC_AC_LEARN, 1);
   Serial.println(" OK (subscribed ac_cmd, ac_learn)");
 
-  // Đẩy lại trạng thái occupied hiện tại để retain đúng sau reconnect (không phải radar thô)
+  // Đẩy lại trạng thái presence hiện tại để retain đúng sau reconnect
   publishPresence(occupied);
 }
 
@@ -255,11 +229,12 @@ void onMqtt(String &topic, String &payload) {
 
 void setup() {
   Serial.begin(115200);
+  // S2 dùng USB CDC gốc: chờ host mở cổng (tối đa 2s) để không mất log boot
+  uint32_t serialWait = millis();
+  while (!Serial && millis() - serialWait < 2000) delay(10);
   delay(200);
 
   pinMode(PIN_PRESENCE, INPUT);
-  pinMode(PIN_PIR, INPUT);
-  attachInterrupt(digitalPinToInterrupt(PIN_PIR), onMotion, RISING);
   irsend.begin();  // IR receiver chỉ bật khi học (startLearn)
 
   connectWiFi();
@@ -278,30 +253,7 @@ void loop() {
 
   uint32_t now = millis();
 
-  // Xử lý cạnh lên PIR mỗi loop (không đợi nhịp poll radar) để phản ứng tức thì.
-  // Cờ do ISR set — đọc/reset ở đây là nơi an toàn duy nhất để gọi MQTT.
-  bool pirRising = false;
-  if (motionFlag) {
-    motionFlag = false;
-    pirRising = true;
-    lastMotionMs = now;
-    motionEverSeen = true;
-
-    bool outsideThrottle = now - lastMotionPublishMs >= MOTION_PUBLISH_THROTTLE_MS;
-    if (!firstMotionPublishDone || outsideThrottle) {
-      lastMotionPublishMs = now;
-      firstMotionPublishDone = true;
-      publishMotion();
-    }
-  }
-
-  // VÀO ngay khi có cạnh lên PIR — không đợi radar
-  if (!occupied && pirRising) {
-    occupied = true;
-    publishPresence(true);
-  }
-
-  // Poll radar mỗi 200ms + chạy state machine fusion đầy đủ (VÀO do radar giữ lâu, GIỮ, RA)
+  // Poll radar mỗi 200ms + state machine presence theo radar (VÀO khi giữ đủ lâu, RA sau debounce)
   if (now - lastPollMs >= 200) {
     lastPollMs = now;
     bool radar = (digitalRead(PIN_PRESENCE) == HIGH);
@@ -315,19 +267,30 @@ void loop() {
     }
 
     if (!occupied) {
-      // VÀO do radar tự giữ HIGH đủ lâu (trường hợp PIR không kích, vd người ngồi yên từ đầu)
+      // VÀO khi radar giữ HIGH liên tục đủ lâu
       if (radar && radarFirstHighMs != 0 && now - radarFirstHighMs >= PRESENCE_HOLD_MS) {
         occupied = true;
         publishPresence(true);
       }
     } else {
-      bool radarRecent  = radar || (radarEverHigh  && now - lastRadarHighMs < RADAR_DEBOUNCE_MS);
-      bool motionRecent = motionEverSeen && now - lastMotionMs < EXIT_TIMEOUT_MS;
-      if (!radarRecent && !motionRecent) {
+      // RA khi radar không còn thấy (kể cả debounce chống rung)
+      bool radarRecent = radar || (radarEverHigh && now - lastRadarHighMs < RADAR_DEBOUNCE_MS);
+      if (!radarRecent) {
         occupied = false;
         publishPresence(false);
       }
     }
+  }
+
+  // Heartbeat: in trạng thái radar/occupied mỗi STATUS_HEARTBEAT_MS để quan sát live khi bench-test.
+  static uint32_t lastHeartbeatMs = 0;
+  if (STATUS_HEARTBEAT_MS && now - lastHeartbeatMs >= STATUS_HEARTBEAT_MS) {
+    lastHeartbeatMs = now;
+    bool radarNow = (digitalRead(PIN_PRESENCE) == HIGH);
+    Serial.printf("[hb] radar=%d occupied=%d sinceRadarHigh=%lus wifi=%d mqtt=%d\n",
+                  radarNow, occupied,
+                  radarEverHigh ? (unsigned long)((now - lastRadarHighMs) / 1000) : 9999UL,
+                  WiFi.status() == WL_CONNECTED, mqtt.connected());
   }
 
   delay(5);

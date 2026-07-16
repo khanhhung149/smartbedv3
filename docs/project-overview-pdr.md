@@ -1,100 +1,94 @@
 # Project Overview & PDR
 
-## Project Name
-**ESP32-based Home Presence Detection + Automatic AC Control System**
+> Cập nhật: 2026-07-16.
 
-Also referenced as: "Hệ thống presence + AC + voice" in development comments.
+## Project Name
+**ESP32 Home Presence Detection + Automatic AC Control + Voice**
 
 ## Problem Statement
 
-Manual air conditioning (AC) control in homes is wasteful:
-- Users often forget to turn off AC when leaving rooms
-- Running AC in unoccupied spaces wastes electricity
-- No intelligent occupancy detection triggers AC control
+Điều khiển điều hòa thủ công gây lãng phí: quên tắt khi rời phòng, chạy AC ở phòng trống tốn điện, không có phát hiện hiện diện đủ tin cậy để tự động hoá.
 
 ## Solution
 
-A distributed, MQTT-based system that:
-1. Detects room occupancy via dual-sensor approach (motion + presence)
-2. Automatically controls AC power based on occupancy state
-3. Learns AC infrared control codes without external cloud services
-4. Provides a REST API and WebSocket interface for monitoring and manual override
+Hệ phân tán qua MQTT:
+1. Phát hiện hiện diện bằng **fusion PIR + radar** (PIR ở voice-node, radar ở room-node, gộp ở backend — chắc hơn 1 cảm biến).
+2. Tự bật/tắt điều hòa theo occupancy (qua IR học được).
+3. **Ra lệnh bằng giọng nói tiếng Việt** ("bật/tắt điều hòa") → ASR self-host → điều khiển AC.
+4. REST/WebSocket cho client giám sát + điều khiển tay.
 
 ## Scope
 
-### MVP Phase (Current - Phases 1-2)
-- **Two-node firmware** (Wemos S2 Mini ESP32-S2):
-  - Door node: PIR motion sensor (GPIO7)
-  - Room node: HLK-LD2410 presence radar (GPIO16) + IR learning/blaster (GPIO5)
-- **MQTT broker**: Mosquitto (authenticated, no TLS - LAN-only MVP)
-- **Go backend**: State machine for occupancy logic, REST API, WebSocket broadcast
-- **Status**: Code complete, firmware not yet hardware-verified, backend verified against simulated MQTT
+### 2 node vật lý (MVP 1 phòng)
+- **Room node** (Wemos S2 Mini): LD2410 radar (GPIO16) → `home/room/presence` + IR learn/blast (GPIO15/5).
+- **Voice node** (ESP32-WROOM-32): INMP441 I2S mic → VAD → stream audio; **PIR (GPIO27) → `home/door/motion`**.
+- **Fusion** motion+presence → occupied ở **backend** (state machine).
 
-### Future Phases (Deferred)
-- **Phase 3**: Voice node (ESP32-WROOM-32 + INMP441 mic) → backend ASR provider
-- **Phase 4**: Flutter mobile app consuming backend REST/WS API
+### Backend + ASR
+- **Go backend**: nhận motion+presence, state machine, REST/WS, **endpoint voice `/api/voice/stream`**.
+- **ASR** (`asr/`): faster-whisper self-host (`small`, cpu, int8) — audio không rời LAN.
+
+### Broker
+- Mosquitto (auth, no TLS, LAN-only).
+
+### Tương lai
+- **Phase 4**: Flutter app tiêu thụ REST/WS.
 
 ## Key Product Decisions
 
-| Decision | Rationale | Status |
-|----------|-----------|--------|
-| **Indirect occupancy inference** (motion + presence, not 2 PIRs) | LD2410 radar alone drifts; dual sensor provides reliable debouncing. Cost/complexity optimal for MVP. | Locked |
-| **MQTT as transport** | Decouples firmware from backend logic; standard for IoT; enables future device integrations. | Locked |
-| **Local-only IR code storage** (no backend sync) | Reduces complexity; room AC is stateful, not highly portable. Revisit if multi-room IR learning needed. | Deferred for later phases |
-| **LAN-only (no TLS, no internet exposure)** | MVP expedience; reduces crypto overhead on ESP32. Must add TLS before any remote access. | Documented constraint |
-| **Debounce + enter/exit windows** (15s enter, 60s exit) | Prevents flicker from brief room transitions. Configurable; needs real-world tuning. | Proposed, not yet validated |
+| Quyết định | Lý do | Trạng thái |
+|-----------|-------|-----------|
+| **Fusion PIR+radar Ở BACKEND** (PIR dời sang voice-node 2026-07-16) | PIR/radar ở 2 board khác nhau → gộp ở backend (state machine 3-tier gốc). Đánh đổi: presence phụ thuộc backend chạy | ✅ Chốt (đảo từ "tại board") |
+| **2 node** (S2 Mini presence+IR / WROOM voice) thay all-in-one | Radar đã hàn sẵn S2 Mini; mic ngốn CPU → WROOM 2 nhân; presence nhẹ → S2 1 nhân đủ | ✅ Chốt |
+| **ASR = faster-whisper self-host** (không cloud) | Miễn phí, audio ở LAN (riêng tư), tiếng Việt tốt | ✅ Chốt, backend xong |
+| **VAD năng lượng trên device** (không wake-word/nút bấm) | Đơn giản cho MVP; chỉ stream khi có tiếng | ✅ Chốt |
+| **Audio qua WebSocket** (không MQTT) | MQTT không hợp stream audio | ✅ Chốt |
+| **MQTT làm transport** cho presence/AC | Decouple firmware↔backend, chuẩn IoT | ✅ Chốt |
+| **IR lưu local NVS** (không sync backend) | Giảm phức tạp; AC gắn phòng | Deferred multi-room |
+| **LAN-only, no TLS** | MVP; thêm TLS trước khi lộ internet | Ràng buộc ghi nhận |
 
-## Architecture Overview
+## Architecture (tóm tắt)
 
 ```
-[Door PIR] ──┐
-             ├──► MQTT Broker (Mosquitto)  ──► Go Backend  ──► REST/WS API
-[Room Radar] ┘                                 (State Machine)
-[Room IR]    ─────────────────────────────────────────────────►
+[Room Radar] ── home/room/presence ──┐
+[Voice PIR]  ── home/door/motion ─────┼─ MQTT ─ Go backend (FUSE→occupied) ─ REST/WS
+[Room IR]    ◄─ home/room/ac_cmd/learn ┘            │
+[Voice mic]  ── WebSocket audio → /api/voice/stream → asr (whisper) → ac_cmd
 ```
 
-- **MQTT Topics** (See [`docs/system-architecture.md`](./system-architecture.md) for full contract):
-  - `home/door/motion`: PIR events from door node
-  - `home/room/presence`: LD2410 presence state (retained)
-  - `home/room/ac_cmd`: Backend commands AC on/off
-  - `home/room/ac_learn`: Backend triggers IR learn mode
+Chi tiết contract: [`system-architecture.md`](./system-architecture.md).
 
-## Non-Goals (Deferred or Out of Scope)
+## Non-Goals (deferred / out of scope)
+- Cloud connectivity (MVP LAN-only)
+- Multi-room / multi-AC (single room MVP)
+- Mobile app (Phase 4, chưa bắt đầu)
+- Lịch sử sự kiện SQLite (YAGNI)
+- Wake-word offline (dùng VAD; wake-word là mở rộng sau)
 
-- Cloud connectivity (MVP is LAN-only)
-- Multi-room/multi-AC support (single room MVP)
-- Voice commands (Phase 3, ASR provider TBD)
-- Mobile app (Phase 4, not started)
-- Historical event logging (SQLite deferred as YAGNI)
-- Advanced ML occupancy detection (direct inference only)
+## Open Questions
 
-## Open Questions & Decisions Pending Real-World Testing
-
-1. **GPIO7 safety on door-node**: Confirm GPIO7 is not reserved for ESP32-S2 boot-strapping before soldering PIR wiring.
-2. **Enter/Exit window tuning**: 15s enter / 60s exit proposed; needs validation against real household movement patterns.
-3. **ASR provider (Phase 3)**: Self-hosted Whisper vs. cloud-based ASR undecided; blocks voice node architecture.
-4. **Event history**: SQLite persistence initially deferred; may be needed if real-world debugging requires audit log.
+1. **Hàn lại radar OUT→GPIO16** (mối chập chờn) + gỡ khỏi cổng USB-C — chặn độ ổn định presence.
+2. **PIR thật trên voice-node**: đo mức áp OUT (3.3 cắm thẳng / 5V chia áp) → nối GPIO27. Con PIR từng cắm ngược trên S2 gây nóng bỏng → thử/thay.
+3. **Tune `VAD_THRESHOLD`** voice-node với mic thật.
+4. **E2E voice**: đo độ trễ whisper trên CPU thật (<2s); hạ `tiny` nếu chậm.
 
 ## Hardware Manifest
 
-See [`docs/system-wiring.md`](./system-wiring.md) (Vietnamese) for detailed pin-maps and wiring diagrams.
-
-- **Door Node**: Wemos S2 Mini + PIR (HC-SR501)
-- **Room Node**: Wemos S2 Mini + HLK-LD2410 (radar) + IR receiver (TSOP38238) + IR blaster (GPIO5 → transistor)
-- **Broker**: Raspberry Pi or similar running Mosquitto
-- **Backend**: Go service (Docker or native Linux binary)
+Pin chi tiết: [`system-wiring.md`](./system-wiring.md).
+- **Room node**: S2 Mini + PIR + HLK-LD2410 + TSOP38238 (IR recv) + IR blaster (transistor).
+- **Voice node**: WROOM-32 + INMP441.
+- **Broker/Backend/ASR**: host Linux/WSL (Docker).
 
 ## Success Metrics
 
-- ✅ Firmware compiles for both nodes without errors
-- ⏳ Firmware flashes and runs on real S2 Mini hardware (pending GPIO7 check)
-- ✅ Go backend compiles and starts cleanly
-- ✅ E2E test: Backend correctly infers occupied/empty state via MQTT events
-- ⏳ Real-hardware integration: All nodes communicate via Mosquitto on local network
-- ✅ Manual override: REST API ac_cmd endpoint controls IR blaster successfully
+- ✅ Firmware room-node & voice-node compile sạch
+- ✅ **Room node flash + chạy HW thật; radar+fusion presence đúng (2026-07-16)**
+- ✅ Backend compile + test xanh (state machine + voice command)
+- ✅ E2E MQTT: presence/motion tới broker, khớp timestamp
+- ⏳ E2E voice: "bật/tắt điều hòa" → whisper → ac_cmd → IR
+- ⏳ Nối PIR thật + hàn lại radar chắc + hàn mic
 
 ## Development Notes
-
-- **Language mix**: Code identifiers are English; firmware comments and logs are Vietnamese (solo developer's native language). This is intentional and documented in [`docs/code-standards.md`](./code-standards.md).
-- **Test coverage**: Go backend has 6/6 scenario tests passing. Firmware unit tests deferred pending hardware verification.
-- **No persistence**: In-memory state machine only; no database yet (aligns with MVP YAGNI principle).
+- **Ngôn ngữ**: định danh English; comment/log firmware tiếng Việt (chủ ý — xem [`code-standards.md`](./code-standards.md)).
+- **Test**: Go state machine + 9 case parse lệnh voice pass. Firmware verify qua serial `[hb]` + MQTT.
+- **No persistence**: state machine in-memory (YAGNI).
