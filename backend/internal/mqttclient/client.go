@@ -22,6 +22,10 @@ const (
 type Handlers struct {
 	OnMotion   func(events.Motion)
 	OnPresence func(events.Presence)
+	// OnACCmd — mọi lệnh AC đi qua bus, BẤT KỂ ai phát (app, voice, hay ESP32 sau này).
+	// Backend không còn tự quyết định AC (ESP32 lo), nhưng lịch sử vẫn phải ghi được lệnh
+	// đã xảy ra thật. Nghe topic thì bắt hết; ghi ở chỗ publish thì sót lệnh của người khác.
+	OnACCmd func(cmd string)
 }
 
 type Client struct {
@@ -56,6 +60,19 @@ func New(host string, port int, user, pass, clientID string, h Handlers) *Client
 			}
 			h.OnPresence(p)
 		})
+		// Nghe chính lệnh AC để ghi lịch sử. Nil-check vì handler này tuỳ chọn.
+		if h.OnACCmd != nil {
+			c.Subscribe(topicACCmd, 1, func(_ mqtt.Client, msg mqtt.Message) {
+				var a struct {
+					Cmd string `json:"cmd"`
+				}
+				if err := json.Unmarshal(msg.Payload(), &a); err != nil || a.Cmd == "" {
+					slog.Warn("payload ac_cmd sai", "raw", string(msg.Payload()))
+					return
+				}
+				h.OnACCmd(a.Cmd)
+			})
+		}
 	})
 	opts.SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 		slog.Warn("mqtt mất kết nối", "err", err)

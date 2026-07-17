@@ -1,6 +1,11 @@
-// Backend presence + AC control.
-// Phase 1-2: connect MQTT, subscribe motion+presence, state machine vào/ra, publish ac_cmd.
-// REST API (Phase 3) + WebSocket (Phase 4) sẽ bổ sung sau.
+// Backend presence + AC — CHỈ HIỂN THỊ + chuyển tiếp lệnh tay.
+//
+// ESP32 (voice-node) là nơi DUY NHẤT quyết định bật/tắt AC tự động: nó tự gộp radar
+// (qua ESP-NOW) + PIR rồi bắn IR ngay tại board. Backend KHÔNG tự publish ac_cmd nữa —
+// nếu cả hai cùng quyết thì chúng lệch nhau theo thời gian và không ai biết tin bên nào.
+//
+// Backend vẫn giữ statemachine để nuôi /api/state + /api/ws cho app, ghi lịch sử event,
+// và chuyển tiếp lệnh TAY: POST /api/ac và voice (whisper -> ParseVietCommand) -> ac_cmd.
 package main
 
 import (
@@ -60,20 +65,6 @@ func main() {
 	hub := api.NewHub()
 
 	var client *mqttclient.Client
-	publish := func(cmd *string) {
-		if cmd == nil {
-			return
-		}
-		if err := client.PublishACCmd(*cmd); err != nil {
-			slog.Warn("publish ac_cmd lỗi", "err", err)
-			return
-		}
-		slog.Info("published ac_cmd", "cmd", *cmd)
-		// UnixMilli chứ không Unix: contract MQTT (firmware/mqtt/README.md) quy định ts là
-		// epoch MILI-giây, và motion/presence từ firmware đều theo đó. Trộn giây vào cùng
-		// một dòng lịch sử sẽ làm app hiển thị lệch 1000 lần.
-		record(store.KindACCmd, *cmd, "backend", time.Now().UnixMilli())
-	}
 
 	// Push snapshot lên WS khi bất kỳ trường nào đổi (Snapshot comparable).
 	var snapMu sync.Mutex
@@ -94,14 +85,24 @@ func main() {
 			OnMotion: func(m events.Motion) {
 				slog.Info("motion", "ts", m.TS)
 				record(store.KindMotion, strconv.FormatBool(m.Motion), "voice-node", m.TS)
-				publish(machine.OnMotion(m.TS, time.Now()))
+				// KHÔNG publish ac_cmd nữa: ESP32 (voice-node) tự fusion radar+PIR và bắn IR.
+				// Để cả hai cùng quyết định thì chúng lệch nhau theo thời gian và không ai biết
+				// tin bên nào. Vẫn nuôi machine để /api/state + /api/ws có dữ liệu cho app.
+				machine.OnMotion(m.TS, time.Now())
 				broadcastIfChanged()
 			},
 			OnPresence: func(p events.Presence) {
 				slog.Info("presence", "present", p.Present, "ts", p.TS)
 				record(store.KindPresence, strconv.FormatBool(p.Present), "room-node", p.TS)
-				publish(machine.OnPresence(p.Present, p.TS, time.Now()))
+				machine.OnPresence(p.Present, p.TS, time.Now())
 				broadcastIfChanged()
+			},
+			// Ghi lịch sử MỌI lệnh AC trên bus, bất kể ai phát (app, voice, ESP32).
+			// UnixMilli chứ không Unix: contract quy định ts là epoch MILI-giây, motion và
+			// presence từ firmware đều theo đó — trộn giây vào là app hiển thị lệch 1000 lần.
+			OnACCmd: func(cmd string) {
+				slog.Info("ac_cmd trên bus", "cmd", cmd)
+				record(store.KindACCmd, cmd, "bus", time.Now().UnixMilli())
 			},
 		})
 
@@ -139,7 +140,7 @@ func main() {
 			cancel()
 			return
 		case <-ticker.C:
-			publish(machine.Tick(time.Now()))
+			machine.Tick(time.Now())  // chỉ cập nhật Snapshot cho app; không ra lệnh AC
 			broadcastIfChanged()
 		}
 	}
