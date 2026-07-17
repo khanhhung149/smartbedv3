@@ -43,6 +43,17 @@ void main() {
       expect(e.time, isNotNull);
     });
 
+    // Chặn tái phát bug đơn vị: contract MQTT (firmware/mqtt/README.md) quy định ts là
+    // MILI-giây. Trước đây app nhân thêm 1000 -> mọi event từ phần cứng thật hiện năm
+    // ~58.000. Không phát hiện được vì test cũ tự bơm ts bằng GIÂY.
+    test('ts là MILI-giây, không nhân thêm 1000', () {
+      final e = Event.fromJson(
+          jsonDecode('{"id":1,"ts":1784214584000,"kind":"motion","value":"true","source":"voice-node"}')
+              as Map<String, dynamic>);
+      expect(e.time!.year, 2026, reason: 'nhân 1000 lần nữa sẽ ra năm ~58.000');
+      expect(e.time, DateTime.fromMillisecondsSinceEpoch(1784214584000));
+    });
+
     test('ts=0 phải coi là KHÔNG có giờ, không phải 1970', () {
       // Message retained trên broker mang ts=0 khi node publish trước lúc NTP sync.
       // Nếu coi 0 là giờ hợp lệ thì lịch sử hiện "01/01 07:00" — sai và khó hiểu.

@@ -2,9 +2,9 @@
 class Event {
   final int id;
 
-  /// Epoch giây từ thiết bị. **0 = không có giờ thật** — message retained trên broker
-  /// do node publish trước khi NTP sync. Hiển thị phải dùng [hasTime], đừng format
-  /// thẳng kẻo ra 1970.
+  /// Epoch **MILI-giây** từ thiết bị (contract: firmware/mqtt/README.md — `ts` là unix_ms).
+  /// **0 = không có giờ thật** — node publish trước khi NTP sync. Hiển thị phải dùng
+  /// [hasTime], đừng format thẳng kẻo ra 1970.
   final int ts;
 
   /// motion | presence | ac_cmd
@@ -34,8 +34,8 @@ class Event {
 
   bool get hasTime => ts > 0;
 
-  DateTime? get time =>
-      hasTime ? DateTime.fromMillisecondsSinceEpoch(ts * 1000) : null;
+  // ts ĐÃ là mili-giây — không nhân 1000 nữa (nhân là ra năm ~58.000).
+  DateTime? get time => hasTime ? DateTime.fromMillisecondsSinceEpoch(ts) : null;
 
   /// true khi value mang nghĩa "bật/có" — dùng để chọn màu/icon.
   bool get isPositive => value == 'true' || value == 'on';

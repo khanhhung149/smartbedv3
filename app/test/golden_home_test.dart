@@ -21,7 +21,7 @@ void main() {
   int id = 0;
   Event ev(String kind, String value, DateTime t) => Event(
         id: ++id,
-        ts: t.millisecondsSinceEpoch ~/ 1000,
+        ts: t.millisecondsSinceEpoch,  // contract: ts là MILI-giây
         kind: kind,
         value: value,
         source: kind == Event.kindMotion ? 'voice-node' : 'room-node',
@@ -45,8 +45,8 @@ void main() {
     present: true,
     occupied: true,
     acDesired: true,
-    lastMotionTs: 1784260800,
-    lastPresenceTs: 1784260800,
+    lastMotionTs: 1784260800000,   // MILI-giây (contract firmware/mqtt/README.md)
+    lastPresenceTs: 1784260800000,
     lastAcCmd: 'on',
   );
 

@@ -69,7 +69,10 @@ func main() {
 			return
 		}
 		slog.Info("published ac_cmd", "cmd", *cmd)
-		record(store.KindACCmd, *cmd, "backend", time.Now().Unix())
+		// UnixMilli chứ không Unix: contract MQTT (firmware/mqtt/README.md) quy định ts là
+		// epoch MILI-giây, và motion/presence từ firmware đều theo đó. Trộn giây vào cùng
+		// một dòng lịch sử sẽ làm app hiển thị lệch 1000 lần.
+		record(store.KindACCmd, *cmd, "backend", time.Now().UnixMilli())
 	}
 
 	// Push snapshot lên WS khi bất kỳ trường nào đổi (Snapshot comparable).

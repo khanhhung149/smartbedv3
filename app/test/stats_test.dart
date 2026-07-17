@@ -9,7 +9,7 @@ final today = DateTime(2026, 7, 17);
 int _id = 0;
 Event ev(String kind, String value, DateTime t) => Event(
       id: ++_id,
-      ts: t.millisecondsSinceEpoch ~/ 1000,
+      ts: t.millisecondsSinceEpoch,  // contract: ts là MILI-giây
       kind: kind,
       value: value,
       source: 'test',

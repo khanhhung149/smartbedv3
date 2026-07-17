@@ -210,7 +210,7 @@ class _HeroCard extends StatelessWidget {
   static String _ago(int ts) {
     if (ts <= 0) return '—';
     final d = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(ts * 1000));
+        .difference(DateTime.fromMillisecondsSinceEpoch(ts));  // ts đã là mili-giây
     if (d.isNegative || d.inSeconds < 60) return 'vừa xong';
     if (d.inMinutes < 60) return '${d.inMinutes}p';
     if (d.inHours < 24) return '${d.inHours}g';
