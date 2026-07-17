@@ -60,10 +60,13 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.H
 		r.Post("/ac", a.postAC)
 		r.Post("/ac/learn", a.postACLearn)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)
+		// WS state phải nằm TRONG /api cho khớp docs + app + mọi endpoint khác.
+		// Trước đây nó đăng ký ở gốc ("/ws") nên app gọi /api/ws bị 404 và mất realtime
+		// im lặng — REST vẫn chạy nên bug ẩn rất kỹ.
+		if hub != nil {
+			r.Get("/ws", hub.serveWS(sp))
+		}
 	})
-	if hub != nil {
-		r.Get("/ws", hub.serveWS(sp))
-	}
 	return r
 }
 
