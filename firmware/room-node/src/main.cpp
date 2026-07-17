@@ -28,6 +28,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <ArduinoOTA.h>
 #include <MQTT.h>
 #include <Preferences.h>
 #include <sys/time.h>
@@ -227,6 +228,33 @@ void onMqtt(String &topic, String &payload) {
   else if (topic == TOPIC_AC_LEARN) startLearn(v);
 }
 
+// Nạp firmware qua WiFi — S2 Mini là board đau nhất khi nạp USB: phải vào bootloader
+// bằng tay (giữ BOOT + tap RST), port lại nhảy ACM0/ACM1. OTA bỏ hẳn khoản đó.
+// USB vẫn là đường lui nếu bản nạp làm chết WiFi.
+//
+// Dùng partition mặc định: đã sẵn otadata + app0/app1, không phải đổi bảng partition.
+void setupOTA() {
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() {
+    // Nhả IR receiver: nó chạy bằng ngắt timer, để nguyên sẽ chen vào lúc ghi flash.
+    irrecv.disableIRIn();
+    Serial.println("\n[ota] bắt đầu");
+  });
+  ArduinoOTA.onEnd([]() { Serial.println("\n[ota] xong — khởi động lại"); });
+  ArduinoOTA.onProgress([](unsigned int cur, unsigned int total) {
+    Serial.printf("[ota] %u%%\r", (cur * 100) / total);
+  });
+  ArduinoOTA.onError([](ota_error_t err) {
+    // Hỏng giữa chừng: slot kia còn nguyên bản cũ, board reboot về bản cũ.
+    Serial.printf("\n[ota] LỖI %u — giữ firmware cũ, nạp USB nếu cần\n", err);
+  });
+
+  ArduinoOTA.begin();
+  Serial.printf("[ota] sẵn sàng: %s @ %s\n", OTA_HOSTNAME, WiFi.localIP().toString().c_str());
+}
+
 void setup() {
   Serial.begin(115200);
   // S2 dùng USB CDC gốc: chờ host mở cổng (tối đa 2s) để không mất log boot
@@ -238,6 +266,7 @@ void setup() {
   irsend.begin();  // IR receiver chỉ bật khi học (startLearn)
 
   connectWiFi();
+  setupOTA();  // ngay sau khi có IP — OTA là đường cứu khi phần còn lại lỗi
   configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC epoch
   mqtt.begin(MQTT_HOST, MQTT_PORT, net);
   mqtt.onMessage(onMqtt);
@@ -246,6 +275,7 @@ void setup() {
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  ArduinoOTA.handle();  // rẻ khi rảnh; chỉ chặn lúc đang nạp thật
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop();
 

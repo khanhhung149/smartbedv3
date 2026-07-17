@@ -10,3 +10,9 @@
 #define MQTT_USER       "homeuser"        // user tạo bằng mosquitto_passwd
 #define MQTT_PASS       "mat-khau-mqtt"
 #define MQTT_CLIENT_ID  "room-node"       // phải duy nhất trên broker
+
+// OTA — nạp firmware qua WiFi, hết cảnh giữ BOOT + tap RST và port nhảy ACM0/ACM1.
+// Nạp:  pio run -e lolin_s2_mini_ota -t upload
+// Đổi IP trong platformio.ini (upload_port) nếu router cấp IP khác.
+#define OTA_HOSTNAME    "room-node"
+#define OTA_PASSWORD    "doi-mat-khau-nay"   // ai cùng LAN cũng nạp được nếu để trống

@@ -17,3 +17,9 @@
 #define MQTT_USER       "user"
 #define MQTT_PASS       "password"
 #define MQTT_CLIENT_ID  "voice-node"     // phải duy nhất trên broker
+
+// OTA — nạp firmware qua WiFi (hết cảnh usbipd + tháo dây 5V khi 2 board chung nguồn).
+// Nạp:  pio run -e esp32dev_ota -t upload
+// Đổi IP trong platformio.ini (upload_port) nếu router cấp IP khác.
+#define OTA_HOSTNAME    "voice-node"
+#define OTA_PASSWORD    "doi-mat-khau-nay"   // ai cùng LAN cũng nạp được nếu để trống

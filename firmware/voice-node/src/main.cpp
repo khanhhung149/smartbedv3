@@ -16,6 +16,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <ArduinoOTA.h>
 #include <WebSocketsClient.h>
 #include <MQTT.h>
 #include <driver/i2s.h>
@@ -188,6 +189,38 @@ void onWsEvent(WStype_t type, uint8_t *payload, size_t length) {
   }
 }
 
+// Nạp firmware qua WiFi — bỏ hẳn cảnh usbipd attach + port nhảy + (khi 2 board dùng
+// chung nguồn) phải tháo dây 5V mỗi lần nạp. USB vẫn là đường lui: bản nào làm chết
+// WiFi thì OTA bó tay.
+//
+// Dùng partition mặc định (default.csv): đã sẵn otadata + app0/app1 (mỗi slot 1.25MB),
+// không phải đổi bảng partition.
+void setupOTA() {
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+  ArduinoOTA.setPassword(OTA_PASSWORD);  // không để bất kỳ ai cùng LAN nạp firmware vào nhà
+
+  // I2S và WebSocket phải nhả TRƯỚC khi ghi flash: i2s_read đang chạy sẽ tranh CPU với
+  // tác vụ ghi, còn WS giữ socket mở dễ làm timeout giữa chừng -> bản nạp hỏng.
+  ArduinoOTA.onStart([]() {
+    Serial.println("\n[ota] bắt đầu — dừng I2S + WS");
+    streaming = false;
+    webSocket.disconnect();
+    i2s_stop(I2S_PORT);
+    i2s_driver_uninstall(I2S_PORT);
+  });
+  ArduinoOTA.onEnd([]() { Serial.println("\n[ota] xong — khởi động lại"); });
+  ArduinoOTA.onProgress([](unsigned int cur, unsigned int total) {
+    Serial.printf("[ota] %u%%\r", (cur * 100) / total);
+  });
+  ArduinoOTA.onError([](ota_error_t err) {
+    // Nạp hỏng giữa chừng: bản cũ ở slot kia vẫn nguyên, board reboot về bản cũ.
+    Serial.printf("\n[ota] LỖI %u — giữ nguyên firmware cũ, nạp lại qua USB nếu cần\n", err);
+  });
+
+  ArduinoOTA.begin();
+  Serial.printf("[ota] sẵn sàng: %s @ %s\n", OTA_HOSTNAME, WiFi.localIP().toString().c_str());
+}
+
 void setup() {
   Serial.begin(115200);
   delay(200);
@@ -196,6 +229,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_PIR), onMotion, RISING);
 
   connectWiFi();
+  setupOTA();  // sau connectWiFi (cần IP), trước I2S để lỡ I2S treo vẫn OTA cứu được
   configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC epoch cho ts motion
   setupI2S();
 
@@ -211,6 +245,7 @@ void loop() {
   uint32_t now = millis();
 
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  ArduinoOTA.handle();  // rẻ khi rảnh (chỉ ngó gói UDP); chỉ chặn lúc đang nạp thật
   webSocket.loop();  // bơm sự kiện WS + xử lý reconnect nội bộ của lib
 
   if (!mqtt.connected()) connectMQTT();
