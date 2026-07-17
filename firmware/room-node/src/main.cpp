@@ -1,258 +1,122 @@
-// Room node — Wemos S2 Mini (ESP32-S2)  [phần cứng thật: LD2410 radar trên S2 Mini]
-// (1) Đọc radar presence -> publish home/room/presence (retain). CHỈ radar.
-// (2) Học mã IR từ remote điều hòa thật, lưu NVS, phát lại khi có lệnh.
+// Room node — Wemos S2 Mini + radar LD2410.
 //
-// PIR đã DỜI sang voice-node (WROOM-32) — quyết định 2026-07-16: fusion PIR+radar
-// chuyển về backend (state machine gộp home/door/motion + home/room/presence).
-// Room-node giờ chỉ lo radar -> presence + điều khiển IR. Xem plan
-// plans/260716-1433-relocate-pir-to-voice-node-backend-fusion/.
+// VAI TRÒ DUY NHẤT: đọc chân presence của radar rồi gửi sang voice-node (ESP32 WROOM-32)
+// qua ESP-NOW. Không WiFi, không MQTT, không NTP, không OTA — mọi quyết định (fusion với
+// PIR, bắn IR, relay lên MQTT) nằm ở voice-node.
 //
-// Wiring thật (HLK-LD2410 -> S2 Mini):
-//   LD2410 VCC -> S2 Mini VBUS (5V)     LD2410 GND -> S2 Mini GND
-//   LD2410 OUT (presence digital) -> S2 Mini GPIO16  (input)  <-- MVP dùng chân này
-//   LD2410 TX  -> S2 Mini GPIO33   LD2410 RX -> S2 Mini GPIO18
-//     (UART để dành parse frame LD2410 sau — MVP chỉ đọc OUT digital, chưa init UART)
+// Wiring thật (xem docs/system-wiring.md):
+//   LD2410 OUT -> GPIO16     LD2410 VCC -> 5V     LD2410 GND -> GND
 //
-//   IR Receiver TSOP: VCC->3V3, GND->GND, OUT->S2 Mini GPIO15 (chỉ dùng lúc học)
-//   IR Blaster: S2 Mini GPIO5 -> R220 -> Base transistor (S8050/2N2222),
-//               Emitter->GND, Collector->IR LED cathode, LED anode->R68->5V
+// ĐÁNH ĐỔI ĐÃ CHẤP NHẬN (user chốt 2026-07-17):
+//   - Bỏ WiFi -> MẤT OTA. Board này chỉ nạp được qua USB (giữ BOOT + tap RST).
+//   - Bỏ WiFi -> MẤT NTP -> không có giờ thật. voice-node đóng dấu thời gian khi relay.
 //
-// Topic:
-//   publish   home/room/presence  {"ts":<unix_ms>,"present":true|false}  QoS1 retain
-//             — "present" là occupied theo RADAR (enter khi radar giữ đủ lâu,
-//               exit sau debounce). Backend fuse thêm motion từ voice-node.
-//   subscribe home/room/ac_cmd    {"cmd":"on"|"off"}    -> phát IR
-//   subscribe home/room/ac_learn  {"button":"on"|"off"} -> vào chế độ học IR
+// ESP-NOW dính kênh WiFi: voice-node vẫn nối WiFi (audio + MQTT + OTA) nên radio của nó
+// bị khoá vào kênh của router. ESP-NOW không đổi được kênh đó -> board này phải QUÉT SSID
+// để dò tới đúng kênh. Sai kênh thì gói bay vào hư không, KHÔNG có lỗi báo về.
 //
-// Mã IR lưu LOCAL trên NVS (namespace "ac_codes"). Không publish qua MQTT (quyết định MVP).
+// Nạp: pio run -t upload -e lolin_s2_mini
+// Serial: pio device monitor
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <ArduinoOTA.h>
-#include <MQTT.h>
-#include <Preferences.h>
-#include <sys/time.h>
-
-#include <IRremoteESP8266.h>
-#include <IRrecv.h>
-#include <IRsend.h>
-#include <IRutils.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 
 #include "config.h"
 
-// ---- Phần cứng (S2 Mini) ----
-static const uint8_t  PIN_PRESENCE = 16;   // LD2410 OUT (presence digital)
-static const uint16_t PIN_IR_RECV  = 15;   // TSOP OUT (chỉ dùng lúc học)
-static const uint16_t PIN_IR_SEND  = 5;    // IR LED driver
+// ---- Phần cứng ----
+static const uint8_t PIN_PRESENCE = 16;  // LD2410 OUT (presence digital)
 
-// ---- Topic ----
-static const char *TOPIC_PRESENCE = "home/room/presence";
-static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
-static const char *TOPIC_AC_LEARN = "home/room/ac_learn";
+// ---- Luật radar (giữ nguyên bản đã NGHIỆM THU trên phần cứng thật 2026-07-16) ----
+static const uint32_t PRESENCE_HOLD_MS  = 1500;  // radar giữ HIGH liên tục bấy lâu -> có người
+static const uint32_t RADAR_DEBOUNCE_MS = 3000;  // radar rớt HIGH trong khoảng này vẫn coi "còn thấy"
+static const uint32_t POLL_MS           = 200;   // nhịp đọc radar
 
-// ---- Presence theo radar: tham số tune sau khi verify thực tế ----
-static const uint32_t PRESENCE_HOLD_MS  = 1500;   // radar giữ HIGH liên tục bấy lâu -> vào (occupied)
-static const uint32_t RADAR_DEBOUNCE_MS = 3000;   // radar rớt HIGH trong khoảng này vẫn coi "còn thấy" (chống rung) -> ra sau đó
-static const uint32_t STATUS_HEARTBEAT_MS = 2000; // nhịp in trạng thái ra Serial để bench-test (đặt 0 để tắt)
+// ---- ESP-NOW ----
+static const uint32_t HEARTBEAT_MS      = 5000;  // gửi lại dù không đổi -> bên nhận biết link còn sống
+static const uint8_t  MAX_SEND_FAIL     = 3;     // FAIL liên tiếp bấy nhiêu -> nghi sai kênh, quét lại
+static const uint32_t RESCAN_COOLDOWN_MS = 10000;
+static const uint8_t  MSG_MAGIC         = 0xA7;  // lọc gói lạ/rác trên cùng kênh
 
-// ---- IR ----
-static const uint16_t kCaptureBufferSize = 1024;  // đủ cho khung điều hòa dài
-static const uint8_t  kIrTimeoutMs       = 50;    // khung AC lớn -> timeout cao (tên tránh trùng IRrecv.h)
-static const uint16_t kMinRawLen         = 12;    // bỏ nhiễu quá ngắn
-static const uint16_t kIrFreqKhz         = 38;
-static const uint32_t LEARN_WINDOW_MS    = 15000; // 15s để bấm remote
+// Payload phải GIỐNG HỆT bên voice-node. packed để 2 kiến trúc (ESP32-S2 vs ESP32)
+// không chèn padding khác nhau làm lệch field.
+typedef struct __attribute__((packed)) {
+  uint8_t  magic;
+  uint8_t  present;
+  uint32_t seq;
+} RadarMsg;
 
-IRrecv irrecv(PIN_IR_RECV, kCaptureBufferSize, kIrTimeoutMs, true);
-IRsend irsend(PIN_IR_SEND);
-decode_results results;
-Preferences prefs;
+static const uint8_t PEER_MAC[6] = ESPNOW_PEER_MAC;  // MAC của voice-node, xem config.h
 
-WiFiClient net;
-MQTTClient mqtt(512);
+// ---- Trạng thái ----
+uint32_t lastPollMs      = 0;
+uint32_t lastSendMs      = 0;
+uint32_t lastRadarHighMs = 0;
+uint32_t radarFirstHighMs = 0;
+bool     radarEverHigh   = false;
+bool     present         = false;
+uint32_t seq             = 0;
+uint8_t  channel         = 0;
+uint32_t lastScanMs      = 0;
+volatile uint8_t sendFailStreak = 0;
 
-static uint16_t rawBuf[kCaptureBufferSize];  // dùng chung cho load & send
-
-// ---- Trạng thái presence (chỉ radar) ----
-bool     occupied = false;         // trạng thái hiện đang publish ra MQTT (radar-based)
-uint32_t lastPollMs = 0;           // nhịp đọc radar 200ms
-
-uint32_t radarFirstHighMs = 0;     // 0 = radar đang LOW; >0 = mốc bắt đầu chuỗi HIGH hiện tại
-uint32_t lastRadarHighMs  = 0;     // lần cuối radar đọc HIGH
-bool     radarEverHigh    = false; // false -> chưa từng thấy radar HIGH, không tính "còn mới" cho lastRadarHighMs=0
-
-bool     learning = false;
-char     learnKey[4] = {0};   // "on" / "off"
-uint32_t learnUntilMs = 0;
-
-// ---- Tiện ích thời gian ----
-uint64_t epochMs() {
-  struct timeval tv;
-  gettimeofday(&tv, nullptr);
-  if (tv.tv_sec < 100000) return 0;  // NTP chưa sync
-  return (uint64_t)tv.tv_sec * 1000ULL + tv.tv_usec / 1000ULL;
-}
-
-// ---- Kết nối ----
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("WiFi: nối tới %s", WIFI_SSID);
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
-    delay(250);
-    Serial.print(".");
+// Callback báo kết quả gửi. Chạy trong ngữ cảnh WiFi task -> chỉ đụng biến đơn giản,
+// KHÔNG in Serial dài hay gọi hàm nặng ở đây.
+void onSent(const uint8_t *mac, esp_now_send_status_t status) {
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    sendFailStreak = 0;
+  } else if (sendFailStreak < 255) {
+    sendFailStreak++;
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? " OK" : " FAIL (thử lại sau)");
 }
 
-void publishPresence(bool present) {
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"ts\":%llu,\"present\":%s}",
-           (unsigned long long)epochMs(), present ? "true" : "false");
-  bool ok = mqtt.connected() &&
-            mqtt.publish(TOPIC_PRESENCE, payload, true /*retain*/, 1 /*qos*/);
-  Serial.printf("PUB %s %s -> %s\n", TOPIC_PRESENCE, payload, ok ? "ok" : "fail");
-}
-
-void connectMQTT() {
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (mqtt.connected()) return;
-  Serial.print("MQTT: nối broker");
-  for (uint8_t i = 0; i < 5 && !mqtt.connected(); i++) {
-    if (mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS)) break;
-    Serial.print(".");
-    delay(1000);
-    if (WiFi.status() != WL_CONNECTED) { Serial.println(" mất WiFi"); return; }
+// Quét SSID để biết router đang ở kênh nào. voice-node nối WiFi nên nó nằm ở kênh này;
+// ESP-NOW bắt buộc cùng kênh mới tới nơi.
+bool learnChannel() {
+  lastScanMs = millis();
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) {
+    if (WiFi.SSID(i) == String(WIFI_SSID)) {
+      channel = WiFi.channel(i);
+      WiFi.scanDelete();
+      Serial.printf("[espnow] thấy SSID '%s' ở kênh %u\n", WIFI_SSID, channel);
+      return true;
+    }
   }
-  if (!mqtt.connected()) { Serial.println(" FAIL"); return; }
-
-  // Subscription mất sau reconnect -> đăng ký lại mỗi lần connect
-  mqtt.subscribe(TOPIC_AC_CMD, 1);
-  mqtt.subscribe(TOPIC_AC_LEARN, 1);
-  Serial.println(" OK (subscribed ac_cmd, ac_learn)");
-
-  // Đẩy lại trạng thái presence hiện tại để retain đúng sau reconnect
-  publishPresence(occupied);
+  WiFi.scanDelete();
+  Serial.printf("[espnow] KHÔNG thấy SSID '%s' -> chưa biết kênh, thử lại sau\n", WIFI_SSID);
+  return false;
 }
 
-// ---- IR: phát lệnh ----
-void sendAC(const char *key) {
-  char lenKey[12], rawKey[12];
-  snprintf(lenKey, sizeof(lenKey), "%s_len", key);
-  snprintf(rawKey, sizeof(rawKey), "%s_raw", key);
+// Đặt kênh + (re)đăng ký peer. Gọi lại được khi kênh đổi.
+bool applyChannel() {
+  if (channel == 0) return false;
+  esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
-  prefs.begin("ac_codes", true /*readonly*/);
-  uint16_t len = prefs.getUShort(lenKey, 0);
-  if (len == 0 || len > kCaptureBufferSize) {
-    prefs.end();
-    Serial.printf("AC: chưa học lệnh '%s' -> bỏ qua (không crash)\n", key);
-    return;
+  esp_now_del_peer(PEER_MAC);  // bỏ qua lỗi nếu chưa từng add
+  esp_now_peer_info_t peer = {};
+  memcpy(peer.peer_addr, PEER_MAC, 6);
+  peer.channel = channel;
+  peer.encrypt = false;
+  if (esp_now_add_peer(&peer) != ESP_OK) {
+    Serial.println("[espnow] add_peer LỖI");
+    return false;
   }
-  size_t got = prefs.getBytes(rawKey, rawBuf, (size_t)len * 2);
-  prefs.end();
-  if (got != (size_t)len * 2) {
-    Serial.printf("AC: đọc mã '%s' lỗi (got=%u byte)\n", key, (unsigned)got);
-    return;
-  }
-  irsend.sendRaw(rawBuf, len, kIrFreqKhz);
-  Serial.printf("AC: phát lệnh '%s' (len=%u)\n", key, len);
+  Serial.printf("[espnow] peer %02X:%02X:%02X:%02X:%02X:%02X @ kênh %u\n",
+                PEER_MAC[0], PEER_MAC[1], PEER_MAC[2], PEER_MAC[3], PEER_MAC[4], PEER_MAC[5],
+                channel);
+  return true;
 }
 
-// ---- IR: bật chế độ học ----
-void startLearn(const char *key) {
-  strncpy(learnKey, key, sizeof(learnKey) - 1);
-  learnKey[sizeof(learnKey) - 1] = 0;
-  learning = true;
-  learnUntilMs = millis() + LEARN_WINDOW_MS;
-  irrecv.enableIRIn();
-  Serial.printf("LEARN: mở học '%s' %lus — bấm nút remote hướng vào TSOP38238\n",
-                key, (unsigned long)(LEARN_WINDOW_MS / 1000));
-}
-
-// ---- IR: xử lý trong loop khi đang học ----
-void handleLearn() {
-  if (!learning) return;
-
-  if (millis() > learnUntilMs) {
-    learning = false;
-    irrecv.disableIRIn();
-    Serial.println("LEARN: hết giờ, không nhận được tín hiệu hợp lệ");
-    return;
+void sendPresence() {
+  RadarMsg msg = {MSG_MAGIC, (uint8_t)(present ? 1 : 0), ++seq};
+  esp_err_t r = esp_now_send(PEER_MAC, (uint8_t *)&msg, sizeof(msg));
+  lastSendMs = millis();
+  if (r != ESP_OK) {
+    if (sendFailStreak < 255) sendFailStreak++;
+    Serial.printf("[espnow] send lỗi ngay: %d\n", r);
   }
-  if (!irrecv.decode(&results)) return;
-
-  uint16_t len = getCorrectedRawLength(&results);
-  if (len < kMinRawLen || len > kCaptureBufferSize) {
-    Serial.printf("LEARN: tín hiệu không hợp lệ (len=%u), tiếp tục nghe\n", len);
-    irrecv.resume();
-    return;
-  }
-
-  uint16_t *raw = resultToRawArray(&results);
-  if (raw == nullptr) {
-    Serial.println("LEARN: cấp phát raw array lỗi");
-    irrecv.resume();
-    return;
-  }
-
-  char lenKey[12], rawKey[12];
-  snprintf(lenKey, sizeof(lenKey), "%s_len", learnKey);
-  snprintf(rawKey, sizeof(rawKey), "%s_raw", learnKey);
-  prefs.begin("ac_codes", false /*read-write*/);
-  prefs.putUShort(lenKey, len);
-  prefs.putBytes(rawKey, raw, (size_t)len * 2);
-  prefs.end();
-  free(raw);
-
-  Serial.printf("LEARN: đã lưu '%s' (len=%u) vào NVS\n", learnKey, len);
-  learning = false;
-  irrecv.disableIRIn();
-}
-
-// ---- Phân giải payload {"cmd":"on"} / {"button":"off"} ----
-const char *parseOnOff(const String &payload) {
-  if (payload.indexOf("\"off\"") >= 0) return "off";
-  if (payload.indexOf("\"on\"")  >= 0) return "on";
-  return nullptr;
-}
-
-void onMqtt(String &topic, String &payload) {
-  Serial.printf("RECV %s %s\n", topic.c_str(), payload.c_str());
-  const char *v = parseOnOff(payload);
-  if (v == nullptr) {
-    Serial.println("  -> payload không có on/off, bỏ qua");
-    return;
-  }
-  if (topic == TOPIC_AC_CMD)        sendAC(v);
-  else if (topic == TOPIC_AC_LEARN) startLearn(v);
-}
-
-// Nạp firmware qua WiFi — S2 Mini là board đau nhất khi nạp USB: phải vào bootloader
-// bằng tay (giữ BOOT + tap RST), port lại nhảy ACM0/ACM1. OTA bỏ hẳn khoản đó.
-// USB vẫn là đường lui nếu bản nạp làm chết WiFi.
-//
-// Dùng partition mặc định: đã sẵn otadata + app0/app1, không phải đổi bảng partition.
-void setupOTA() {
-  ArduinoOTA.setHostname(OTA_HOSTNAME);
-  ArduinoOTA.setPassword(OTA_PASSWORD);
-
-  ArduinoOTA.onStart([]() {
-    // Nhả IR receiver: nó chạy bằng ngắt timer, để nguyên sẽ chen vào lúc ghi flash.
-    irrecv.disableIRIn();
-    Serial.println("\n[ota] bắt đầu");
-  });
-  ArduinoOTA.onEnd([]() { Serial.println("\n[ota] xong — khởi động lại"); });
-  ArduinoOTA.onProgress([](unsigned int cur, unsigned int total) {
-    Serial.printf("[ota] %u%%\r", (cur * 100) / total);
-  });
-  ArduinoOTA.onError([](ota_error_t err) {
-    // Hỏng giữa chừng: slot kia còn nguyên bản cũ, board reboot về bản cũ.
-    Serial.printf("\n[ota] LỖI %u — giữ firmware cũ, nạp USB nếu cần\n", err);
-  });
-
-  ArduinoOTA.begin();
-  Serial.printf("[ota] sẵn sàng: %s @ %s\n", OTA_HOSTNAME, WiFi.localIP().toString().c_str());
 }
 
 void setup() {
@@ -263,65 +127,70 @@ void setup() {
   delay(200);
 
   pinMode(PIN_PRESENCE, INPUT);
-  irsend.begin();  // IR receiver chỉ bật khi học (startLearn)
 
-  connectWiFi();
-  setupOTA();  // ngay sau khi có IP — OTA là đường cứu khi phần còn lại lỗi
-  configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC epoch
-  mqtt.begin(MQTT_HOST, MQTT_PORT, net);
-  mqtt.onMessage(onMqtt);
-  connectMQTT();
+  // STA nhưng KHÔNG connect: chỉ cần radio bật để quét kênh + chạy ESP-NOW.
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  Serial.printf("[espnow] MAC board này: %s\n", WiFi.macAddress().c_str());
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("[espnow] init LỖI -> khởi động lại");
+    delay(2000);
+    ESP.restart();
+  }
+  esp_now_register_send_cb(onSent);
+
+  if (learnChannel()) applyChannel();
+  Serial.println("[espnow] room-node sẵn sàng (radar-only, không WiFi/MQTT/OTA)");
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) connectWiFi();
-  ArduinoOTA.handle();  // rẻ khi rảnh; chỉ chặn lúc đang nạp thật
-  if (!mqtt.connected()) connectMQTT();
-  mqtt.loop();
-
-  handleLearn();
-
   uint32_t now = millis();
 
-  // Poll radar mỗi 200ms + state machine presence theo radar (VÀO khi giữ đủ lâu, RA sau debounce)
-  if (now - lastPollMs >= 200) {
+  // Chưa biết kênh -> quét lại định kỳ, đừng gửi mù.
+  if (channel == 0) {
+    if (now - lastScanMs >= RESCAN_COOLDOWN_MS && learnChannel()) applyChannel();
+    return;
+  }
+
+  // Gửi FAIL liên tiếp -> nghi router đổi kênh -> quét lại.
+  if (sendFailStreak >= MAX_SEND_FAIL && now - lastScanMs >= RESCAN_COOLDOWN_MS) {
+    Serial.printf("[espnow] %u lần gửi FAIL -> quét lại kênh\n", sendFailStreak);
+    sendFailStreak = 0;
+    if (learnChannel()) applyChannel();
+  }
+
+  if (now - lastPollMs >= POLL_MS) {
     lastPollMs = now;
-    bool radar = (digitalRead(PIN_PRESENCE) == HIGH);
+    bool radar = digitalRead(PIN_PRESENCE) == HIGH;
 
     if (radar) {
       lastRadarHighMs = now;
       radarEverHigh = true;
       if (radarFirstHighMs == 0) radarFirstHighMs = now;
     } else {
-      radarFirstHighMs = 0;  // chuỗi HIGH bị ngắt, reset mốc bắt đầu
+      radarFirstHighMs = 0;
     }
 
-    if (!occupied) {
-      // VÀO khi radar giữ HIGH liên tục đủ lâu
+    bool before = present;
+    if (!present) {
+      // Vào: radar phải giữ HIGH liên tục đủ lâu (chống nhiễu bật/tắt).
       if (radar && radarFirstHighMs != 0 && now - radarFirstHighMs >= PRESENCE_HOLD_MS) {
-        occupied = true;
-        publishPresence(true);
+        present = true;
       }
     } else {
-      // RA khi radar không còn thấy (kể cả debounce chống rung)
+      // Ra: radar im đủ lâu. Debounce vì LD2410 rớt HIGH chớp nhoáng khi người ngồi yên.
       bool radarRecent = radar || (radarEverHigh && now - lastRadarHighMs < RADAR_DEBOUNCE_MS);
-      if (!radarRecent) {
-        occupied = false;
-        publishPresence(false);
-      }
+      if (!radarRecent) present = false;
+    }
+
+    if (present != before) {
+      Serial.printf("[radar] present -> %d\n", present);
+      sendPresence();
     }
   }
 
-  // Heartbeat: in trạng thái radar/occupied mỗi STATUS_HEARTBEAT_MS để quan sát live khi bench-test.
-  static uint32_t lastHeartbeatMs = 0;
-  if (STATUS_HEARTBEAT_MS && now - lastHeartbeatMs >= STATUS_HEARTBEAT_MS) {
-    lastHeartbeatMs = now;
-    bool radarNow = (digitalRead(PIN_PRESENCE) == HIGH);
-    Serial.printf("[hb] radar=%d occupied=%d sinceRadarHigh=%lus wifi=%d mqtt=%d\n",
-                  radarNow, occupied,
-                  radarEverHigh ? (unsigned long)((now - lastRadarHighMs) / 1000) : 9999UL,
-                  WiFi.status() == WL_CONNECTED, mqtt.connected());
-  }
-
-  delay(5);
+  // Heartbeat: bên nhận dùng nó để phát hiện link chết. Không có nó, voice-node không
+  // phân biệt được "phòng vẫn trống" với "board này đã chết".
+  if (now - lastSendMs >= HEARTBEAT_MS) sendPresence();
 }

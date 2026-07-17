@@ -2,17 +2,20 @@
 // config.h ĐÃ bị .gitignore — không bao giờ commit credentials.
 #pragma once
 
+// SSID để QUÉT KÊNH, KHÔNG phải để kết nối.
+// Board này không nối WiFi (chạy ESP-NOW). Nhưng voice-node thì có nối, nên radio của nó
+// bị khoá vào kênh của router — ESP-NOW bắt buộc cùng kênh mới tới nơi. Board này quét
+// SSID này để dò ra kênh đó.
+// -> KHÔNG cần WIFI_PASS: không bao giờ connect.
 #define WIFI_SSID       "ten-wifi"
-#define WIFI_PASS       "mat-khau-wifi"
 
-#define MQTT_HOST       "192.168.1.50"   // IP máy chạy Mosquitto broker
-#define MQTT_PORT       1883
-#define MQTT_USER       "homeuser"        // user tạo bằng mosquitto_passwd
-#define MQTT_PASS       "mat-khau-mqtt"
-#define MQTT_CLIENT_ID  "room-node"       // phải duy nhất trên broker
+// MAC của voice-node (ESP32 WROOM-32) — đích nhận ESP-NOW.
+// LẤY Ở ĐÂU: nạp voice-node trước, xem serial dòng:
+//     [espnow] MAC board này: AA:BB:CC:DD:EE:FF
+// rồi điền vào đây theo dạng {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF}.
+#define ESPNOW_PEER_MAC { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
 
-// OTA — nạp firmware qua WiFi, hết cảnh giữ BOOT + tap RST và port nhảy ACM0/ACM1.
-// Nạp:  pio run -e lolin_s2_mini_ota -t upload
-// Đổi IP trong platformio.ini (upload_port) nếu router cấp IP khác.
-#define OTA_HOSTNAME    "room-node"
-#define OTA_PASSWORD    "doi-mat-khau-nay"   // ai cùng LAN cũng nạp được nếu để trống
+// ĐÃ GỠ (không còn dùng):
+//   MQTT_*      -> board này không publish nữa; voice-node relay hộ lên broker
+//   OTA_*       -> bỏ WiFi nên không OTA được, chỉ nạp USB
+//   BACKEND_*   -> không nói chuyện với backend
