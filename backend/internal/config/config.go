@@ -32,7 +32,7 @@ func Load() (Config, error) {
 		EnterWindow:  time.Duration(getenvInt("ENTER_WINDOW_S", 15)) * time.Second,
 		ExitTimeout:  time.Duration(getenvInt("EXIT_TIMEOUT_S", 60)) * time.Second,
 		HTTPAddr:     getenv("HTTP_ADDR", ":8080"),
-		DBPath:       getenv("DB_PATH", "/data/home.db"),
+		DBPath:       lookupOr("DB_PATH", "/data/home.db"),
 	}
 	if c.MQTTHost == "" || c.MQTTUser == "" || c.MQTTPass == "" {
 		return c, fmt.Errorf("MQTT_HOST, MQTT_USER, MQTT_PASS là bắt buộc")
@@ -64,6 +64,16 @@ func LoadVoice() VoiceConfig {
 
 func getenv(k, def string) string {
 	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+// lookupOr phân biệt "không khai báo" với "khai báo rỗng" — khác getenv coi cả hai là
+// chưa đặt. Cần cho DB_PATH: đặt DB_PATH= (rỗng, có chủ ý) phải TẮT được lịch sử,
+// trong khi không khai báo thì dùng đường dẫn mặc định.
+func lookupOr(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok {
 		return v
 	}
 	return def
