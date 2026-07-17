@@ -1,6 +1,12 @@
 # Project Roadmap
 
-> Cập nhật: 2026-07-16.
+> Cập nhật: 2026-07-17.
+
+> **ĐÊM 16→17/07**: Phase 4 (**app Flutter Android**) và **lịch sử event SQLite** XONG
+> (`089b42a`, `1ec80bd`, `ea6e318`, đã push). Toolchain Flutter+Android dựng từ số 0
+> trong WSL, build ra APK release thật → `C:\Users\HP\Desktop\dieu-hoa-thong-minh.apk`.
+> **Việc duy nhất còn lại của MVP: cắm PIR** (cần tay người).
+> Xem `plans/260716-2055-flutter-app-and-event-history/`.
 
 ## Overview
 
@@ -105,11 +111,37 @@ Chốt: board **WROOM-32** (2 nhân); **không ASR trên board** (không PSRAM);
 
 ---
 
-## Phase 4: Flutter App (Future)
+## Phase 4: Flutter App
 
-**Status**: 🔴 CHƯA BẮT ĐẦU (đợi backend ổn định).
+**Status**: ✅ **CODE-COMPLETE (2026-07-17)** — analyze sạch, 12/12 test xanh (4 test gọi
+backend thật), APK release build được. ⏳ chưa cài lên máy Android thật.
 
-Home screen (occupancy + AC realtime qua WS), điều khiển AC tay (`/api/ac`), UI học IR (`/api/ac/learn`), settings. Stack đề xuất: Flutter 3.x + Riverpod + Dio/WebSocket.
+Stack thực tế: **Flutter 3.44.6 + Riverpod 3.x + `http` + `web_socket_channel` +
+`shared_preferences`** (dùng `http` thay Dio — chỉ 3 endpoint, YAGNI).
+`app/` trong repo. **UI học IR bỏ** — IR đã ngoài scope.
+
+| Màn | Nguồn dữ liệu | Status |
+|---|---|---|
+| Trang chủ — occupancy realtime + bật/tắt AC | `/api/state` (snapshot đầu) + `/api/ws` (push) + `POST /api/ac` | ✅ |
+| Lịch sử | `GET /api/events` | ✅ |
+| Cài đặt — IP backend + thử kết nối | `/healthz` | ✅ |
+
+**Chốt kỹ thuật:**
+- **iOS KHÔNG build được trên Windows** (cần macOS+Xcode; cài lên iPhone thật còn cần
+  Apple Dev $99/năm). User xài iOS nhưng chốt **Android trước**.
+- Quyền INTERNET phải khai ở manifest `main` — `flutter create` chỉ đặt ở `debug`/`profile`
+  nên **bản release sẽ không có mạng**. Đã verify bằng dump APK.
+- `network_security_config` cho phép cleartext: backend LAN không TLS, Android 9+ chặn HTTP.
+- `ts=0` hiện **"không rõ giờ"** — message retained mang ts=0 khi node publish trước NTP sync.
+- WS chỉ push KHI ĐỔI → phải lấy snapshot đầu bằng REST.
+
+### Success Criteria
+- [x] `flutter analyze` sạch, `flutter test` xanh
+- [x] APK release build được + có quyền INTERNET
+- [x] Parse đúng dữ liệu THẬT từ backend (test live)
+- [ ] Cài lên máy Android thật, Home đổi realtime khi vào/ra phòng
+- [ ] Nút bật/tắt AC → thấy `ac_cmd` ở broker
+- [ ] iOS (chờ có máy Mac)
 
 ---
 
@@ -117,10 +149,10 @@ Home screen (occupancy + AC realtime qua WS), điều khiển AC tay (`/api/ac`)
 
 | Phase | Ưu tiên | Trạng thái |
 |-------|---------|-----------|
-| 1 | 🟥 Cao nhất | ✅ Radar→presence HW OK; ⏳ IR + hàn lại radar |
-| 2 | 🟥 Cao nhất | ✅ Code+test; ⏳ E2E audio |
-| 3 | 🟨 Trung bình | ✅ Build; ⏳ hàn mic + E2E |
-| 4 | 🟩 Thấp | 🔴 Chưa bắt đầu |
+| 1 | 🟥 Cao nhất | ✅ Radar→presence nghiệm thu HW; ⏳ hàn lại radar OUT→GPIO16 |
+| 2 | 🟥 Cao nhất | ✅ Nghiệm thu E2E voice + **lịch sử SQLite** |
+| 3 | 🟥 Cao nhất | ✅ Mic chạy thật; ⏳ **PIR — việc DUY NHẤT còn lại của MVP** |
+| 4 | 🟨 Trung bình | ✅ Code-complete + APK; ⏳ cài máy thật |
 
 ## Open Questions & Decisions Pending
 
