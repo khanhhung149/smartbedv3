@@ -39,7 +39,7 @@ dependencies:
   web_socket_channel: ^3.0.3
   shared_preferences: ^2.5.5
   intl: ^0.20.3
-
+  fl_chart: ^1.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/event.dart';
 import 'models/snapshot.dart';
+import 'models/stats.dart';
 import 'services/api_client.dart';
 import 'services/ws_client.dart';
 
@@ -74,6 +75,17 @@ final snapshotProvider = StreamProvider<Snapshot>((ref) async* {
 });
 
 /// Lịch sử event, tự tải lại khi đổi URL hoặc khi user kéo refresh.
+/// Lấy 500 (trần backend) để chart có đủ nhiều ngày; 100 chỉ đủ vài giờ khi phòng bận.
 final eventsProvider = FutureProvider<List<Event>>(
-  (ref) => ref.watch(apiProvider).getEvents(limit: 100),
+  (ref) => ref.watch(apiProvider).getEvents(limit: 500),
 );
+
+/// Nguồn thời gian — tiêm được để test/golden xác định. Không có nó thì computeStats
+/// đọc đồng hồ thật và kết quả đổi theo lúc chạy.
+final nowProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
+/// Số liệu sinh hoạt tính từ lịch sử. Tính lại mỗi khi event đổi.
+final statsProvider = Provider<AsyncValue<Stats>>((ref) {
+  final now = ref.watch(nowProvider);
+  return ref.watch(eventsProvider).whenData((e) => computeStats(e, now: now()));
+});

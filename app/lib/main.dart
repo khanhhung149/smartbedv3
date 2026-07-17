@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers.dart';
+import 'screens/analytics_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screen.dart';
+import 'theme.dart';
+import 'widgets/pill_nav.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,12 +31,7 @@ class HomeAcApp extends StatelessWidget {
     return MaterialApp(
       title: 'Điều hoà thông minh',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true),
-      darkTheme: ThemeData(
-        colorSchemeSeed: Colors.teal,
-        brightness: Brightness.dark,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light,
       home: const _RootNav(),
     );
   }
@@ -49,27 +47,31 @@ class _RootNav extends StatefulWidget {
 class _RootNavState extends State<_RootNav> {
   int _index = 0;
 
-  // IndexedStack giữ state 3 màn: đổi tab không dựng lại WS hay tải lại lịch sử.
-  static const _screens = [HomeScreen(), HistoryScreen(), SettingsScreen()];
+  // IndexedStack giữ state 4 màn: đổi tab không dựng lại WS hay tải lại lịch sử.
+  static const _screens = [
+    HomeScreen(),
+    AnalyticsScreen(),
+    HistoryScreen(),
+    SettingsScreen(),
+  ];
+
+  static const _items = [
+    NavItem(Icons.grid_view_rounded, 'Tổng quan'),
+    NavItem(Icons.insights_rounded, 'Phân tích'),
+    NavItem(Icons.history_rounded, 'Lịch sử'),
+    NavItem(Icons.settings_rounded, 'Cài đặt'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // extendBody để nội dung chạy dưới thanh nav nổi (các màn tự chừa padding dưới).
+      extendBody: true,
       body: IndexedStack(index: _index, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Trang chủ'),
-          NavigationDestination(icon: Icon(Icons.history), label: 'Lịch sử'),
-          NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'Cài đặt'),
-        ],
+      bottomNavigationBar: PillNav(
+        index: _index,
+        onChanged: (i) => setState(() => _index = i),
+        items: _items,
       ),
     );
   }
