@@ -124,7 +124,7 @@ uint32_t falseSinceMs  = 0;      // lúc present chuyển false (đếm EXIT_TIM
 bool     presencePublished = false;  // đã publish presence lần nào chưa (ghi đè retained cũ)
 uint32_t lastHeartbeatMs = 0;
 
-IRDaikinESP ac(PIN_IR_SEND);
+IRDaikin2 ac(PIN_IR_SEND);   // thử biến thể 2 (312-bit) — IRDaikinESP (280-bit) không ăn
 
 // ISR: chỉ set cờ. Client MQTT không interrupt-safe.
 void IRAM_ATTR onMotion() {

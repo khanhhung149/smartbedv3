@@ -76,17 +76,33 @@ void onSent(const uint8_t *mac, esp_now_send_status_t status) {
 bool learnChannel() {
   lastScanMs = millis();
   int n = WiFi.scanNetworks();
+
+  // Chọn AP có SÓNG MẠNH NHẤT, không phải cái quét thấy đầu tiên.
+  // Nhà có nhiều điểm phát cùng tên (router + repeater/mesh) ở các kênh khác nhau —
+  // thực tế đã gặp 'mp' vừa ở kênh 13 vừa ở kênh 1. Vớ đại cái đầu tiên có thể trúng
+  // repeater ở xa trong khi voice-node lại nối cái gần → gói bay vào hư không, KHÔNG
+  // có báo lỗi. AP mạnh nhất là AP mà voice-node nhiều khả năng đang bám.
+  int bestRssi = -127;
+  uint8_t bestCh = 0;
   for (int i = 0; i < n; i++) {
-    if (WiFi.SSID(i) == String(WIFI_SSID)) {
-      channel = WiFi.channel(i);
-      WiFi.scanDelete();
-      Serial.printf("[espnow] thấy SSID '%s' ở kênh %u\n", WIFI_SSID, channel);
-      return true;
+    if (WiFi.SSID(i) != String(WIFI_SSID)) continue;
+    int rssi = WiFi.RSSI(i);
+    Serial.printf("[espnow]   ứng viên '%s' kênh %d rssi %d\n", WIFI_SSID, WiFi.channel(i), rssi);
+    if (rssi > bestRssi) {
+      bestRssi = rssi;
+      bestCh = WiFi.channel(i);
     }
   }
   WiFi.scanDelete();
-  Serial.printf("[espnow] KHÔNG thấy SSID '%s' -> chưa biết kênh, thử lại sau\n", WIFI_SSID);
-  return false;
+
+  if (bestCh == 0) {
+    Serial.printf("[espnow] KHÔNG thấy SSID '%s' -> chưa biết kênh, thử lại sau\n", WIFI_SSID);
+    return false;
+  }
+  channel = bestCh;
+  Serial.printf("[espnow] chọn kênh %u (rssi %d, mạnh nhất trong %d ứng viên)\n",
+                channel, bestRssi, n);
+  return true;
 }
 
 // Đặt kênh + (re)đăng ký peer. Gọi lại được khi kênh đổi.
