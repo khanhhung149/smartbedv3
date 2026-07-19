@@ -94,18 +94,21 @@ module day() {
                 cube([5, 10, 27], center = true);
             // tab chốt mép trước — lệch 14° khỏi giữa để không đè lên khe USB-C
             rotate([0, 0, -14]) translate([-6, 99, 11]) cube([12, 9, 5]);
-            // khung định vị board (đặt board xong dán keo/băng dính):
+            // Khung định vị CHỈ cho WROOM (cần thẳng hàng khe USB-C).
+            // Cụm S2+radar đã HÀN LIỀN thành một khối cứng → không ép vào khung
+            // được, chừa trống nửa trái khay: dán keo, radar áp sát thành nào
+            // cũng xuyên được (thành 2mm, sóng 24GHz qua tốt).
+            // Mic INMP441 nhỏ (14×13): dán keo ngay sau lỗ mic.
             translate([0, 68.5, FLOOR]) fence(30, 57.5);            // WROOM, USB quay ra trước
-            translate([-33, 62, FLOOR]) fence(26.4, 35.3);          // S2 Mini
-            rotate([0, 0, -32]) translate([0, 90, FLOOR]) fence(37, 9);    // LD2410 dựng sát thành
-            // mic INMP441 nhỏ (14×13): dán keo ngay sau lỗ mic, không cần khung
         }
         // lỗ chốt bản lề (xuyên cả 2 lug theo trục x)
         translate([0, 15, 22]) rotate([0, 90, 0]) cylinder(d = 3.4, h = 40, center = true, $fn = 24);
         // lỗ vít/đinh tab chốt trước (cùng góc 14° với tab)
         rotate([0, 0, -14]) translate([0, 103.5, 8]) cylinder(d = 3.4, h = 20, $fn = 24);
-        // khe USB-C cấp nguồn vào WROOM (rộng rãi cho mọi kiểu board/cáp)
-        translate([-5.5, 96, 4]) cube([11, 12, 8]);
+        // Khe USB-C cấp nguồn vào WROOM. Khe đo theo VỎ NHỰA đầu cáp chứ không
+        // theo đầu kim loại 8.4×2.6: đầu kim loại chỉ dài 6.5mm mà phải cắm sâu
+        // ~6mm vào ổ → vỏ nhựa bắt buộc chui qua thành 2-3mm mới với tới board.
+        translate([-6, 96, 4]) cube([12, 12, 8]);
         // lỗ mic (INMP441 nằm ngay sau thành)
         wall_hole(-20, 8, 4);
         // lỗ LED IR (KY-005 chĩa ra, dí sát mắt nhận dàn lạnh)
