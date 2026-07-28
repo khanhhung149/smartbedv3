@@ -86,3 +86,44 @@ func TestReentryTurnsOnAgain(t *testing.T) {
 		t.Fatalf("vào lại phải bật, got %v", cmd)
 	}
 }
+
+// Lệnh tay phải giữ nguyên qua các Tick khi phòng không đổi trạng thái. Trước đây
+// evaluate() so occupied != acDesired nên bẻ lại lệnh tay ngay ở Tick kế tiếp:
+// người dùng bật điều hoà trong phòng trống thì công tắc nảy về tắt sau ~1 giây.
+func TestManualSurvivesTicksWhileOccupancyUnchanged(t *testing.T) {
+	base := time.Unix(1000, 0)
+	m := New(cfg())
+
+	m.SetManual(true)
+	for i := 1; i <= 5; i++ {
+		if cmd := m.Tick(base.Add(time.Duration(i) * time.Second)); cmd != nil {
+			t.Fatalf("tick %d bẻ lại lệnh tay: %v", i, *cmd)
+		}
+	}
+	if !m.Snapshot().ACDesired {
+		t.Fatal("ac_desired phải giữ true sau lệnh tay")
+	}
+}
+
+// Nhưng khi phòng THỰC SỰ đổi trạng thái thì tự động được quyền ghi đè lệnh tay —
+// đúng giao kèo app hiển thị: "Lệnh tay có thể bị ghi đè khi phòng đổi trạng thái."
+func TestOccupancyChangeOverridesManual(t *testing.T) {
+	base := time.Unix(1000, 0)
+	m := New(cfg())
+
+	m.SetManual(true) // bật tay trong phòng trống
+	m.OnMotion(1, base)
+	cmd := m.OnPresence(true, 2, base.Add(2*time.Second))
+	if cmd != nil {
+		t.Fatalf("vào phòng khi đã bật tay: không cần lệnh mới, got %v", *cmd)
+	}
+
+	m.OnPresence(false, 3, base.Add(3*time.Second))
+	cmd = m.Tick(base.Add(3*time.Second + cfg().ExitTimeout))
+	if cmd == nil || *cmd != "off" {
+		t.Fatalf("rời phòng phải tắt dù trước đó bật tay, got %v", cmd)
+	}
+	if m.Snapshot().ACDesired {
+		t.Fatal("ac_desired phải là false sau khi ra khỏi phòng")
+	}
+}

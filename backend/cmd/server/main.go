@@ -103,6 +103,12 @@ func main() {
 			OnACCmd: func(cmd string) {
 				slog.Info("ac_cmd trên bus", "cmd", cmd)
 				record(store.KindACCmd, cmd, "bus", time.Now().UnixMilli())
+				// Trạng thái mong muốn phải bám theo lệnh THẬT trên bus, không chỉ
+				// theo suy luận occupied. Thiếu bước này thì công tắc trong app luôn
+				// nảy về chỗ cũ sau khi bấm (ac_desired không bao giờ đổi), người dùng
+				// tưởng bấm hụt nên bấm lại nhiều lần.
+				machine.SetManual(cmd == "on")
+				broadcastIfChanged()
 			},
 		})
 

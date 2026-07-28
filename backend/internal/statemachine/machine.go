@@ -33,6 +33,10 @@ type Machine struct {
 	occupied  bool
 	acDesired bool
 
+	// occupied ở lần tự động áp dụng gần nhất. Auto chỉ can thiệp khi occupied ĐỔI
+	// giá trị; giữa hai lần đổi, acDesired thuộc về lệnh tay.
+	prevOccupied bool
+
 	lastMotionAt time.Time // lần motion gần nhất
 	lastFalseAt  time.Time // lúc presence chuyển false gần nhất
 	falseActive  bool      // đang trong trạng thái presence=false (đếm exit)
@@ -92,7 +96,16 @@ func (m *Machine) evaluate(now time.Time) *string {
 		}
 	}
 
-	if m.occupied == m.acDesired {
+	// Tự động chỉ can thiệp khi occupied ĐỔI giá trị, không phải mỗi khi nó lệch
+	// acDesired. So trực tiếp occupied != acDesired thì lệnh tay bị bẻ lại ngay ở
+	// lần Tick kế tiếp (Tick chạy mỗi giây) — người dùng bật điều hoà trong phòng
+	// trống là tắt lại tức thì, công tắc trong app nảy về chỗ cũ.
+	if m.occupied == m.prevOccupied {
+		return nil
+	}
+	m.prevOccupied = m.occupied
+
+	if m.acDesired == m.occupied {
 		return nil
 	}
 	m.acDesired = m.occupied
@@ -102,6 +115,19 @@ func (m *Machine) evaluate(now time.Time) *string {
 	}
 	m.lastACCmd = cmd
 	return &cmd
+}
+
+// SetManual áp lệnh tay (app hoặc voice) lên trạng thái mong muốn. Lệnh giữ
+// nguyên cho tới khi phòng đổi trạng thái occupied — đúng giao kèo app hiển thị
+// cho người dùng: "Lệnh tay có thể bị ghi đè khi phòng đổi trạng thái."
+func (m *Machine) SetManual(on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.acDesired = on
+	m.lastACCmd = "off"
+	if on {
+		m.lastACCmd = "on"
+	}
 }
 
 func (m *Machine) Snapshot() Snapshot {
