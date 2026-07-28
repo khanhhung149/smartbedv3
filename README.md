@@ -1,18 +1,25 @@
 # ESP32 Home Presence Detection + Auto AC + Voice
 
-Hệ IoT phân tán: phát hiện hiện diện bằng **fusion PIR (voice-node) + radar (room-node), gộp ở backend**, tự điều khiển điều hòa qua IR học được, và **ra lệnh giọng nói tiếng Việt** qua ASR self-host.
+Hệ IoT phân tán: phát hiện hiện diện bằng **radar 24GHz (LD2410C)**, **ESP32 tự quyết bật/tắt điều hòa qua
+IR Daikin**, **ra lệnh giọng nói tiếng Việt** qua ASR self-host, và **app Android** giám sát/điều khiển.
 
-**Status** (2026-07-16): Room node radar → presence đã **nghiệm thu phần cứng**. Backend + ASR + voice-node (audio+MQTT+PIR) code-complete, build/test xanh; voice E2E + PIR thật + IR + hàn lại radar còn chờ.
+**Status** (2026-07-24): ✅ **E2E CHẠY THẬT** — radar → presence → fusion tại board → **IR Daikin vào COOL**;
+voice (mic → whisper → `ac_cmd`) chạy; backend + lịch sử SQLite + app Android xong; OTA cả 2 node.
+⏳ Còn: in ướm vỏ hộp 3D.
 
 ## Kiến trúc
 
 ```
-Room node (S2 Mini) ── home/room/presence (radar) ──┐
-  IR learn/blast ◄── home/room/ac_cmd ──────────────┤
-Voice node (WROOM-32) ─ home/door/motion (PIR) ──────┼─ Mosquitto ─ Go backend (FUSE) ─ REST/WS
-                     └─ WebSocket audio ─────────────┼──────────→ /api/voice/stream
-                                                      └──────────→ asr (faster-whisper) → ac_cmd
+radar-node (S2 Mini) ─ home/room/presence (retain) ─┬─→ Mosquitto ─→ Go backend ─ REST/WS ─→ App
+  LD2410C native UART  home/door/motion ────────────┤                 (CHỈ hiển thị      Android
+                       tele/<T>/SENSOR ─────────────┼──────────────→   + lịch sử SQLite)
+                                                    │
+voice-node (WROOM-32) ─ SUB presence ─→ fusion tại BOARD ─→ IR Daikin152 (GPIO4) ─→ Điều hòa
+  INMP441 mic ─ WebSocket audio ────────→ /api/voice/stream ─→ asr (whisper) ─→ ac_cmd
 ```
+
+**ESP32 là bộ não duy nhất**: voice-node nghe presence rồi tự quyết AC. Backend **không** tự phát `ac_cmd`
+theo occupancy (2 nơi cùng quyết thì lệch nhau) — chỉ chuyển tiếp lệnh **tay/voice**.
 
 Chi tiết: [`docs/system-architecture.md`](./docs/system-architecture.md).
 
@@ -20,18 +27,21 @@ Chi tiết: [`docs/system-architecture.md`](./docs/system-architecture.md).
 
 | Thư mục | Nội dung |
 |---------|----------|
-| `backend/` | Go: MQTT + state machine + REST/WS + `internal/voice/` (endpoint audio) |
+| `backend/` | Go: MQTT + state machine + REST/WS + `internal/voice/` + `internal/store/` (SQLite lịch sử) |
 | `asr/` | Python FastAPI + faster-whisper (ASR self-host) |
-| `firmware/` | PlatformIO: `room-node` (active), `voice-node` (active), `door-node` (retired), `mqtt/` |
+| `app/` | Flutter Android: Home / History / Analytics / Thiết bị / Settings |
+| `firmware/` | PlatformIO: **`radar-node`** + **`voice-node`** (active); `room-node`, `door-node` (retired); `mqtt/` |
+| `hardware/` | Vỏ hộp in 3D: OpenSCAD + STL (`vo-hop-modular.scad`) |
+| `scripts/` | `wsl-portproxy.ps1` (chỉ cần khi broker chạy trong WSL) |
 | `docs/` | Tài liệu kỹ thuật |
-| `plans/` | Log pha + quyết định (gitignored) |
+| `plans/` | Log pha + quyết định |
 
 ## Documentation
 
 | Doc | Cho | Nội dung |
 |-----|-----|----------|
 | [`docs/project-overview-pdr.md`](./docs/project-overview-pdr.md) | Product | Vấn đề, scope, quyết định, metrics |
-| [`docs/system-architecture.md`](./docs/system-architecture.md) | Designer | Sơ đồ, MQTT/voice contract, fusion, API |
+| [`docs/system-architecture.md`](./docs/system-architecture.md) | Designer | Sơ đồ, MQTT/voice contract, fusion tại board, API |
 | [`docs/codebase-summary.md`](./docs/codebase-summary.md) | Dev mới | Cấu trúc code, module, file thật |
 | [`docs/code-standards.md`](./docs/code-standards.md) | Contributor | Quy ước đặt tên, pattern, test |
 | [`docs/project-roadmap.md`](./docs/project-roadmap.md) | PM | Trạng thái pha, việc còn treo |
@@ -45,74 +55,99 @@ cd backend
 docker compose up            # backend (:8080) + asr (faster-whisper)
 curl http://localhost:8080/healthz
 ```
-Config qua env (xem `.env.example`; `ASR_URL`, `MQTT_*`, timing).
+Config qua env (`.env.example`: `MQTT_*`, `ASR_URL`, timing, `DB_PATH`).
 
 ### Broker
-```bash
-docker ps | grep home-mqtt   # Mosquitto :1883 (auth homeuser/homepass123)
-```
+Mô hình A: **Docker Desktop publish port ra Windows host** (broker LAN `192.168.1.120:1883`, auth) — không
+cần portproxy. Nếu chạy broker trong WSL thì IP đổi mỗi restart → dùng `scripts/wsl-portproxy.ps1`.
 
 ### Firmware
 ```bash
-# Room node (S2 Mini) — vào bootloader tay: giữ nút 0, tap RST, thả 0
-cd firmware/room-node && pio run -e lolin_s2_mini -t upload
-# Voice node (WROOM-32)
-cd firmware/voice-node && pio run -e esp32dev -t upload
-```
-Secrets: copy `include/config.h.example` → `config.h`, điền WiFi/MQTT/backend host.
+# Lần đầu (USB)
+cd firmware/radar-node && pio run -e lolin_s2_mini -t upload   # S2: giữ nút 0, tap RST, thả 0
+cd firmware/voice-node && pio run -e esp32dev      -t upload
 
-> WSL: nạp qua `usbipd` (attach board vào WSL). S2 Mini native-USB CDC — xem serial bằng `pio device monitor` (`cat` không đọc được vì cần DTR). Log `[hb]` in trạng thái mỗi 2s.
+# Sau đó nạp qua WiFi (OTA) — khỏi tháo dây nguồn
+export OTA_PASSWORD='...'
+cd firmware/radar-node && pio run -e lolin_s2_mini_ota -t upload
+cd firmware/voice-node && pio run -e esp32dev_ota      -t upload
+```
+Secrets: copy `include/config.h.example` → `config.h`, điền WiFi/MQTT/OTA password.
+
+> WSL: nạp qua `usbipd attach --wsl --auto-attach --busid <id>`. S2 native-USB CDC **đổi cổng khi reset**
+> (`ttyACM0`→`ttyACM1`) → cần `--auto-attach`; lần upload đầu hay fail, chạy lại là được.
+> `pio device monitor` **không chạy** trong shell non-interactive (`termios: Inappropriate ioctl`) → dùng pyserial.
+
+### App (Flutter Android)
+```bash
+cd app && flutter build apk --release
+```
 
 ## MQTT Topics
 
 | Topic | Hướng | Retain | Nội dung |
 |-------|-------|--------|----------|
-| `home/room/presence` | Room → Backend | ✅ | presence theo radar (backend fuse thêm motion) |
-| `home/door/motion` | Voice node (PIR) → Backend | — | cạnh lên PIR (GPIO27) |
-| `home/room/ac_cmd` | Backend → Room | — | AC on/off (voice hoặc REST) |
-| `home/room/ac_learn` | Backend → Room | — | mở học IR 15s |
+| `home/room/presence` | radar-node → backend **+ voice-node** | ✅ | presence theo radar (heartbeat 30s). **Nguồn presence duy nhất** |
+| `home/room/presence` (will) | broker khi radar-node rớt | ✅ | `{"present":false}` — hết kẹt "thấy người" khi S2 mất điện |
+| `home/door/motion` | radar-node → backend | — | event cử động (throttle 1s) → Analytics |
+| `tele/<T>/SENSOR` | radar-node → app | — | số liệu radar Detect/Moving/Static (3s). App coi **quá 15s không có = mất tín hiệu** (`tele/<T>/LWT` kẹt "Online" nên không tin được) |
+| `home/room/ac_cmd` | backend/app → voice-node | — | AC on/off **tay/voice** (không phải auto) |
 
-Xem live: `docker exec -it home-mqtt mosquitto_sub -u homeuser -P homepass123 -t 'home/#' -v`
+Xem live: `docker exec -it home-mqtt mosquitto_sub -u homeuser -P homepass123 -t '#' -v`
 
 ## API
 
 ```bash
 curl http://localhost:8080/api/state
+curl 'http://localhost:8080/api/events?limit=50'
 curl -X POST http://localhost:8080/api/ac -H 'Content-Type: application/json' -d '{"cmd":"on"}'
-curl -X POST http://localhost:8080/api/ac/learn -H 'Content-Type: application/json' -d '{"button":"on"}'
-# WebSocket state:  ws://localhost:8080/api/ws
+# WebSocket state:  ws://localhost:8080/api/ws        (PHẢI /api/ws, không phải /ws)
 # WebSocket audio:  ws://localhost:8080/api/voice/stream  (PCM 16k mono 16-bit LE)
 ```
 
 ## Testing
 ```bash
-cd backend && go test ./...     # state machine + 9 case parse lệnh voice
-cd firmware/room-node && pio run -e lolin_s2_mini   # compile check
+cd backend && go test ./...                            # state machine + parse lệnh voice + store
+cd firmware/radar-node && pio run -e lolin_s2_mini     # compile check
+cd app && flutter analyze
 ```
 
-## Current Blockers
+> **Bài học:** test tự động từng để lọt 3 bug — chỉ lộ khi nhìn **app/thiết bị thật**. Với firmware/IR,
+> bằng chứng là **serial + payload trên broker + phản ứng thiết bị**, không phải test pass.
 
-| Blocker | Ảnh hưởng | Trạng thái |
-|---------|-----------|-----------|
-| Mối hàn radar OUT→GPIO16 chập chờn + đè cổng USB-C | Độ ổn định presence | ⏳ Hàn lại + gỡ khỏi USB-C |
-| PIR dời sang voice-node (GPIO27) — chưa verify, con cũ nghi hỏng (cắm ngược nóng) | Fusion đủ 2 cảm biến | ⏳ Đo áp + đấu đúng chữ in / thay con |
-| Mic INMP441 chưa hàn + VAD chưa tune | Voice node | ⏳ Hàn + tune `VAD_THRESHOLD` |
-| E2E voice chưa chạy | Luồng voice→AC | ⏳ `docker compose up` + nói thử |
+## Còn treo
+
+| Việc | Ảnh hưởng | Trạng thái |
+|------|-----------|-----------|
+| In ướm vỏ hộp `hardware/vo-hop-base.stl` | Chiều cao khe USB / lỗ LED IR còn là giả định | ⏳ in thử rồi chỉnh |
+| Đấu nguồn chung Topo A + (board WROOM cũ) tụ 470-1000µF | 1 cốc sạc nuôi 2 board | ⏳ việc tay |
+
+## Gotcha phần cứng (đã trả giá)
+
+- **LD2410 cần GND chung** với board đọc nó — mất GND chung thì UART chết (Moving=0) dù BLE vẫn mượt.
+- **LED IR vô hình với mắt** — kiểm bằng camera điện thoại (thấy nháy tím). Module IR chạy **5V** (3V3 bị
+  under-drive, tầm ngắn).
+- **IR Daikin**: remote **ARC480A47 = họ DAIKIN152** → `IRDaikin152`. Không cần học mã/TSOP.
+- **WROOM brownout tại `WiFi.mode()`**: biên nguồn 5V mỏng (diode nối tiếp → 4.7V). Firmware **không** phải
+  nguyên nhân (đã chứng minh bằng swap board). Fix: tụ 470-1000µF hoặc board khác.
+- **Đừng hàn radar đè cổng USB-C** của S2 (gây chập/nóng).
 
 ## Security (MVP / LAN-only)
-🔒 MQTT auth (no TLS) · REST/WS no auth (LAN) · **audio không rời LAN** (ASR self-host) · IR codes chỉ local NVS.
+🔒 MQTT auth (no TLS) · REST/WS no auth (LAN) · **audio không rời LAN** (ASR self-host) · OTA có password.
 ⚠️ Trước internet: TLS/mTLS MQTT, auth API, siết CORS, rate-limit.
 
 ## Roadmap
 
 | Phase | Trạng thái |
 |-------|-----------|
-| 1: Presence + AC (room node radar-only, fusion ở backend) | ✅ Code + **HW nghiệm thu** (radar); ⏳ IR + hàn lại radar |
-| 2: Go backend + voice endpoint + ASR | ✅ Code + test xanh; ⏳ E2E audio |
-| 3: Voice node (WROOM-32 + INMP441) | ✅ Firmware build; ⏳ hàn mic + tune + E2E |
-| 4: Flutter app | 🔴 Chưa bắt đầu |
+| 1: Presence (radar-node native UART → MQTT) | ✅ chạy thật |
+| 2: Go backend + voice endpoint + ASR + SQLite lịch sử | ✅ chạy thật |
+| 3: voice-node (mic + fusion tại board + IR Daikin) | ✅ chạy thật, **AC vào COOL** |
+| 4: Flutter app Android | ✅ APK chạy, tab Thiết bị có staleness 15s |
+| 5: OTA 2 node | ✅ |
+| 6: Vỏ hộp in 3D modular | ⏳ STL xong, chưa in ướm |
 
 Chi tiết: [`docs/project-roadmap.md`](./docs/project-roadmap.md).
 
 ---
-**Last updated**: 2026-07-16
+**Last updated**: 2026-07-24

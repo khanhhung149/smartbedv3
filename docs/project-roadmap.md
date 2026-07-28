@@ -1,57 +1,69 @@
 # Project Roadmap
 
-> Cập nhật: 2026-07-17.
+> Cập nhật: **2026-07-24**.
 
-> **ĐÊM 16→17/07**: Phase 4 (**app Flutter Android**) và **lịch sử event SQLite** XONG
-> (`089b42a`, `1ec80bd`, `ea6e318`, đã push). Toolchain Flutter+Android dựng từ số 0
-> trong WSL, build ra APK release thật → `C:\Users\HP\Desktop\dieu-hoa-thong-minh.apk`.
-> **Việc duy nhất còn lại của MVP: cắm PIR** (cần tay người).
-> Xem `plans/260716-2055-flutter-app-and-event-history/`.
+> ## 🎉 MVP CHẠY THẬT ĐẦY ĐỦ (24/07)
+> Chuỗi E2E hoàn chỉnh: **radar → presence → fusion tại board → IR Daikin → điều hòa vào COOL**, và
+> **voice** (nói "bật điều hòa" → whisper → `ac_cmd` → IR). Backend + lịch sử SQLite + app Android + OTA
+> 2 node đều xong.
+>
+> **Thay đổi kiến trúc so với 17/07:**
+> - **PIR BỎ khỏi hệ.** Radar cấp presence trực tiếp, không cần PIR.
+> - **Fusion đảo về BOARD**: voice-node nghe `home/room/presence` rồi tự bắn IR. Backend **không** tự
+>   publish `ac_cmd` nữa (2 nơi cùng quyết thì lệch nhau → ESP32 là bộ não duy nhất).
+> - **IR TRỞ LẠI scope và ĐÃ CHẠY**: dùng protocol Daikin có sẵn (`IRDaikin152`, remote ARC480A47), không
+>   cần học mã/TSOP. Module IR phải chạy **5V**.
+> - **`firmware/radar-node` thay `room-node`**: S2 đọc LD2410C **native UART @256000** (Moving/Static thật),
+>   không ESP-NOW, không firmware bên thứ ba.
+> - Thêm **vỏ hộp in 3D modular** (`hardware/vo-hop-modular.scad`).
 
 ## Overview
 
-Bốn pha tăng dần: (1) presence + AC trên room node (**radar → presence**), (2) Go backend + endpoint voice + ASR (**fuse motion+presence**), (3) voice node WROOM-32 (**mic + PIR**), (4) Flutter app.
+Sáu pha: (1) presence từ radar-node, (2) Go backend + voice + ASR + lịch sử SQLite, (3) voice-node
+(mic + **fusion tại board** + IR Daikin), (4) Flutter app Android, (5) OTA 2 node, (6) vỏ hộp in 3D.
 
-**Trạng thái**: Phase 1 radar → presence **nghiệm thu HW**. Phase 2 backend + **voice E2E NGHIỆM THU** (nói "bật/tắt điều hòa" → whisper → `ac_cmd on/off` đúng, 2026-07-16 chiều). Phase 3 mic INMP441 hàn + chạy thật. **IR bỏ khỏi scope** (không làm phần cứng; giữ code, `ac_cmd` là đích). **PIR để mai** (con cũ chết do cắm ngược). Phase 4 chưa bắt đầu.
+**Trạng thái**: Phase 1-5 ✅ **chạy thật**. Phase 6 ⏳ STL xong chưa in ướm.
+Việc code còn treo: **không có**. Staleness tab "Thiết bị" (15s im lặng ⇒ "Mất tín hiệu") đã làm 26/07 —
+cần thiết vì will đã dời sang `presence` nên `tele/<T>/LWT` kẹt "Online"; còn lại là việc tay (in vỏ, hàn nguồn).
 
 > **Nâng cấp 2026-07-15/16** (`plans/260715-2047-...` → `plans/260716-1433-relocate-pir-to-voice-node-backend-fusion/`):
 > - Gộp còn **2 node vật lý**. **PIR dời sang voice-node (WROOM-32 GPIO27), radar ở room-node → fusion về BACKEND** (16/07, đảo từ "fuse tại board" sau khi PIR cắm ngược trên S2 gây nóng). Door-node nghỉ hưu.
-> - Voice: ASR = **faster-whisper self-host** (`asr/`); backend voice endpoint `/api/voice/stream` + VAD + parse lệnh Việt → `ac_cmd` (xong, review APPROVE). Firmware voice-node build xong (audio+MQTT+PIR).
+> - Voice: ASR = **faster-whisper self-host** (`asr/`); backend voice endpoint `/api/voice/stream` + VAD + parse lệnh Việt → `ac_cmd` (xong, review APPROVE). Firmware voice-node build xong (audio+MQTT; PIR sau đó bị BỎ — xem mục 24/07 ở đầu file).
 > - **16/07**: flash room-node HW thật, radar → presence chạy đúng qua serial `[hb]` + MQTT.
 
 ---
 
-## Phase 1: Presence + AC (Room node — radar → presence)
+## Phase 1: Presence (radar-node — LD2410C native UART → MQTT)
 
-**Status**: ✅ CODE-COMPLETE · ✅ **RADAR → PRESENCE NGHIỆM THU HW (2026-07-16)** · ⏳ hàn lại radar + IR
+**Status**: ✅ **CHẠY THẬT (23-24/07)** — thay hoàn toàn `room-node` cũ.
 
 ### Deliverables
 | Component | Status | Ghi chú |
 |-----------|--------|---------|
-| Room node firmware (radar → presence + IR, radar-only) | ✅ Code + build (`lolin_s2_mini`, Flash ~61%) | `firmware/room-node/src/main.cpp` (PIR đã gỡ, dời voice-node) |
-| Presence theo radar | ✅ Nghiệm thu | ENTER radar giữ ≥`PRESENCE_HOLD_MS`=1500; EXIT radar im ≥`RADAR_DEBOUNCE_MS`=3000. Fusion motion+presence ở backend |
-| Debug heartbeat `[hb]` + chờ USB-CDC boot | ✅ Thêm 16/07 | `STATUS_HEARTBEAT_MS`=2000 |
-| MQTT broker | ✅ `home-mqtt` :1883 (auth) | |
-| Door node | ⚠️ Nghỉ hưu | `firmware/door-node/` giữ tham chiếu ISR |
+| `firmware/radar-node` (LD2410C native UART) | ✅ chạy thật (`lolin_s2_mini`, Flash ~60%) | OUT G16 + UART TX33/RX18 @256000 |
+| Presence theo radar | ✅ nghiệm thu qua broker | `PRESENCE_HOLD_MS`=300; heartbeat 30s; retain |
+| `home/door/motion` (Analytics) | ✅ verify broker | throttle 1s |
+| `tele/<T>/SENSOR` cho app | ✅ | 3s; Detect/Moving/Static thật |
+| **MQTT will `present:false`** | ✅ flash + verify | S2 rớt → broker bắn vắng (~15-20s) |
+| OTA | ✅ | env `lolin_s2_mini_ota`, password đồng bộ voice-node |
+| `room-node` / `door-node` | ⚠️ Nghỉ hưu | giữ tham chiếu, **không flash** |
 
-### Đã nghiệm thu (2026-07-16, HW thật)
-- ✅ Flash S2 Mini qua usbipd (bootloader tay: giữ BOOT + tap RST).
-- ✅ Boot + WiFi (`mp`) + MQTT (`home-mqtt`) + NTP sync (timestamp thật).
-- ✅ Radar `=1` khi có người, `=0` khi trống (giữ 168s liên tục — không báo giả).
-- ✅ `present` VÀO khi radar giữ; RA ~3s sau radar hết (`RADAR_DEBOUNCE_MS`).
-- ✅ Pub `home/room/presence` true/false tới broker (khớp serial).
+### Đã nghiệm thu (HW thật)
+- ✅ Flash qua usbipd (`--auto-attach` vì S2 đổi cổng khi reset).
+- ✅ WiFi (`mp`) + MQTT + NTP; presence true/false đúng trên broker.
+- ✅ **Moving/Static đổi liên tục** khi quơ tay (sau khi fix **GND chung**).
+- ✅ Rút nguồn S2 → will `present:false` → app hết kẹt "thấy người".
 
-### Còn treo (phần cứng)
-1. **Hàn lại radar OUT→GPIO16** — mối chập chờn (từng đọc HIGH giả khi hở; LED module tắt mà GPIO16 vẫn 1). Gỡ radar khỏi vị trí đè cổng USB-C (mầm chập).
-2. **IR receiver + blaster** — chưa có phần cứng (GPIO15/5 firmware dành sẵn) → `ac_cmd`→IR chưa chạy được.
-3. **PIR** → nay thuộc Phase 3 (voice-node GPIO27). **E2E fusion** cần backend + cả 2 node publish.
+### Bài học phần cứng
+1. **Mất GND chung** khi tách nguồn → `Moving=0` dù `Detect=1`, app BLE HLK vẫn mượt → không phải module hỏng.
+2. **Đừng hàn radar đè cổng USB-C** (đã gây chập/nóng ở bản trước).
 
 ### Success Criteria
-- [x] Room node flash + boot + WiFi + MQTT + NTP
-- [x] Radar publish presence đổi trạng thái đúng (radar-only)
+- [x] radar-node flash + boot + WiFi + MQTT + NTP
+- [x] Publish presence đổi trạng thái đúng
 - [x] Phòng trống → `present:false`; có người → `present:true`
-- [ ] Backend fuse motion(voice-node)+presence(radar) → occupied đúng
-- [ ] IR learn/blast verify với điều hòa thật (chờ phần cứng IR)
+- [x] Moving/Static (UART) có số thật, đổi liên tục
+- [x] Will bắn `present:false` khi board rớt
 
 ---
 
@@ -85,29 +97,41 @@ Bốn pha tăng dần: (1) presence + AC trên room node (**radar → presence**
 
 ---
 
-## Phase 3: Voice Node (WROOM-32 + INMP441 + PIR)
+## Phase 3: voice-node (WROOM-32 + INMP441 + **fusion tại board** + IR Daikin)
 
-**Status**: ✅ **MIC HÀN + CHẠY THẬT (2026-07-16)** — audio stream → whisper → `ac_cmd` E2E OK. Chân I2S phải `ONLY_RIGHT` (driver ESP32 đảo LEFT/RIGHT), gain `>>11`, VAD 2500. · ⏳ **PIR để mai** (con cũ chết do cắm ngược 5V/GND — thử con khác trên GPIO27).
+**Status**: ✅ **CHẠY THẬT ĐẦY ĐỦ (24/07)** — mic → VAD → whisper → `ac_cmd` → **IR Daikin vào COOL**.
+I2S phải `ONLY_RIGHT` (driver ESP32 đảo LEFT/RIGHT), gain `>>11`, VAD 2500. **PIR đã BỎ.**
 
-Chốt: board **WROOM-32** (2 nhân); **không ASR trên board** (không PSRAM); **VAD năng lượng trên device**; **stream WS PCM 16k mono 16-bit LE** tới `/api/voice/stream`; ASR = whisper `small` self-host. **PIR dời về đây** (GPIO27) → pub `home/door/motion` (fusion ở backend).
+Chốt: board **WROOM-32** (2 nhân); **không ASR trên board** (không PSRAM); **VAD năng lượng trên device**;
+**stream WS PCM 16k mono 16-bit LE**; ASR = whisper `small` self-host. **Fusion tại board** — sub
+`home/room/presence` rồi tự bắn IR (ESP32 là bộ não duy nhất).
 
 ### Deliverables
 | Item | Status |
 |------|--------|
-| Firmware I2S INMP441 (SCK26/WS25/SD34) | ✅ build pass |
-| VAD năng lượng RMS + stream WS | ✅ |
-| **MQTT client + PIR GPIO27 → `home/door/motion`** | ✅ build pass |
+| Firmware I2S INMP441 (SCK26/WS25/SD34) | ✅ chạy thật |
+| VAD năng lượng RMS + stream WS | ✅ (RMS max ~28000 khi nói, VAD trigger đúng) |
+| **Fusion tại board**: sub presence → occupied (ENTER 800ms / EXIT 60s / link timeout 90s) | ✅ |
+| **IR Daikin** `IRDaikin152` GPIO4, module 5V | ✅ **AC vào COOL 25°C quạt AUTO** |
+| Sub `home/room/ac_cmd` (lệnh tay/voice) | ✅ |
 | WiFi/WS/MQTT reconnect | ✅ |
-| Hàn mic thật + đấu PIR (đúng chữ in, con cũ nghi hỏng) | ⏳ |
-| Tune `VAD_THRESHOLD` (placeholder 800) | ⏳ thực địa |
-| E2E: nói "bật/tắt điều hòa" → AC | ⏳ |
+| OTA (`esp32dev_ota`) | ✅ |
+| Purge Tasmota + bỏ PIR khỏi firmware | ✅ |
 
 ### Success Criteria
-- [ ] PIR GPIO27 kích → pub `home/door/motion`; audio stream không hồi quy
-- [ ] Serial thấy RMS tăng khi nói, stream=true khi vượt ngưỡng
-- [ ] Backend nhận đủ chunk, whisper trả text đúng câu
-- [ ] "bật/tắt điều hòa" → điều hòa thật bật/tắt (E2E qua Phase 1 + 2 + IR)
-- [ ] Mất WiFi/backend → reconnect, không treo
+- [x] Serial thấy RMS tăng khi nói, `streaming=true` khi vượt ngưỡng
+- [x] Backend nhận đủ chunk, whisper trả text đúng câu
+- [x] "bật điều hòa" → `[ir] Daikin ON (25C)` → **điều hòa thật vào COOL**
+- [x] presence từ radar-node → `[fusion] occupied → 1` → IR ON tự động
+- [x] radar-node chết (>90s không presence) → coi vắng, AC không chạy vĩnh viễn
+- [x] Mất WiFi/backend → reconnect, không treo
+
+### Bài học
+- **LED IR vô hình với mắt** → soi camera điện thoại. Mất nhiều lượt debug vì tưởng mạch chết.
+- **Module IR phải cấp 5V** (nhãn 5V, tầm 1-2m); 3V3 under-drive → tầm ngắn.
+- **ARC480A47 = họ DAIKIN152** → `IRDaikin152` đúng protocol, không cần học mã/TSOP.
+- **WROOM brownout tại `WiFi.mode()`** là **phần cứng** (biên nguồn mỏng), không phải firmware — chứng minh
+  bằng swap board mới: cùng firmware, 0 brownout. Đừng thử lại lever TX power/CPU freq.
 
 ---
 
@@ -149,21 +173,25 @@ Stack thực tế: **Flutter 3.44.6 + Riverpod 3.x + `http` + `web_socket_channe
 
 | Phase | Ưu tiên | Trạng thái |
 |-------|---------|-----------|
-| 1 | 🟥 Cao nhất | ✅ Radar→presence nghiệm thu HW; ⏳ hàn lại radar OUT→GPIO16 |
-| 2 | 🟥 Cao nhất | ✅ Nghiệm thu E2E voice + **lịch sử SQLite** |
-| 3 | 🟥 Cao nhất | ✅ Mic chạy thật; ⏳ **PIR — việc DUY NHẤT còn lại của MVP** |
-| 4 | 🟨 Trung bình | ✅ Code-complete + APK; ⏳ cài máy thật |
+| 1 — radar-node presence | 🟥 Cao nhất | ✅ **chạy thật** (kèm will `present:false`) |
+| 2 — backend + voice + ASR + SQLite | 🟥 Cao nhất | ✅ **chạy thật** |
+| 3 — voice-node fusion + IR Daikin | 🟥 Cao nhất | ✅ **chạy thật, AC vào COOL** |
+| 4 — Flutter app Android | 🟨 Trung bình | ✅ APK chạy trên máy thật, tab Thiết bị có staleness 15s |
+| 5 — OTA 2 node | 🟩 Thấp | ✅ |
+| 6 — Vỏ hộp in 3D modular | 🟩 Thấp | ⏳ STL xong, **chưa in ướm** |
 
 ## Open Questions & Decisions Pending
 
 | Câu hỏi | Ảnh hưởng | Timeline |
 |---------|-----------|----------|
-| Hàn lại radar OUT→GPIO16 + gỡ khỏi USB-C | Ổn định presence P1 | Ngay |
-| Đo áp PIR + đấu đúng chữ in trên voice-node GPIO27 (con cũ nghi hỏng) | Fusion đủ 2 sensor P3 | Khi đấu PIR |
-| Tune `VAD_THRESHOLD` + độ trễ whisper (`small` vs `tiny`) | UX voice P3 | Khi có mic |
-| Tune `ENTER/EXIT` window | Chính xác P2 | Sau khi có PIR |
+| **In ướm `vo-hop-base.stl`** → chốt chiều cao khe USB / lỗ LED IR | Vỏ hộp P6 | Khi in |
+| Ngưỡng staleness 15s có hợp WiFi nhà không (nháy "Mất tín hiệu" khi mạng chớp?) | Tab Thiết bị | Sau vài ngày dùng |
+| Đấu nguồn chung Topo A (hàn S2 5V→WROOM VIN) | 1 cốc sạc nuôi 2 board | Việc tay |
+| Tune `ENTER_STABLE_MS`/`EXIT_TIMEOUT_MS` tại voice-node | Trải nghiệm auto AC | Sau khi dùng thực tế |
+| Motion: đổi từ throttle 1/s sang rising-edge only | Kích thước DB lịch sử | Nếu DB phình |
+| Xoá `selftest.cpp` + `[env:selftest]` (chẩn đoán throwaway) | Dọn repo | Khi chắc không cần |
+| `/api/ac/learn` + `home/room/ac_learn` (legacy, vô tác dụng) | Dọn contract | Khi dọn |
 | TLS/mTLS MQTT + auth API | Security | Trước internet |
-| SQLite event history | Scope P2 | YAGNI, revisit nếu cần |
 
 ---
 

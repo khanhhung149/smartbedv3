@@ -1,131 +1,190 @@
 # Codebase Summary
 
-> Cập nhật: 2026-07-16. Phản ánh kiến trúc 2-node fusion-tại-board + voice→ASR.
+> Cập nhật: **2026-07-24**. Phản ánh kiến trúc hiện tại: radar-node native UART, **fusion + IR tại
+> voice-node** (ESP32 là bộ não), backend chỉ hiển thị + lưu lịch sử, **app Flutter Android**, vỏ hộp 3D.
 
 ## Project Structure
 
 ```
 project-root/
-├── backend/      # Go: MQTT + state machine + REST/WS + voice endpoint
+├── backend/      # Go: MQTT + state machine + REST/WS + voice endpoint + SQLite lịch sử
 ├── asr/          # Python FastAPI + faster-whisper (self-host ASR)
-├── firmware/     # PlatformIO ESP32: room-node, voice-node, door-node (retired), mqtt/
+├── app/          # Flutter Android: Home/History/Analytics/Thiết bị/Settings
+├── firmware/     # PlatformIO ESP32: radar-node, voice-node (+ room-node, door-node nghỉ hưu), mqtt/
+├── hardware/     # Vỏ hộp in 3D: OpenSCAD + STL
+├── scripts/      # wsl-portproxy.ps1 (chỉ cần khi broker chạy trong WSL)
 ├── docs/         # Tài liệu kỹ thuật
-├── plans/        # Log pha + quyết định (gitignored trừ template)
+├── plans/        # Log pha + quyết định
 ├── README.md
 └── .gitignore
 ```
 
 ## Backend (Go)
 
-**Location**: `backend/` · **Framework**: Chi router + paho MQTT + coder/websocket + log/slog · **Module**: `github.com/hung/home-backend`
-**Status**: ✅ Code-complete, build/vet/test xanh (state machine + voice command). E2E audio thật: ⏳.
+**Location**: `backend/` · Chi router + paho MQTT + coder/websocket + slog · Module `github.com/hung/home-backend`
+**Status**: ✅ chạy thật (presence/motion/ac_cmd + lịch sử + voice E2E).
 
 ```
 backend/
-├── cmd/server/main.go            # bootstrap: config, MQTT, router, HTTP server
+├── cmd/server/main.go            # bootstrap: config, MQTT, store, router, HTTP
 ├── internal/
 │   ├── api/
-│   │   ├── router.go             # Chi router; group /api gồm ws + voice/stream
-│   │   ├── handlers.go           # REST: /healthz, /api/state, /api/ac, /api/ac/learn
-│   │   ├── handlers_test.go
-│   │   ├── ws.go                 # WebSocket hub broadcast state
-│   │   └── ws_test.go
-│   ├── config/config.go          # env parse: MQTT_*, HTTP_*, timing + LoadVoice() (ASR_*)
-│   ├── events/events.go          # struct payload MQTT (Motion, Presence)
-│   ├── mqttclient/client.go      # paho wrapper: connect/sub/pub/reconnect, PublishACCmd()
-│   ├── statemachine/
-│   │   ├── machine.go            # Idle/Occupied/ExitWait (Phase 2)
-│   │   └── machine_test.go
-│   └── voice/                    # ⭐ MỚI (Phase 2 voice)
-│       ├── stream.go             # WS /api/voice/stream: utteranceBuffer, read-deadline VAD, WAV
-│       ├── asr_client.go         # POST multipart WAV → ASR_URL
-│       ├── command.go            # ParseVietCommand(text) → "on"/"off"
-│       └── command_test.go       # 9 case pass
-├── Dockerfile                    # multi-stage → distroless
-├── docker-compose.yml            # backend + service asr (+ volume cache model)
-└── .env.example
+│   │   ├── router.go             # Chi; group /api: state, events, ac, ws, voice/stream
+│   │   ├── handlers.go           # REST: /healthz, /api/state, /api/events, /api/ac, /api/ac/learn
+│   │   ├── ws.go                 # WS hub broadcast state (đăng ký tại /api/ws)
+│   │   └── *_test.go
+│   ├── config/config.go          # env: MQTT_*, HTTP_*, timing, LoadVoice() (ASR_*), DB_PATH
+│   ├── events/events.go          # payload MQTT (Motion, Presence)
+│   ├── mqttclient/client.go      # paho wrapper: sub presence/motion/ac_cmd, PublishACCmd/ACLearn
+│   ├── statemachine/machine.go   # occupied (CHỈ để hiển thị — không phát lệnh)
+│   ├── store/store.go            # SQLite lịch sử event (modernc.org/sqlite, pure Go)
+│   └── voice/                    # stream.go (WS→WAV), asr_client.go, command.go (ParseVietCommand)
+├── Dockerfile · docker-compose.yml (backend + asr) · .env.example
 ```
 
-### Voice pipeline (internal/voice)
-- `stream.go`: nhận WS binary PCM 16k mono 16-bit LE → `utteranceBuffer.feed()`; kết thúc câu bằng **read-deadline `ASR_SILENCE_MS`** mỗi `conn.Read`; flush câu cuối khi client đóng; byte cap `ASR_MAX_UTTER_MS`; dựng WAV header.
-- `asr_client.go`: POST multipart WAV tới `ASR_URL`, nhận text.
-- `command.go`: chuẩn hoá + bỏ dấu, match "bật/tắt" + "điều hòa/điều hoà/máy lạnh" → phát `home/room/ac_cmd`.
+**Điểm quan trọng:** `main.go` **KHÔNG publish `ac_cmd`** theo occupancy nữa — ESP32 (voice-node) tự quyết.
+Backend chỉ chuyển tiếp lệnh **tay** (`POST /api/ac`) và **voice** (whisper → `ParseVietCommand` → `ac_cmd`),
+đồng thời nuôi state cho app + ghi lịch sử. Tránh 2 nơi cùng quyết định thì lệch nhau.
 
 ### API
 | Method | Path | Status |
 |--------|------|--------|
 | GET | `/healthz` | ✅ |
 | GET | `/api/state` | ✅ |
+| GET | `/api/events?limit=&before=` | ✅ (503 nếu không có DB) |
 | POST | `/api/ac` | ✅ |
-| POST | `/api/ac/learn` | ✅ |
-| GET | `/api/ws` | ✅ |
-| GET | `/api/voice/stream` | ✅ (chưa E2E audio thật) |
+| POST | `/api/ac/learn` | ⚠️ legacy — voice-node không dùng IR learn (Daikin protocol sẵn) |
+| GET | `/api/ws` | ✅ (**phải** `/api/ws`, không phải `/ws`) |
+| GET | `/api/voice/stream` | ✅ E2E chạy |
 
 ### Config env
-`MQTT_HOST/PORT/USER/PASS`, `HTTP_ADDR` (`:8080`), `ENTER_WINDOW_S` (15), `EXIT_TIMEOUT_S` (60), `ASR_URL`, `ASR_SILENCE_MS`, `ASR_MAX_UTTER_MS`, `VOICE_SAMPLE_RATE` (16000).
+`MQTT_HOST/PORT/USER/PASS`, `HTTP_ADDR` (`:8080`), `ENTER_WINDOW_S` (15), `EXIT_TIMEOUT_S` (60),
+`ASR_URL`, `ASR_SILENCE_MS`, `ASR_MAX_UTTER_MS`, `VOICE_SAMPLE_RATE` (16000), `DB_PATH`.
+
+---
+
+## App (Flutter / Android)
+
+**Location**: `app/` · Riverpod + mqtt_client + SharedPreferences. **Status**: ✅ APK build ra Desktop.
+
+```
+app/lib/
+├── main.dart · theme.dart · providers.dart      # Riverpod wiring
+├── models/    device.dart (MqttDevice) · event.dart · snapshot.dart · stats.dart
+├── screens/   home_screen · history_screen · analytics_screen
+│              devices_screen · add_device_screen · mqtt_log_screen · settings_screen
+├── services/  api_client.dart (REST) · ws_client.dart (/api/ws) · mqtt_service.dart
+└── widgets/   pill_nav.dart
+```
+
+**Hai đường dữ liệu song song:**
+1. **Backend** (REST + WS `/api/ws`) → Home (occupancy/AC), History (`/api/events`), Analytics.
+2. **MQTT trực tiếp** (`mqtt_service.dart`) → tab **"Thiết bị"**: đọc `tele/<T>/SENSOR` hiện số liệu radar
+   (Detect/Moving/Static). Khuôn topic kiểu `tele/stat` giữ nguyên để không phải đổi app.
+
+**Độ tươi (staleness) ở tab "Thiết bị"** — `DeviceState.staleAfter = 15s`:
+- `DeviceState.viewAt(now)` (`models/device.dart`): quá 15s không có message ⇒ `online=false`,
+  `occupied=null`, bỏ luôn cự ly/năng lượng cũ. Dựng object mới chứ không `copyWith` (copyWith cố ý giữ
+  giá trị cũ khi tham số null nên không xoá được gì).
+- `MqttService._startFreshnessTick()`: phát lại state **mỗi giây** kể cả khi không có message — thiếu nó
+  thì thiết bị chết ⇒ stream im ⇒ UI đứng nguyên ở "Có người".
+- `LWT Offline` ⇒ xoá số đọc ngay (không chờ 15s). radar-node không đi đường này vì will đã dành cho
+  `home/room/presence`.
+
+> Đã purge tên "Tasmota" khỏi app (`TasmotaDevice`→`MqttDevice`) nhưng **giữ nguyên topic + logic parse +
+> key SharedPreferences `devices`** — chỉ đổi tên/chữ, không đổi hành vi.
 
 ---
 
 ## ASR service (Python)
 
-**Location**: `asr/` · faster-whisper self-host.
-
-```
-asr/
-├── app.py           # FastAPI: WhisperModel(small, cpu, int8); POST /transcribe (multipart WAV); GET /healthz
-├── requirements.txt
-└── Dockerfile
-```
-
-Chạy như 1 container cạnh backend (docker-compose `asr`). Audio không rời LAN. Model `small` là mặc định; hạ `tiny` nếu CPU chậm.
+**Location**: `asr/` — `app.py` (FastAPI + `WhisperModel(small, cpu, int8)`, `POST /transcribe` multipart WAV,
+`GET /healthz`), `requirements.txt`, `Dockerfile`. Chạy cạnh backend qua docker-compose. Audio không rời LAN.
 
 ---
 
 ## Firmware (PlatformIO)
 
-**Location**: `firmware/` · 3 project độc lập (không lib chung).
-
 ```
 firmware/
-├── room-node/     # board lolin_s2_mini (ESP32-S2), -DARDUINO_USB_CDC_ON_BOOT=1
-│   └── src/main.cpp   # radar → presence + IR learn/blast + MQTT + [hb] heartbeat (radar-only)
-├── voice-node/    # board esp32dev (WROOM-32)
-│   └── src/main.cpp   # INMP441 I2S + VAD + stream WS PCM 16k + MQTT PIR→motion
-├── door-node/     # ⚠️ NGHỈ HƯU (tham chiếu ISR PIR); không flash cho MVP 1 phòng
+├── radar-node/    # ⭐ ĐANG CHẠY trên S2 Mini — LD2410C native UART → MQTT
+│   ├── src/main.cpp · src/selftest.cpp (chẩn đoán UART, throwaway)
+│   └── platformio.ini  # env: lolin_s2_mini · lolin_s2_mini_ota · selftest
+├── voice-node/    # ⭐ ĐANG CHẠY trên WROOM-32 — mic + fusion + IR Daikin
+│   └── platformio.ini  # env: esp32dev · esp32dev_ota
+├── room-node/     # ⚠️ NGHỈ HƯU (bản S2 cũ: ESP-NOW/IR-learn) — không flash
+├── door-node/     # ⚠️ NGHỈ HƯU (tham chiếu ISR PIR)
 └── mqtt/          # cấu hình Mosquitto (passwd.example)
 ```
 
-### Room node — `firmware/room-node/src/main.cpp`
-**Board**: Wemos S2 Mini (ESP32-S2). **Status**: ✅ **Nghiệm thu HW 2026-07-16** (radar → presence chạy đúng). Radar-only (PIR đã dời sang voice-node).
+### radar-node — `firmware/radar-node/src/main.cpp`
+**Board**: Wemos S2 Mini (`lolin_s2_mini`, `-DARDUINO_USB_CDC_ON_BOOT=1`). **Status**: ✅ chạy thật.
 
 | Thành phần | Chân | Vai trò |
 |-----------|------|---------|
-| LD2410 radar | GPIO16 (OUT digital), UART GPIO33/18 (để dành) | Presence; poll 200ms |
-| IR receiver TSOP | GPIO15 | Học mã IR (cửa sổ 15s) — ⏳ chưa có phần cứng |
-| IR blaster | GPIO5 → transistor | Phát mã IR đã học — ⏳ chưa có phần cứng |
-| NVS | — | Lưu mã IR "on"/"off" (namespace `ac_codes`) |
+| LD2410C OUT | GPIO16 | Presence digital (hold 300ms) |
+| LD2410C TX→RX | GPIO33 / GPIO18 | UART @**256000** đọc Moving/Static distance+energy |
+| LD2410C VCC/GND | 5V / **GND chung** | ⚠️ Mất GND chung → UART chết dù BLE vẫn chạy |
 
-- Pub `home/room/presence` (theo **radar**, retain). KHÔNG còn pub `home/door/motion` (PIR đã dời đi).
-- Sub `home/room/ac_cmd` → `sendAC()`; `home/room/ac_learn` → `startLearn()`.
-- Debug: `[hb]` heartbeat mỗi `STATUS_HEARTBEAT_MS`=2000 in `radar/occupied/sinceRadarHigh/wifi/mqtt`; chờ USB-CDC lúc boot để không mất log (đặc thù S2).
-- Tham số presence: `PRESENCE_HOLD_MS`=1500 (ENTER radar giữ), `RADAR_DEBOUNCE_MS`=3000 (EXIT radar im).
-- Deps: `crankyoldgit/IRremoteESP8266`, `256dpi/MQTT`.
+- Pub: `home/room/presence` (retain, QoS1, heartbeat 30s) · `home/door/motion` (throttle 1s) ·
+  `tele/<T>/SENSOR` (3s) · trả lời `cmnd/<T>/STATUS` → `stat/<T>/STATUS10`.
+- **MQTT will** = `home/room/presence` `{"present":false}` retain → S2 rớt thì broker tự bắn vắng
+  (~15-20s theo keepalive). Đánh đổi: `tele/<T>/LWT` không còn là will (kẹt "Online") → app dựa vào
+  staleness 15s ở tab "Thiết bị" (đã làm).
+- `build_src_filter` loại `selftest.cpp` khỏi firmware chính (nó có setup/loop riêng).
+- Deps: `ncmreynolds/ld2410`, `256dpi/MQTT`. OTA: `ArduinoOTA` (env `lolin_s2_mini_ota`).
 
-### Voice node — `firmware/voice-node/src/main.cpp`
-**Board**: ESP32-WROOM-32 (`esp32dev`). **Status**: ✅ build pass (audio + MQTT + PIR), ⏳ chưa hàn mic + tune VAD + verify PIR.
+### voice-node — `firmware/voice-node/src/main.cpp`
+**Board**: ESP32-WROOM-32 (`esp32dev`). **Status**: ✅ chạy thật (mic → VAD → ASR → IR; IR vào COOL).
 
 | Thành phần | Chân | Vai trò |
 |-----------|------|---------|
-| INMP441 SCK/WS/SD | GPIO26 / 25 / 34 | I2S mic (SD input-only) |
-| INMP441 L/R | GND | Kênh trái |
-| **PIR** | **GPIO27** (`INPUT_PULLDOWN`, interrupt RISING) | Chuyển động → pub `home/door/motion` |
+| INMP441 SCK/WS/SD | GPIO26 / 25 / 34 | I2S mic (L/R→GND) |
+| IR blaster | **GPIO4** (module 5V) | `IRDaikin152` — GPIO5 là strapping, không dùng |
+| PIR | (GPIO27, **đã bỏ**) | Không còn gắn interrupt |
 
-- Audio: I2S RX 16kHz slot 32-bit → `raw >> 16` PCM16; VAD RMS > `VAD_THRESHOLD` (placeholder 800) → stream WS `/api/voice/stream`; im `SILENCE_MS` → ngừng gửi.
-- **MQTT** (`256dpi/MQTT`, client id `voice-node`): PIR cạnh lên → `publishMotion()` → `home/door/motion` (throttle 1s). MQTT chạy song song audio (WROOM 2 nhân).
-- WiFi/WS/MQTT reconnect. Deps: `links2004/WebSockets` + `256dpi/MQTT` + I2S driver.
+- **Fusion tại board**: sub `home/room/presence` → `ENTER_STABLE_MS`=800 bật / `EXIT_TIMEOUT_MS`=60000 tắt /
+  `RADAR_LINK_TIMEOUT_MS`=90000 (radar chết → coi vắng, chống AC chạy mãi).
+- Sub `home/room/ac_cmd` (lệnh tay/voice) → `sendAC()`.
+- Audio: I2S 16kHz slot 32-bit → PCM16 với `MIC_SHIFT=11`; VAD `RMS > 2500`; im `SILENCE_MS`=800 → ngừng gửi.
+- `build_flags` chỉ biên dịch Daikin (`-D_IR_ENABLE_DEFAULT_=false`, `SEND_DAIKIN/DAIKIN152=true`) — bỏ
+  hàng trăm protocol không dùng (board đã ~75% flash).
+- Deps: `links2004/WebSockets`, `256dpi/MQTT`, `crankyoldgit/IRremoteESP8266`. OTA: env `esp32dev_ota`.
 
 ### Secrets
-Mỗi node: `include/config.h.example` (check-in) + `include/config.h` (gitignore, WiFi/MQTT/backend host thật).
+Mỗi node: `include/config.h.example` (check-in) + `include/config.h` (**gitignore** — WiFi/MQTT/OTA password thật).
+
+---
+
+## Hardware (vỏ hộp in 3D)
+
+**Location**: `hardware/` · OpenSCAD → STL → Bambu Studio. **Vật liệu: PETG, thành 3mm** (máy Bambu A1 hở,
+không in PC-ABS/ASA).
+
+```
+hardware/
+├── vo-hop-modular.scad          # ⭐ HIỆN TẠI (v3) — part="base"|"face"|"lid"|"assembly"|"exploded"|"layout"
+├── vo-hop-{base,face,lid}.stl   # 3 mảnh IN RỜI
+├── vo-hop-tach-roi.png          # ảnh tách rời + lát cắt rãnh trượt (render bằng OpenSCAD)
+├── vo-hop-LAP-RAP-xem-thoi.stl  # bản đã lắp — CHỈ ĐỂ XEM, không in
+└── vo-so.scad + vo-so-*.stl     # ⚠️ bản vỏ sò cũ, giữ làm đường lui
+```
+
+| Mảnh | Chứa | Ghép bằng |
+|---|---|---|
+| `base` | WROOM (4 trụ-socket 13mm xỏ pin, 25.4×45.72, lỗ Ø1.4) · S2 (2 trụ vít M2, pitch 18.5) · IR (2 gờ) · khe USB-C S2 ở vách sau (nguồn) · 4 trụ góc Ø8 · rãnh trượt face | — |
+| `face` | Khe USB-C WROOM + lỗ LED IR Ø6.5 | **KHÔNG vít** — thả từ trên vào rãnh, nắp đè giữ |
+| `lid` | Cửa sổ radar (chừa **1.5mm** cho 24GHz) + cradle radar ngửa + vòng đỡ mic Ø10 + lỗ thu âm | 4 vít M3 vào **ren đồng ép nhiệt** (lỗ chờ Ø4.2) |
+
+**Vì sao face không vít**: trụ in đứng ⇒ đường lớp nằm ngang ⇒ vít bắt ngang là lực **tách lớp**, hướng
+yếu nhất của FDM. Rãnh trượt đổi toàn bộ tải sang lực cắt dọc theo lớp.
+
+**Kiểm trước khi in**: `scripts/check-enclosure-fit.sh` lấy phép giao khối (CGAL) từng cặp mảnh rồi tính
+**thể tích** khối giao. Đếm số mặt KHÔNG đủ — hai mảnh chạm nhau vẫn sinh cả trăm mặt mà thể tích bằng 0.
+Bản v2 từng lọt qua mắt thường với `base∩face` 1945mm³ và `base∩lid` 264mm³, tức **cả 3 mảnh đều không
+lắp được**. Chạy script này trước mỗi lần in.
+
+⏳ **Chưa in ướm** — chiều cao cổng USB/tâm LED IR còn là giả định.
 
 ---
 
@@ -134,14 +193,34 @@ Mỗi node: `include/config.h.example` (check-in) + `include/config.h` (gitignor
 | Mục | Quy ước |
 |-----|---------|
 | Định danh code | English (camelCase hàm, SCREAMING_SNAKE_CASE hằng) |
-| Comment/log | Tiếng Việt (firmware), English (Go) |
-| Go test | table-driven, tên scenario (không đánh số chung chung) |
-| Firmware | không unit test; verify qua serial `[hb]` + MQTT |
+| Comment/log | Tiếng Việt (firmware, app), English/Việt (Go) |
+| Go test | table-driven, tên scenario |
+| Firmware | không unit test; verify qua serial + **sub broker thật** |
+| Flutter | Riverpod provider; model immutable + `copyWith` |
 
-**Không lib firmware chung**: mỗi node standalone (sensor khác nhau, flash/debug độc lập, chấp nhận trùng WiFi/MQTT init cho MVP).
+**Không lib firmware chung**: mỗi node standalone (flash/debug độc lập).
+
+**Bài học verify:** test tự động từng để lọt 3 bug — chỉ lộ khi **nhìn app/thiết bị thật**. Với firmware/IR,
+bằng chứng phải là **serial + payload trên broker + phản ứng của thiết bị**, không phải test pass.
+
+**Test chạy hạ tầng thật** (tự skip khi hạ tầng không có, không làm đỏ suite):
+
+| File | Cần gì | Bắt được gì |
+|------|--------|-------------|
+| `app/test/api_live_test.dart` | backend ở `localhost:8080` | lệch contract JSON app↔Go |
+| `app/test/mqtt_live_test.dart` | broker + `MQTT_HOST/MQTT_USER/MQTT_PASS` | độ tươi tab Thiết bị trên **thời gian thật**: đóng vai radar rồi im, đo lúc lật "Mất tín hiệu" và đếm nhịp phát lại |
+
+```bash
+MQTT_HOST=127.0.0.1 MQTT_USER=... MQTT_PASS=... flutter test
+```
+
+Credential lấy từ biến môi trường — **không viết vào repo**. Test MQTT live là thứ duy nhất bắt được lỗi
+"logic độ tươi đúng nhưng stream không phát lại": timer chỉ sai khi chạy trên đồng hồ thật.
 
 ---
 
 ## Next Steps
 
-Xem [`project-roadmap.md`](./project-roadmap.md). Việc gần nhất (phần cứng): hàn lại radar OUT→GPIO16 + gỡ khỏi USB-C; nối PIR; hàn INMP441 + tune VAD; E2E voice.
+Xem [`project-roadmap.md`](./project-roadmap.md). Việc gần nhất:
+1. **In ướm `vo-hop-base.stl`** rồi chỉnh chiều cao khe USB / lỗ IR nếu lệch.
+2. Đấu nguồn chung Topo A (S2 5V+GND → WROOM VIN) — việc tay.

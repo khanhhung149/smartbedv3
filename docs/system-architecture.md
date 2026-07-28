@@ -1,112 +1,124 @@
 # System Architecture
 
-> Cập nhật: 2026-07-16 (rev2). Kiến trúc hiện tại: **2 node vật lý**; **PIR ở voice-node, radar ở room-node → fusion tại BACKEND**; voice stream → ASR self-host. (Rev1 từng để fusion tại board — đã đảo theo quyết định dời PIR sang ESP32, xem `plans/260716-1433-relocate-pir-to-voice-node-backend-fusion/`.)
+> Cập nhật: **2026-07-24 (rev3)**. Kiến trúc hiện tại: **2 node WiFi độc lập**; **radar-node cấp presence
+> duy nhất**, **voice-node là BỘ NÃO AC** (nghe presence → tự bắn IR Daikin); **backend CHỈ hiển thị + lưu
+> lịch sử + chuyển tiếp lệnh tay/voice**, không tự quyết AC. PIR đã bỏ khỏi hệ. IR learn/NVS bỏ (dùng
+> protocol Daikin có sẵn). Rev2 (16/07) từng fuse ở backend + dùng PIR — đã thay.
 
 ## High-Level Overview
 
 Bốn lớp:
 
 1. **Sensor Tier** (Firmware):
-   - **Room node** (Wemos S2 Mini): LD2410 radar → `home/room/presence` (radar-based); IR learn/blast điều khiển điều hòa.
-   - **Voice node** (ESP32-WROOM-32): INMP441 I2S mic → VAD → stream audio; **PIR (GPIO27) → `home/door/motion`**.
+   - **radar-node** (Wemos S2 Mini): LD2410C đọc **native UART** → `home/room/presence` + `home/door/motion`
+     + `tele/<T>/SENSOR` (số liệu radar cho app).
+   - **voice-node** (ESP32-WROOM-32): INMP441 I2S mic → VAD → stream audio; **subscribe presence → fusion
+     tại board → bắn IR Daikin** (GPIO4).
 2. **Broker Tier** (MQTT): Mosquitto (auth, no TLS, LAN-only).
-3. **Logic Tier** (Go backend): nhận motion(voice-node)+presence(radar), **fuse → occupied** (state machine), endpoint voice WebSocket, phát `ac_cmd`, REST/WS cho client.
-4. **ASR Tier** (Python `asr/`): faster-whisper self-host, transcribe audio → text (audio không rời LAN).
+3. **Logic Tier** (Go backend): nhận presence/motion/ac_cmd → state machine nuôi `/api/state` + `/api/ws`,
+   **lưu lịch sử SQLite** (`/api/events`), endpoint voice WebSocket → ASR → `ac_cmd`. **KHÔNG tự bắn ac_cmd.**
+4. **ASR Tier** (Python `asr/`): faster-whisper self-host (audio không rời LAN).
 
-> **Fusion ở backend** (không còn tại board): PIR và radar nằm ở 2 board khác nhau nên occupancy được gộp ở backend — VÀO khi `presence=true` + có `motion` trong `EnterWindow`; RA khi `presence=false` giữ ≥ `ExitTimeout`. Đánh đổi: presence occupancy phụ thuộc backend chạy.
+> **Fusion ở BOARD** (đảo lại so với rev2): voice-node nghe `home/room/presence` rồi tự quyết bật/tắt AC.
+> Lý do: nếu cả backend lẫn board cùng quyết thì chúng lệch nhau, không biết tin bên nào → chốt **ESP32 là
+> bộ não duy nhất**. Backend sập thì AC vẫn chạy đúng.
 
 ```
-┌─ Room node — S2 Mini ────────────────────────┐   ┌─ Voice node — WROOM-32 ──────────┐
-│  LD2410 radar (OUT GPIO16, UART 33/18)       │   │  INMP441 I2S (26/25/34)          │
-│  IR recv GPIO15 · IR blast GPIO5 · NVS       │   │  VAD năng lượng tại board        │
-│  ENTER radar giữ≥1.5s / EXIT radar im≥3s     │   │  stream PCM 16k mono 16-bit → WS │
-│   pub home/room/presence (radar, retain)     │   │  PIR (GPIO27) → home/door/motion │
-│   sub home/room/ac_cmd, home/room/ac_learn   │   └───────┬──────────────────┬───────┘
-└───────────────┬──────────────────────────────┘  audio WS│           MQTT motion│
-                │ MQTT presence + ac                       │                      │
-                ▼                                          ▼                      ▼
-   ┌─────────────────────────────┐          ┌────────────────────────────┐   ┌───────────┐
-   │  Mosquitto broker (:1883)   │◄─────────│  Go backend (:8080)        │◄──│ (motion   │
-   │  auth, no TLS, LAN          │─────────►│  FUSE motion+presence →    │   │  qua      │
-   └─────────────────────────────┘ presence │    occupied (state machine)│   │  broker)  │
-                                    + ac_cmd │  /api/voice/stream (WS)    │   └───────────┘
-                                             │  → WAV → asr:/transcribe   │
-                                             │  → ParseVietCommand→ac_cmd │
-                                             │  + REST/WS                 │
-                                             └──────────────┬─────────────┘
-                                                            ▼
-                                             ┌──────────────────────────────┐
-                                             │  asr/ (faster-whisper, :9000) │
-                                             │  model small, cpu, int8       │
-                                             └──────────────────────────────┘
+┌─ radar-node — S2 Mini ───────────────────┐   ┌─ voice-node — WROOM-32 ───────────┐
+│  LD2410C: OUT G16 · UART TX33/RX18       │   │  INMP441 I2S (SCK26/WS25/SD34)    │
+│  @256000 · presence hold 300ms           │   │  VAD năng lượng tại board         │
+│  pub home/room/presence (retain,QoS1)    │   │  stream PCM 16k mono → WS backend │
+│  pub home/door/motion (event)            │   │  SUB home/room/presence           │
+│  pub tele/<T>/SENSOR (3s, cho app)       │   │  → fusion → IR Daikin152 (GPIO4)  │
+│  WILL: presence {"present":false}        │   │  SUB home/room/ac_cmd (lệnh tay)  │
+│  ArduinoOTA                              │   │  ArduinoOTA                       │
+└───────────────┬──────────────────────────┘   └────────┬─────────────────┬────────┘
+                │ MQTT                          audio WS│          MQTT   │
+                ▼                                       ▼                 ▼
+   ┌─────────────────────────────┐        ┌────────────────────────────────────┐
+   │  Mosquitto broker (:1883)   │◄──────►│  Go backend (:8080)                │
+   │  auth, no TLS, LAN          │        │  statemachine → /api/state, /api/ws│
+   └─────────────────────────────┘        │  SQLite lịch sử → /api/events      │
+                                          │  /api/voice/stream (WS) → WAV      │
+                                          │  → ASR → ParseVietCommand → ac_cmd │
+                                          └──────────────┬─────────────────────┘
+                                                         ▼
+                                          ┌──────────────────────────────┐
+                                          │ asr/ (faster-whisper, :9000) │
+                                          │ model small, cpu, int8       │
+                                          └──────────────────────────────┘
+                                   Flutter app (Android) → REST /api/* + WS
+                                   + đọc MQTT trực tiếp (tab "Thiết bị")
 ```
 
-> **Door node cũ** (`firmware/door-node/`) đã nghỉ hưu cho MVP 1 phòng — logic PIR gộp vào room node. File giữ lại làm tham chiếu ISR, không flash riêng.
+> **Node nghỉ hưu:** `firmware/door-node/` (PIR) và `firmware/room-node/` (bản S2 cũ, ESP-NOW/IR-learn) giữ
+> làm tham chiếu, **không flash**. Bản đang chạy trên S2 là `firmware/radar-node/`.
 
 ---
 
 ## MQTT Topic Contract
 
-Payload JSON, timestamp Unix milliseconds (`ts`). `ts=0` nghĩa NTP chưa sync (ngay sau boot).
+Payload JSON, timestamp Unix milliseconds (`ts`). `ts=0` = NTP chưa sync.
 
 | Topic | Hướng | QoS | Retain | Payload | Ý nghĩa |
 |-------|-------|-----|--------|---------|---------|
-| `home/room/presence` | Room node (radar) → Broker → Backend | 1 | **Yes** | `{"ts":<ms>,"present":true\|false}` | Presence theo **radar** (ENTER radar giữ ≥1.5s, EXIT radar im ≥3s). Retain để client vào sau lấy ngay trạng thái. |
-| `home/door/motion` | **Voice node (PIR)** → Broker → Backend | 1 | No | `{"ts":<ms>,"motion":true}` | Cạnh lên PIR (GPIO27, throttle ~1s). Backend dùng để fuse (ENTER cần motion+presence). |
-| `home/room/ac_cmd` | Backend → Broker → Room | 1 | No | `{"cmd":"on"\|"off"}` | Lệnh AC (từ voice ASR hoặc REST). Room node phát IR đã học. |
-| `home/room/ac_learn` | Backend → Broker → Room | 1 | No | `{"button":"on"\|"off"}` | Mở cửa sổ học IR 15s. Room node capture raw IR → NVS. |
+| `home/room/presence` | radar-node → Broker → backend **+ voice-node** | 1 | **Yes** | `{"ts":<ms>,"present":bool}` | Presence theo radar (OUT giữ ≥300ms). Retain + heartbeat 30s. **Nguồn presence DUY NHẤT.** |
+| `home/room/presence` (**will**) | Broker (khi radar-node rớt) | 1 | Yes | `{"present":false}` | MQTT will: S2 mất điện/WiFi → broker tự bắn `present:false` (~15-20s theo keepalive) → hết kẹt "thấy người". |
+| `home/door/motion` | radar-node → backend | 1 | No | `{"ts":<ms>,"motion":true}` | Event cử động (throttle 1s) → backend lưu → app Analytics đếm. |
+| `tele/<DEVICE_TOPIC>/SENSOR` | radar-node → app | 0 | No | `{"LD2410":{"Detect":..,"Moving":{..},"Static":{..}}}` | Số liệu radar mỗi 3s cho tab "Thiết bị" của app (đọc MQTT trực tiếp). |
+| `cmnd/<T>/STATUS` / `stat/<T>/STATUS10` | app ↔ radar-node | 0 | No | `"10"` / `{"StatusSNS":{...}}` | App poll trạng thái tức thời. |
+| `home/room/ac_cmd` | backend/app → voice-node | 1 | No | `{"cmd":"on"\|"off"}` | Lệnh AC **TAY** (REST `/api/ac` hoặc voice ASR). Backend KHÔNG tự phát theo occupancy. |
 
-Audio **không** đi qua MQTT — voice node nối WebSocket trực tiếp tới backend `/api/voice/stream`.
+Audio **không** qua MQTT — voice-node nối WebSocket tới `/api/voice/stream`.
+
+`home/room/ac_learn` **đã bỏ** (Daikin dùng protocol có sẵn trong IRremoteESP8266, không cần học mã).
+Endpoint `/api/ac/learn` còn trong code nhưng vô tác dụng với voice-node hiện tại.
 
 ---
 
-## Fusion ở backend (motion voice-node + presence room-node)
+## Fusion & chính sách AC — tại voice-node (board)
 
-PIR (voice-node) và radar (room-node) ở 2 board khác nhau → occupancy gộp ở **backend** (`internal/statemachine`). Đánh đổi: presence occupancy phụ thuộc backend chạy (mất tính "đúng khi broker/backend sập").
+`firmware/voice-node` subscribe `home/room/presence`, tự quyết:
 
-**Room node — presence theo radar** (`firmware/room-node`, `#define`):
 | Tham số | Mặc định | Vai trò |
 |---|---|---|
-| `PRESENCE_HOLD_MS` | 1500 | Radar giữ HIGH liên tục bấy lâu → `present=true` |
-| `RADAR_DEBOUNCE_MS` | 3000 | Radar rớt HIGH trong khoảng này vẫn coi "còn thấy" → `present=false` sau đó |
-| `STATUS_HEARTBEAT_MS` | 2000 | Nhịp in `[hb]` trạng thái ra Serial khi bench-test (0 = tắt) |
+| `ENTER_STABLE_MS` | 800 | presence=true liên tục 0.8s → `occupied` → bắn IR ON |
+| `EXIT_TIMEOUT_MS` | 60000 | vắng 60s → `occupied=false` → bắn IR OFF |
+| `RADAR_LINK_TIMEOUT_MS` | 90000 | Không nhận presence 90s → coi radar-node chết → coi như VẮNG (chống AC chạy vĩnh viễn) |
+| `STATUS_HEARTBEAT_MS` | 2000 | Nhịp log `[hb]` ra Serial |
 
-**Voice node — motion theo PIR** (`firmware/voice-node`): PIR GPIO27 interrupt RISING → pub `home/door/motion` (throttle `MOTION_PUBLISH_THROTTLE_MS`=1000). `INPUT_PULLDOWN` để chân chưa nối không bắn interrupt ma.
+**radar-node — presence** (`firmware/radar-node`):
 
-**Backend — fusion** (`statemachine.evaluate`, `EnterWindow`=15s, `ExitTimeout`=60s):
-```
-OnMotion(ts):   lastMotionAt = now
-OnPresence(p):  present = p; nếu p=false → bắt đầu đếm exit
-evaluate():
-  VÀO: present=true & (now - lastMotionAt) ≤ EnterWindow → occupied=true → ac_cmd "on"
-  RA : occupied & present=false giữ ≥ ExitTimeout → occupied=false → ac_cmd "off"
-```
+| Tham số | Mặc định | Vai trò |
+|---|---|---|
+| `PRESENCE_HOLD_MS` | 300 | OUT HIGH liên tục bấy lâu → `present=true` |
+| `PRESENCE_HEARTBEAT_MS` | 30000 | Republish presence định kỳ (link sống + ghi đè retained cũ) |
+| `TELE_PERIOD_MS` | 3000 | Nhịp `tele/<T>/SENSOR` cho app |
+| `MOTION_THROTTLE_MS` | 1000 | Chặn flood `home/door/motion` |
 
-### Vì sao fuse cả PIR lẫn radar?
-- **PIR đơn lẻ**: chuyển động tắt khi ngồi yên → mất người → thoát nhầm.
-- **Radar đơn lẻ**: LD2410 nhạy, giữ presence khi ngồi yên nhưng dễ bắt gió/xuyên tường (false-positive).
-- **Cả hai (fuse ở backend)**: presence=radar giữ khi tĩnh; motion=PIR xác nhận có người thật → VÀO cần cả hai → chắc hơn, chống radar báo xuyên tường.
+**App — tab "Thiết bị"** (`app/lib/models/device.dart`, `app/lib/services/mqtt_service.dart`):
+
+| Tham số | Mặc định | Vai trò |
+|---|---|---|
+| `DeviceState.staleAfter` | 15000 | Quá bấy lâu không có message ⇒ "Mất tín hiệu": `online=false`, `occupied=null`, bỏ số liệu cũ. Radar đẩy SENSOR 3s + app poll `STATUS 10` 2s ⇒ 15s là lỡ ~5 nhịp |
+| nhịp phát lại state | 1000 | Emit lại state mỗi giây dù không có message — không có nó thì thiết bị chết là stream im, UI đứng ở "Có người" |
+
+**Backend statemachine** vẫn tính `occupied` (`EnterWindow`=15s, `ExitTimeout`=60s) nhưng **chỉ để hiển thị**
+(`/api/state`, `/api/ws`) và ghi lịch sử — không phát lệnh.
 
 ---
 
-## Luồng Voice → AC
+## Điều khiển IR — Daikin
 
-```
-Voice node: mic I2S → RMS > VAD_THRESHOLD → mở WS → gửi PCM 16k mono 16-bit LE
-            im lặng SILENCE_MS → ngừng gửi (giữ WS mở)
-Backend /api/voice/stream (internal/voice/stream.go):
-   đọc frame → utteranceBuffer.feed()
-   read-deadline = ASR_SILENCE_MS mỗi lần Read → hết hạn = kết thúc câu → flush
-   (byte cap ASR_MAX_UTTER_MS; flush câu cuối khi client đóng)
-   → dựng WAV header → asr_client POST multipart tới ASR_URL /transcribe
-   → text tiếng Việt → ParseVietCommand(text) → "on"/"off"
-   → mqttclient.PublishACCmd() → home/room/ac_cmd
-Room node nhận ac_cmd → sendAC() phát IR đã học → điều hòa bật/tắt.
-```
+**Không học mã, không cần TSOP.** Dùng protocol có sẵn:
 
-`ParseVietCommand` (internal/voice/command.go): chuẩn hoá + bỏ dấu, khớp "bật/tắt" + "điều hòa/điều hoà/máy lạnh". Test: `command_test.go`.
-
-ASR service (`asr/app.py`): FastAPI + faster-whisper `WhisperModel(small, cpu, int8)`, `POST /transcribe` (multipart WAV) → `{"text":...}`, `GET /healthz`.
+- Remote thật: **ARC480A47** → thuộc họ **DAIKIN152** → class `IRDaikin152` (verify trong library:
+  `ir_Daikin.h` map ARC480A5/A14 → DAIKIN152).
+- Mặc định khi bật: **COOL, 25°C, quạt AUTO** (`AC_DEFAULT_MODE/TEMP/FAN`). Daikin gửi **trọn 35 byte
+  trạng thái** mỗi lần → bật là phải set đủ mode/temp/fan, không có "lệnh bật" riêng.
+- Chân phát: **GPIO4** (GPIO5 là strapping — không dùng).
+- Module IR chạy **5V** (nhãn: 5V, tầm 1–2m, 940nm). Cấp 3V3 bị under-drive → tầm ngắn.
+- **LED IR vô hình với mắt** — kiểm bằng cách chĩa camera điện thoại vào LED, thấy nháy tím.
 
 ---
 
@@ -115,16 +127,55 @@ ASR service (`asr/app.py`): FastAPI + faster-whisper `WhisperModel(small, cpu, i
 | Method | Path | Mục đích |
 |--------|------|----------|
 | GET | `/healthz` | Liveness + trạng thái MQTT |
-| GET | `/api/state` | Occupancy + AC hiện tại |
-| POST | `/api/ac` | Lệnh AC tay: `{"cmd":"on"/"off"}` → pub `ac_cmd` |
-| POST | `/api/ac/learn` | Mở học IR: `{"button":"on"/"off"}` → pub `ac_learn` |
-| GET | `/api/ws` | WebSocket broadcast state |
-| GET | `/api/voice/stream` | **WebSocket audio** (PCM 16k mono 16-bit LE) → ASR → `ac_cmd` |
+| GET | `/api/state` | Occupancy + AC hiện tại (hiển thị) |
+| GET | `/api/events?limit=&before=` | **Lịch sử event** từ SQLite, mới nhất trước (503 nếu không có DB) |
+| POST | `/api/ac` | Lệnh AC tay → pub `ac_cmd` |
+| POST | `/api/ac/learn` | (legacy, vô tác dụng với voice-node hiện tại) |
+| GET | `/api/ws` | WebSocket broadcast state — **phải là `/api/ws`**, không phải `/ws` |
+| GET | `/api/voice/stream` | WebSocket audio (PCM 16k mono 16-bit LE) → ASR → `ac_cmd` |
 
-`config.LoadVoice()` thêm cấu hình voice mà không đổi chữ ký `NewRouter`/`Load` cũ.
+Lịch sử lưu bằng `modernc.org/sqlite` (pure Go, không CGO). Kind: `presence` / `motion` / `ac_cmd`.
 
-### State machine (Phase 2 — nay là điểm fusion)
-`Idle / Occupied / ExitWait` với `ENTER_WINDOW_S=15`, `EXIT_TIMEOUT_S=60`. Nhận `motion`(voice-node PIR) + `presence`(room-node radar) → **fuse thành occupied** (VÀO cần cả hai; RA khi presence=false đủ lâu). Thiết kế 3-tier gốc vốn cho door-PIR + room-radar nên khớp — dời PIR sang voice-node không đổi topic → backend không cần sửa code.
+---
+
+## Luồng Voice → AC
+
+```
+voice-node: mic I2S → RMS > VAD_THRESHOLD(2500) → mở WS → gửi PCM 16k mono LE
+            im lặng SILENCE_MS(800) → ngừng gửi (giữ WS mở)
+backend /api/voice/stream → utteranceBuffer → WAV → ASR /transcribe
+            → text → ParseVietCommand → "on"/"off" → pub home/room/ac_cmd
+voice-node nhận ac_cmd → sendAC() → IRDaikin152 → điều hòa vào COOL 25°C
+```
+
+`MIC_SHIFT=11` (nâng gain INMP441 ~32x so >>16; RMS nền ~160-1200, tiếng nói ~4800-8000+).
+
+---
+
+## Nạp firmware — OTA
+
+Cả 2 node đã có `ArduinoOTA` (password trong `config.h`, **không commit**). Nạp USB 1 lần để kích hoạt, sau
+đó nạp qua WiFi. Partition **không đổi** (default 1.25MB đã có 2 slot OTA).
+
+```bash
+export OTA_PASSWORD='...'
+cd firmware/radar-node && pio run -e lolin_s2_mini_ota -t upload   # S2
+cd firmware/voice-node && pio run -e esp32dev_ota      -t upload   # WROOM
+```
+
+Giữ env USB (`lolin_s2_mini` / `esp32dev`) làm **đường lui** — bản nào làm chết WiFi thì OTA bó tay.
+
+---
+
+## Nguồn điện (Topo A)
+
+**S2 là board nguồn**: cốc sạc ≥2A → USB-C của **S2**; kéo **5V + GND từ S2 sang chân VIN của WROOM**.
+Bơm vào VIN là **đi tắt qua diode nối tiếp** trên WROOM (diode làm chân 5V chỉ còn 4.7V, sát dropout
+AMS1117 → gốc brownout). Chỉ chung 5V+GND, **không chung 3V3**. Không cắm USB WROOM khi dây liên board còn
+nối (2 nguồn đánh nhau) → đó là lý do cần OTA.
+
+> Con WROOM cũ brownout tại `WiFi.mode()` do biên nguồn mỏng; **swap sang WROOM mới thì hết** (cùng
+> firmware, 0 brownout, chạy trọn mic→VAD→IR). Firmware không phải nguyên nhân — đừng đổ cho TX power/CPU freq.
 
 ---
 
@@ -134,28 +185,29 @@ ASR service (`asr/app.py`): FastAPI + faster-whisper `WhisperModel(small, cpu, i
 |------|----------|---------|
 | `MQTT_HOST` / `MQTT_PORT` / `MQTT_USER` / `MQTT_PASS` | — / 1883 | Broker |
 | `HTTP_ADDR` | `:8080` | Listen |
-| `ENTER_WINDOW_S` / `EXIT_TIMEOUT_S` | 15 / 60 | State machine |
-| `ASR_URL` | — | Endpoint faster-whisper (vd `http://asr:9000/transcribe`) |
-| `ASR_SILENCE_MS` | ~800 | Read-deadline kết thúc câu |
-| `ASR_MAX_UTTER_MS` | — | Trần độ dài 1 câu (byte cap) |
-| `VOICE_SAMPLE_RATE` | 16000 | Sample rate PCM |
+| `ENTER_WINDOW_S` / `EXIT_TIMEOUT_S` | 15 / 60 | State machine (hiển thị) |
+| `ASR_URL` / `ASR_SILENCE_MS` / `ASR_MAX_UTTER_MS` | — / ~800 / — | ASR |
+| `VOICE_SAMPLE_RATE` | 16000 | PCM |
+| `DB_PATH` | — | SQLite lịch sử event |
 
-Secrets (WiFi/MQTT trong `config.h`, `.env`, `passwd`) đều gitignore.
+Secrets (`config.h`, `.env`, `passwd`, OTA password) đều gitignore.
 
 ---
 
 ## Deployment
 
 ```
-Linux/WSL host (LAN)
-├─ Mosquitto (home-mqtt, :1883)          # docker
-├─ Go backend (:8080)                    # docker compose (backend/)
-└─ asr (faster-whisper, :9000 internal)  # docker compose, volume cache model
-Room node (WiFi) ─┐
-Voice node (WiFi) ┴─ tới host qua LAN (192.168.1.x)
+Windows host + Docker Desktop (Mô hình A: publish port ra host, KHÔNG portproxy)
+├─ Mosquitto (home-mqtt, :1883)          # broker LAN 192.168.1.120
+├─ Go backend (:8080)
+└─ asr (faster-whisper, :9000 internal)
+radar-node (WiFi "mp") ─┐
+voice-node (WiFi "mp")  ┴─ tới host qua LAN
+Flutter app (Android)   ── REST/WS backend + MQTT trực tiếp
 ```
 
-Bật full: `cd backend && docker compose up` (backend + asr). Chỉ quan sát presence: `docker exec -it home-mqtt mosquitto_sub -u homeuser -P homepass123 -t 'home/#' -v`.
+> Nếu chạy broker trong WSL thì IP WSL đổi mỗi lần restart → ESP32 mất broker; Win10 không hỗ trợ mirrored
+> networking, phải dùng `scripts/wsl-portproxy.ps1`. **Mô hình A (Docker Desktop) tránh hẳn vấn đề này.**
 
 ---
 
@@ -163,39 +215,44 @@ Bật full: `cd backend && docker compose up` (backend + asr). Chỉ quan sát p
 
 | Mục | Trạng thái |
 |-----|-----------|
-| MQTT TLS | ❌ (LAN-only; thêm trước khi lộ internet) |
+| MQTT TLS | ❌ (LAN-only) |
 | MQTT auth | ✅ user/pass |
 | REST/WS auth | ❌ (giả định LAN) |
-| Audio ra ngoài | ✅ Không — ASR self-host, audio ở LAN |
-| IR codes | ✅ Chỉ local NVS trên room node |
+| Audio ra ngoài | ✅ Không — ASR self-host |
+| OTA password | ✅ có trên cả 2 node (không commit) |
 
-Trước khi lộ internet: thêm TLS/mTLS MQTT, auth API, siết CORS, rate-limit.
+Trước khi lộ internet: TLS/mTLS MQTT, auth API, siết CORS, rate-limit.
 
 ---
 
 ## Hardware & Wiring
 
-Pinout chi tiết + cảnh báo điện: [`docs/system-wiring.md`](./system-wiring.md).
+Pinout chi tiết + cảnh báo điện: [`system-wiring.md`](./system-wiring.md). Vỏ hộp: `hardware/`.
 
-- **Room node**: S2 Mini + LD2410 (OUT GPIO16, UART 33/18) + IR recv (GPIO15) + IR blast (GPIO5).
-- **Voice node**: WROOM-32 + INMP441 (SCK26/WS25/SD34, L/R→GND) + PIR (GPIO27 → motion).
-- **Broker**: Mosquitto (container `home-mqtt`).
+- **radar-node**: S2 Mini + LD2410C (OUT G16, TX→G33, RX→G18, VCC 5V, **GND phải chung** — mất GND chung
+  thì UART chết dù BLE vẫn chạy).
+- **voice-node**: WROOM-32 + INMP441 (SCK26/WS25/SD34, L/R→GND) + IR blaster **GPIO4 (5V)**.
+- **Vỏ hộp**: `hardware/vo-hop-modular.scad` — xếp lớp modular 3 mảnh (base/face/lid), PETG thành 3mm,
+  ghép vít M3 góc. WROOM giữ bằng 4 trụ-socket xỏ pin (25.4×45.72, lỗ Ø1.4); S2 bắt 2 vít M2 (pitch 18.5);
+  radar + mic ngửa gắn dưới nắp (cửa sổ radar chừa 1.5mm cho 24GHz). Bản vỏ sò cũ `vo-so.scad` giữ làm lui.
 
 ---
 
-## Trạng thái nghiệm thu (2026-07-16)
+## Trạng thái nghiệm thu (2026-07-24)
 
 | Hạng mục | Trạng thái |
 |----------|-----------|
-| Room node radar → `presence` (radar-only) | ✅ nghiệm thu HW (serial `[hb]` + MQTT); firmware radar-only build pass |
-| Backend fuse motion+presence → occupied | ✅ code verify (build/vet/test xanh, không cần sửa); ⏳ E2E |
-| Backend voice + ASR (build/vet/test) | ✅ xanh (chưa E2E audio thật) |
-| Voice node firmware (MQTT + PIR + audio, build) | ✅ pass; ⏳ chưa hàn mic + chưa verify PIR trên board |
-| **PIR trên voice-node (WROOM GPIO27) → motion** | ⏳ chưa verify — con PIR từng cắm ngược trên S2 gây nóng bỏng (nghi hỏng); phải đấu đúng 5V/GND/IN + thử/thay |
-| **IR receiver + blaster (GPIO15/GPIO5)** | ⏳ **chưa có phần cứng** — firmware sẵn sàng, chưa đấu mạch → `ac_cmd`→IR chưa chạy được |
-| E2E voice → whisper → ac_cmd → IR | ⏳ chưa chạy (chờ IR + mic) |
-
-**Đã phát hiện:** (1) mối hàn radar OUT→GPIO16 **chập chờn** → hàn lại chắc + gỡ khỏi cổng USB-C. (2) PIR cắm ngược trên S2 gây nóng bỏng → đã dời sang voice-node GPIO27; đấu lại cẩn thận theo chữ in chân.
+| radar-node → presence + motion + SENSOR | ✅ chạy thật, verify qua broker |
+| Will `present:false` khi S2 rớt | ✅ đã flash + verify broker |
+| voice-node: presence → fusion → IR | ✅ E2E chạy (`[fusion] occupied→1` → `[ir] Daikin ON`) |
+| Voice: mic → VAD → ASR → ac_cmd → IR | ✅ chạy (RMS max ~28000, VAD trigger, IR fire) |
+| **IR Daikin vào COOL** | ✅ **đã vào Cool** (ARC480A47=Daikin152 + module IR 5V + chĩa sát) |
+| Backend `/api/events` + SQLite | ✅ |
+| App Android (Home/Settings/History/Thiết bị/Analytics) | ✅ APK build ra Desktop |
+| OTA 2 node | ✅ có code + env; radar-node đã đồng bộ OTA password |
+| WROOM brownout | ✅ hết trên **board mới** (board cũ cần tụ 470-1000µF) |
+| **App staleness tab "Thiết bị"** | ✅ 15s không message ⇒ "Mất tín hiệu" (`DeviceState.viewAt` + nhịp phát lại 1s). Đo trên broker thật 28/07: lật sau **15.1s**, 13 lần phát trong lúc im lặng (`test/mqtt_live_test.dart`) |
+| Vỏ hộp modular | ⏳ STL xuất xong, **chưa in ướm** (chiều cao cổng USB/LED IR còn là giả định) |
 
 ---
 
