@@ -19,11 +19,13 @@
 #include <ArduinoOTA.h>
 #include <WebSocketsClient.h>
 #include <MQTT.h>
-#include <esp_now.h>
 #include <ir_Daikin.h>
 #include <driver/i2s.h>
 #include <sys/time.h>
 #include <math.h>
+#include "soc/soc.h"           // WRITE_PERI_REG — tắt brownout detector
+#include "soc/rtc_cntl_reg.h"  // RTC_CNTL_BROWN_OUT_REG
+#include <esp_system.h>        // esp_reset_reason() — chẩn đoán lý do reset (9 = BROWNOUT)
 
 #include "config.h"
 
@@ -55,24 +57,21 @@ static const uint8_t AC_DEFAULT_MODE = kDaikinCool;
 static const uint8_t AC_DEFAULT_FAN  = kDaikinFanAuto;
 
 static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
-static const char *TOPIC_PRESENCE = "home/room/presence";  // relay hộ room-node
+// SUBSCRIBE (không publish) — nguồn presence duy nhất là radar-node.
+static const char *TOPIC_PRESENCE = "home/room/presence";
 
-// ---- ESP-NOW nhận radar từ room-node ----
-static const uint8_t  MSG_MAGIC = 0xA7;
-// Heartbeat bên gửi 5s -> lỡ 3 nhịp thì coi link chết. KHÔNG có timeout này, room-node
-// chết lúc đang "có người" sẽ làm điều hoà chạy vĩnh viễn.
-static const uint32_t RADAR_LINK_TIMEOUT_MS = 15000;
+// ---- Nguồn radar: radar-node publish home/room/presence ----
+// voice-node chỉ NGHE topic này ({"ts","present"}); mọi lọc tinh (cự ly/năng lượng,
+// chống báo giả xuyên tường) nằm ở radar-node / cấu hình LD2410. Không đọc SENSOR, không poll.
+// Không nhận presence quá lâu -> coi link radar-node chết -> coi như KHÔNG có người (đừng
+// để điều hoà chạy vĩnh viễn khi radar-node rớt). radar-node heartbeat presence mỗi 30s
+// nên 90s là thừa an toàn.
+static const uint32_t RADAR_LINK_TIMEOUT_MS = 90000;
 
-// Phải GIỐNG HỆT struct bên room-node. packed vì 2 board khác kiến trúc (S2 vs ESP32).
-typedef struct __attribute__((packed)) {
-  uint8_t  magic;
-  uint8_t  present;
-  uint32_t seq;
-} RadarMsg;
-
-// ---- Fusion tại board (luật copy từ backend/internal/statemachine/machine.go) ----
-static const uint32_t ENTER_WINDOW_MS = 15000;  // khớp ENTER_WINDOW_S=15
-static const uint32_t EXIT_TIMEOUT_MS = 60000;  // khớp EXIT_TIMEOUT_S=60
+// ---- Chính sách AC tại board (ESP32 là bộ não) ----
+// Vào: presence giữ LIÊN TỤC đủ lâu -> bật AC. Ra: vắng đủ lâu -> tắt AC.
+static const uint32_t ENTER_STABLE_MS = 800;    // thấy người liên tục 0.8s là occupied
+static const uint32_t EXIT_TIMEOUT_MS = 60000;  // vắng 60s mới tắt (khớp EXIT_TIMEOUT_S=60)
 static const uint32_t STATUS_HEARTBEAT_MS = 2000;
 
 static const i2s_port_t I2S_PORT     = I2S_NUM_0;
@@ -97,7 +96,7 @@ static const uint8_t  MIC_SHIFT     = 11;
 WebSocketsClient webSocket;
 
 WiFiClient  net;              // TCP riêng cho MQTT (WebSocket dùng client nội bộ của lib)
-MQTTClient  mqtt(256);        // buffer nhỏ — chỉ publish motion payload ngắn
+MQTTClient  mqtt(512);        // payload presence/ac_cmd đều nhỏ (<128B)
 
 static int32_t i2sRawBuf[I2S_READ_SAMPLES];  // dữ liệu thô từ I2S (32-bit slot)
 static int16_t pcmBuf[I2S_READ_SAMPLES];     // PCM16 sau khi hạ bit, gửi thẳng qua WS
@@ -110,21 +109,23 @@ volatile bool motionFlag = false;  // set trong ISR PIR, tiêu thụ trong loop(
 uint32_t lastMotionPublishMs   = 0;
 bool     firstMotionPublishDone = false;
 
-// ---- Trạng thái ESP-NOW / fusion ----
-// Set trong callback ESP-NOW (chạy ở WiFi task, KHÔNG phải ISR) — chỉ ghi biến đơn giản,
-// mọi việc nặng (MQTT, IR) làm trong loop().
-volatile bool     radarPresent = false;
-volatile uint32_t lastRadarMs  = 0;   // millis() lần nhận cuối; 0 = chưa từng nhận
-volatile uint32_t lastRadarSeq = 0;
+// ---- Trạng thái presence (nhận từ MQTT home/room/presence) ----
+// Ghi trong onMqtt (chạy đồng bộ trong mqtt.loop() ở loop()), đọc trong loop().
+bool     radarPresent = false;
+uint32_t lastRadarMs  = 0;   // millis() lần nhận presence cuối; 0 = chưa từng nhận
+uint32_t lastRadarSeq = 0;
 
-bool     present       = false;  // radar còn sống VÀ đang thấy người
-bool     occupied      = false;  // kết luận fusion (radar + PIR)
-uint32_t lastMotionMs  = 0;      // lần PIR kích gần nhất
+bool     present       = false;  // radar-node còn sống VÀ đang báo có người
+bool     occupied      = false;  // kết luận chính sách AC (present ổn định đủ lâu)
 uint32_t falseSinceMs  = 0;      // lúc present chuyển false (đếm EXIT_TIMEOUT)
-bool     presencePublished = false;  // đã publish presence lần nào chưa (ghi đè retained cũ)
+uint32_t presenceSinceMs = 0;    // lúc present chuyển true (đếm ENTER_STABLE)
+
 uint32_t lastHeartbeatMs = 0;
 
-IRDaikin2 ac(PIN_IR_SEND);   // thử biến thể 2 (312-bit) — IRDaikinESP (280-bit) không ăn
+IRDaikin152 ac(PIN_IR_SEND);   // 152-bit: NGẮN NHẤT trong các biến thể còn setPower thật
+                               // (64/128 chỉ có setPowerToggle -> không diễn tả được bật/tắt).
+                               // Ngắn hơn Daikin2 (312-bit) >2x -> bắn nhanh hơn, chặn CPU ít hơn,
+                               // đỡ làm i2s_read lỡ nhịp khi đang stream mic.
 
 // ISR: chỉ set cờ. Client MQTT không interrupt-safe.
 void IRAM_ATTR onMotion() {
@@ -142,8 +143,11 @@ uint64_t epochMs() {
 // ---- WiFi: kết nối + tự thử lại, không treo loop khi mất mạng ----
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
+  Serial.println("[boot] truoc WiFi.mode"); Serial.flush();
   WiFi.mode(WIFI_STA);
+  Serial.println("[boot] truoc WiFi.begin"); Serial.flush();
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  Serial.println("[boot] sau WiFi.begin"); Serial.flush();
   Serial.printf("WiFi: nối tới %s", WIFI_SSID);
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
@@ -169,7 +173,8 @@ void connectMQTT() {
   // thì sau reconnect đầu tiên là điếc vĩnh viễn.
   if (mqtt.connected()) {
     mqtt.subscribe(TOPIC_AC_CMD, 1);
-    Serial.printf("MQTT: sub %s\n", TOPIC_AC_CMD);
+    mqtt.subscribe(TOPIC_PRESENCE, 1);   // presence từ radar-node -> chính sách AC
+    Serial.printf("MQTT: sub %s + %s\n", TOPIC_AC_CMD, TOPIC_PRESENCE);
   }
 }
 
@@ -178,48 +183,13 @@ void connectMQTT() {
 // đẩy ts=0 lên broker và backend ghi vĩnh viễn vào lịch sử -> app hiện 1970.
 bool ntpReady() { return epochMs() > 0; }
 
-// Callback ESP-NOW: chạy trong ngữ cảnh WiFi task (KHÔNG phải ISR). Chỉ ghi biến đơn giản
-// — mọi việc nặng (MQTT, IR, Serial dài) làm trong loop().
-// Chữ ký theo API ESP-NOW của core này (const uint8_t *mac). Bản IDF mới hơn đổi tham số
-// đầu thành esp_now_recv_info_t* — nếu nâng core mà build gãy ở đây thì là chỗ cần sửa.
-void onRadarRecv(const uint8_t *mac, const uint8_t *data, int len) {
-  if (len != sizeof(RadarMsg)) return;        // gói lạ trên cùng kênh
-  RadarMsg msg;
-  memcpy(&msg, data, sizeof(msg));
-  if (msg.magic != MSG_MAGIC) return;
-
-  radarPresent = msg.present != 0;
-  lastRadarSeq = msg.seq;
-  lastRadarMs  = millis();                    // 32-bit -> ghi/đọc nguyên tử trên ESP32
-}
-
-void setupEspNow() {
-  // Gọi SAU connectWiFi(): ESP-NOW chạy trên kênh mà WiFi STA đã chốt. room-node phải
-  // quét SSID để dò tới đúng kênh này — sai kênh thì gói bay vào hư không, không báo lỗi.
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("[espnow] init LỖI");
-    return;
-  }
-  esp_now_register_recv_cb(onRadarRecv);
-  Serial.printf("[espnow] MAC board này: %s  (điền vào ESPNOW_PEER_MAC của room-node)\n",
-                WiFi.macAddress().c_str());
-  Serial.printf("[espnow] đang ở kênh %d — room-node phải dò tới đúng kênh này\n",
-                WiFi.channel());
-}
-
-// Relay presence hộ room-node (nó bỏ WiFi, chỉ còn ESP-NOW).
-// retain=true: backend restart phải đọc lại được trạng thái hiện tại, không thì nó mù cho
-// tới lần đổi tiếp theo (có thể hàng giờ). Đây cũng là thứ GHI ĐÈ retained message cũ mà
-// room-node bản trước để lại trên broker.
-void publishPresence(bool p) {
-  if (!ntpReady()) return;  // thà hoãn còn hơn ghi ts=0 vào lịch sử vĩnh viễn
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"ts\":%llu,\"present\":%s}",
-           (unsigned long long)epochMs(), p ? "true" : "false");
-  bool ok = mqtt.connected() &&
-            mqtt.publish(TOPIC_PRESENCE, payload, true /*retain*/, 1 /*qos*/);
-  Serial.printf("PUB %s %s -> %s\n", TOPIC_PRESENCE, payload, ok ? "ok" : "fail");
-  if (ok) presencePublished = true;
+// Nhận home/room/presence từ radar-node: {"ts":..,"present":true|false}. Chạy trong loop()
+// (mqtt.loop gọi đồng bộ). Chỉ cần cờ present + mốc thời gian nhận (phát hiện link chết).
+// Payload cố định nên dò chuỗi như ac_cmd, khỏi kéo JSON lib.
+void onPresence(const String &payload) {
+  radarPresent = payload.indexOf("\"present\":true") >= 0;
+  lastRadarSeq++;
+  lastRadarMs = millis();
 }
 
 // Bắn lệnh điều hoà Daikin.
@@ -238,13 +208,18 @@ void sendAC(bool on) {
 
 // Lệnh tay từ app (/api/ac) và voice (whisper -> ParseVietCommand) đều tới qua topic này.
 void onMqtt(String &topic, String &payload) {
-  if (topic != TOPIC_AC_CMD) return;
-  if (payload.indexOf("\"on\"") >= 0) {
-    sendAC(true);
-  } else if (payload.indexOf("\"off\"") >= 0) {
-    sendAC(false);
-  } else {
-    Serial.printf("[ir] ac_cmd không hiểu: %s\n", payload.c_str());
+  if (topic == TOPIC_AC_CMD) {
+    if (payload.indexOf("\"on\"") >= 0) {
+      sendAC(true);
+    } else if (payload.indexOf("\"off\"") >= 0) {
+      sendAC(false);
+    } else {
+      Serial.printf("[ir] ac_cmd không hiểu: %s\n", payload.c_str());
+    }
+    return;
+  }
+  if (topic == TOPIC_PRESENCE) {
+    onPresence(payload);
   }
 }
 
@@ -354,15 +329,30 @@ void setupOTA() {
 }
 
 void setup() {
-  Serial.begin(115200);
-  delay(200);
+  // TẮT brownout detector (theo yêu cầu). Nguồn WROOM biên mỏng; gai dòng lúc WiFi.begin()
+  // kéo 5V tụt làm detector reset. LƯU Ý: thử 22/07 tắt detector KHÔNG cứu (áp sập thật ->
+  // crash bẩn) — nếu vẫn loop thì tụ 5V là bắt buộc. Đặt ở dòng đầu, trước cả Serial.
+  // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);  // BẬT LẠI detector: để chip TỰ báo brownout
+                                                  // (chẩn đoán) thay vì treo câm. Bật lại tắt sau.
+  // LƯU Ý: hạ CPU 80MHz + WiFi TX 8.5dBm ĐÃ THỬ (22+23/07) -> VẪN brownout tại WiFi.mode()
+  // vì con giết là inrush init/calibrate RADIO, gần như độc lập TX power/CPU. Không thêm lại.
+  // Fix DUY NHẤT = tụ 470-1000µF ở 5V-GND. Xem memory wroom-brownout-ams1117-dead.
 
-  pinMode(PIN_PIR, INPUT_PULLDOWN);  // PIR đẩy HIGH chủ động; pulldown giữ LOW khi chưa nối
-  attachInterrupt(digitalPinToInterrupt(PIN_PIR), onMotion, RISING);
+  Serial.begin(115200);
+  delay(500);
+  // Lý do reset lần TRƯỚC: 1=POWERON 3=SW 4=PANIC 5=INT_WDT 6=TASK_WDT 9=BROWNOUT.
+  // Nếu là nguồn, sau cú sập ở WiFi.mode sẽ thấy lặp "reset reason = 9".
+  Serial.printf("\n[boot] reset reason = %d\n", (int)esp_reset_reason()); Serial.flush();
+  Serial.println("[boot] setup() start"); Serial.flush();
+
+  // PIR đã BỎ khỏi hệ thống — KHÔNG gắn interrupt nữa. GPIO27 thả nổi + interrupt RISING
+  // sinh ra motion=true GIẢ (nhiễu chân nổi) làm bẩn lịch sử. Giữ pinMode pulldown cho
+  // chân ở mức thấp ổn định; muốn dùng lại PIR sau này thì gắn lại attachInterrupt.
+  pinMode(PIN_PIR, INPUT_PULLDOWN);
+  // attachInterrupt(digitalPinToInterrupt(PIN_PIR), onMotion, RISING);  // tắt: không có PIR
 
   connectWiFi();
   setupOTA();     // sau connectWiFi (cần IP), trước I2S để lỡ I2S treo vẫn OTA cứu được
-  setupEspNow();  // sau connectWiFi: ESP-NOW bám kênh mà WiFi STA đã chốt
   ac.begin();     // IR Daikin (GPIO4)
   configTime(0, 0, "pool.ntp.org", "time.google.com");  // UTC epoch cho ts motion/presence
   setupI2S();
@@ -376,10 +366,10 @@ void setup() {
   connectMQTT();
 }
 
-// Gộp radar (qua ESP-NOW) + PIR (local) -> occupied -> bắn IR.
-// Luật copy nguyên từ backend/internal/statemachine/machine.go để 2 nơi không lệch ngữ nghĩa.
+// Chính sách AC: presence (từ radar-node qua MQTT) ổn định đủ lâu -> bật; vắng đủ lâu -> tắt.
+// Lọc tinh (cự ly/năng lượng, chống báo giả xuyên tường) đã nằm ở radar-node/cấu hình LD2410.
 void updateFusion(uint32_t now) {
-  // Link chết -> coi như KHÔNG có người. Không có timeout này, room-node chết lúc đang
+  // Link chết -> coi như KHÔNG có người. Không có timeout này, radar-node chết lúc đang
   // "có người" sẽ làm điều hoà chạy vĩnh viễn.
   uint32_t lastMs = lastRadarMs;
   bool radarAlive = lastMs != 0 && (now - lastMs) < RADAR_LINK_TIMEOUT_MS;
@@ -387,20 +377,17 @@ void updateFusion(uint32_t now) {
 
   if (p != present) {
     present = p;
-    if (!present) falseSinceMs = now;
-    publishPresence(present);
-  } else if (!presencePublished && ntpReady()) {
-    // Publish lần đầu sau khi NTP sẵn sàng: ghi đè retained message CŨ mà bản room-node
-    // trước để lại trên broker (nếu không, backend restart đọc phải trạng thái nhiều giờ trước).
-    publishPresence(present);
+    if (present) presenceSinceMs = now; else falseSinceMs = now;
   }
 
   bool before = occupied;
-  // Vào: radar thấy người VÀ có chuyển động gần đây (chống radar báo giả xuyên tường).
+  // Vào: presence giữ LIÊN TỤC đủ lâu mới bật (chống báo giả thoáng qua).
   if (present && !occupied) {
-    if (lastMotionMs != 0 && now - lastMotionMs <= ENTER_WINDOW_MS) occupied = true;
+    if (presenceSinceMs != 0 && now - presenceSinceMs >= ENTER_STABLE_MS) {
+      occupied = true;
+    }
   }
-  // Ra: radar im đủ lâu.
+  // Ra: vắng đủ lâu.
   if (occupied && !present && falseSinceMs != 0) {
     if (now - falseSinceMs >= EXIT_TIMEOUT_MS) occupied = false;
   }
@@ -424,7 +411,6 @@ void loop() {
   // Tiêu thụ cờ PIR (ISR set) — nơi an toàn duy nhất để gọi MQTT.
   if (motionFlag) {
     motionFlag = false;
-    lastMotionMs = now;  // mốc cho fusion (ENTER_WINDOW), độc lập với throttle publish
     bool outsideThrottle = now - lastMotionPublishMs >= MOTION_PUBLISH_THROTTLE_MS;
     if (!firstMotionPublishDone || outsideThrottle) {
       lastMotionPublishMs = now;
@@ -438,10 +424,9 @@ void loop() {
   if (STATUS_HEARTBEAT_MS && now - lastHeartbeatMs >= STATUS_HEARTBEAT_MS) {
     lastHeartbeatMs = now;
     uint32_t lastMs = lastRadarMs;
-    Serial.printf("[hb] radar=%d link=%s motion=%lus present=%d occupied=%d seq=%lu wifi=%d mqtt=%d\n",
+    Serial.printf("[hb] presence=%d link=%s present=%d occupied=%d seq=%lu wifi=%d mqtt=%d\n",
                   radarPresent ? 1 : 0,
                   (lastMs != 0 && now - lastMs < RADAR_LINK_TIMEOUT_MS) ? "up" : "DOWN",
-                  lastMotionMs ? (unsigned long)((now - lastMotionMs) / 1000) : 0UL,
                   present, occupied, (unsigned long)lastRadarSeq,
                   WiFi.status() == WL_CONNECTED, mqtt.connected());
   }
