@@ -103,3 +103,12 @@ external/
 worktrees/
 # Gemini CLI settings (contains user-specific config)
 .gemini/
+
+# Ảnh golden test sinh ra khi test đỏ — không phải nguồn
+app/test/failures/
+
+# Vỏ sò: thiết kế đã bỏ, .scad là nguồn duy nhất cần giữ (STL/PNG dựng lại được, 4.4MB)
+hardware/vo-so-*.stl
+hardware/vo-so-*.png
+# Bản đã lắp chỉ để xem, không in
+hardware/vo-hop-LAP-RAP-xem-thoi.stl
