@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers.dart';
 import 'screens/analytics_screen.dart';
+import 'screens/devices_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screen.dart';
@@ -37,19 +38,20 @@ class HomeAcApp extends StatelessWidget {
   }
 }
 
-class _RootNav extends StatefulWidget {
+class _RootNav extends ConsumerStatefulWidget {
   const _RootNav();
 
   @override
-  State<_RootNav> createState() => _RootNavState();
+  ConsumerState<_RootNav> createState() => _RootNavState();
 }
 
-class _RootNavState extends State<_RootNav> {
+class _RootNavState extends ConsumerState<_RootNav> {
   int _index = 0;
 
-  // IndexedStack giữ state 4 màn: đổi tab không dựng lại WS hay tải lại lịch sử.
+  // IndexedStack giữ state các màn: đổi tab không dựng lại WS/MQTT hay tải lại lịch sử.
   static const _screens = [
     HomeScreen(),
+    DevicesScreen(),
     AnalyticsScreen(),
     HistoryScreen(),
     SettingsScreen(),
@@ -57,6 +59,7 @@ class _RootNavState extends State<_RootNav> {
 
   static const _items = [
     NavItem(Icons.grid_view_rounded, 'Tổng quan'),
+    NavItem(Icons.sensors_rounded, 'Thiết bị'),
     NavItem(Icons.insights_rounded, 'Phân tích'),
     NavItem(Icons.history_rounded, 'Lịch sử'),
     NavItem(Icons.settings_rounded, 'Cài đặt'),
@@ -64,6 +67,8 @@ class _RootNavState extends State<_RootNav> {
 
   @override
   Widget build(BuildContext context) {
+    // Giữ liên kết poll MQTT sống suốt vòng đời app, không phụ thuộc tab đang mở.
+    ref.watch(devicePollBinderProvider);
     return Scaffold(
       // extendBody để nội dung chạy dưới thanh nav nổi (các màn tự chừa padding dưới).
       extendBody: true,

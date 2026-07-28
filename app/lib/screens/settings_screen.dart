@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers.dart';
 import '../services/api_client.dart';
+import '../services/mqtt_service.dart';
 import '../theme.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -17,16 +18,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String? _testResult;
   bool _testing = false;
 
+  late final TextEditingController _mqttHost;
+  late final TextEditingController _mqttPort;
+  late final TextEditingController _mqttUser;
+  late final TextEditingController _mqttPass;
+  String? _mqttTestResult;
+  bool _mqttTesting = false;
+
   @override
   void initState() {
     super.initState();
     _ctrl = TextEditingController(text: ref.read(baseUrlProvider));
+    final cfg = ref.read(mqttConfigProvider);
+    _mqttHost = TextEditingController(text: cfg.host);
+    _mqttPort = TextEditingController(text: cfg.port.toString());
+    _mqttUser = TextEditingController(text: cfg.username);
+    _mqttPass = TextEditingController(text: cfg.password);
   }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _mqttHost.dispose();
+    _mqttPort.dispose();
+    _mqttUser.dispose();
+    _mqttPass.dispose();
     super.dispose();
+  }
+
+  MqttConfig _readMqttForm() => MqttConfig(
+        host: _mqttHost.text.trim(),
+        port: int.tryParse(_mqttPort.text.trim()) ?? 1883,
+        username: _mqttUser.text.trim(),
+        password: _mqttPass.text,
+      );
+
+  Future<void> _testMqtt() async {
+    setState(() {
+      _mqttTesting = true;
+      _mqttTestResult = null;
+    });
+    final r = await MqttService.test(_readMqttForm());
+    if (mounted) {
+      setState(() {
+        _mqttTesting = false;
+        _mqttTestResult = r == 'ok' ? 'Kết nối được broker' : r;
+      });
+    }
+  }
+
+  Future<void> _saveMqtt() async {
+    await ref.read(mqttConfigProvider.notifier).set(_readMqttForm());
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã lưu cấu hình MQTT')),
+      );
+    }
   }
 
   /// Thử kết nối TRƯỚC khi lưu — user gõ nhầm IP thì biết ngay tại đây, thay vì về
@@ -56,6 +103,105 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         SnackBar(content: Text('Đã lưu ${ref.read(baseUrlProvider)}')),
       );
     }
+  }
+
+  Widget _mqttField(TextEditingController c, String hint, IconData icon,
+      {bool obscure = false, TextInputType? keyboard}) {
+    return TextField(
+      controller: c,
+      obscureText: obscure,
+      autocorrect: false,
+      keyboardType: keyboard,
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppTheme.bg,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          borderSide: BorderSide.none,
+        ),
+        hintText: hint,
+        prefixIcon: Icon(icon, size: 20),
+      ),
+    );
+  }
+
+  Widget _mqttCard(BuildContext context) {
+    final ok = _mqttTestResult == 'Kết nối được broker';
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Broker MQTT (thiết bị radar)',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          _mqttField(_mqttHost, 'Host broker (vd 192.168.1.120)',
+              Icons.dns_rounded),
+          const SizedBox(height: 10),
+          _mqttField(_mqttPort, 'Cổng (1883)', Icons.numbers_rounded,
+              keyboard: TextInputType.number),
+          const SizedBox(height: 10),
+          _mqttField(_mqttUser, 'Tài khoản MQTT', Icons.person_outline_rounded),
+          const SizedBox(height: 10),
+          _mqttField(_mqttPass, 'Mật khẩu MQTT', Icons.lock_outline_rounded,
+              obscure: true),
+          const SizedBox(height: 10),
+          Text(
+            'Tab Thiết bị đọc radar LD2410 qua broker này. Tài khoản/mật khẩu '
+            'phải khớp broker — lưu trên máy, không gửi đi đâu khác.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _mqttTesting ? null : _testMqtt,
+                  icon: _mqttTesting
+                      ? const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.wifi_find_rounded, size: 18),
+                  label: const Text('Thử kết nối'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _saveMqtt,
+                  icon: const Icon(Icons.save_rounded, size: 18),
+                  label: const Text('Lưu'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.ink,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_mqttTestResult != null) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(ok ? Icons.check_circle_rounded : Icons.error_rounded,
+                    color: ok ? AppTheme.green : AppTheme.red, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(_mqttTestResult!,
+                        style: const TextStyle(fontSize: 13))),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -91,7 +237,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                       borderSide: BorderSide.none,
                     ),
-                    hintText: 'http://192.168.1.95:8080',
+                    hintText: 'http://192.168.1.120:8080',
                     prefixIcon: const Icon(Icons.dns_rounded, size: 20),
                   ),
                 ),
@@ -155,6 +301,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 20),
+          _mqttCard(context),
           const SizedBox(height: 20),
           AppCard(
             child: Column(

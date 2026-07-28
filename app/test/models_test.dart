@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:home_ac/models/device.dart';
 import 'package:home_ac/models/event.dart';
 import 'package:home_ac/models/snapshot.dart';
 import 'package:home_ac/providers.dart';
@@ -70,6 +71,53 @@ void main() {
       expect(mk('on').isPositive, isTrue);
       expect(mk('false').isPositive, isFalse);
       expect(mk('off').isPositive, isFalse);
+    });
+  });
+
+  group('DeviceState độ tươi', () {
+    // Bug thật: rút nguồn radar-node thì tab "Thiết bị" vẫn hiện "Có người" mãi.
+    // tele/<T>/LWT kẹt "Online" (will đã dời sang home/room/presence, MQTT chỉ cho
+    // 1 will/kết nối) nên lastSeen là dấu hiệu DUY NHẤT nói thiết bị đã chết.
+    const t0 = 1784214584000;
+    const live = DeviceState(
+      topic: 'radar_phong',
+      online: true,
+      occupied: true,
+      movingDistance: 120,
+      movingEnergy: 40,
+      staticDistance: 80,
+      staticEnergy: 20,
+      lastSeenMs: t0,
+    );
+
+    test('còn trong ngưỡng thì giữ nguyên số liệu', () {
+      expect(live.staleAt(t0 + 14000), isFalse);
+      final v = live.viewAt(t0 + 14000);
+      expect(v.occupied, isTrue);
+      expect(v.online, isTrue);
+      expect(v.movingDistance, 120);
+    });
+
+    test('quá ngưỡng thì offline, occupied null, số liệu cũ bị bỏ', () {
+      expect(live.staleAt(t0 + 16000), isTrue);
+      final v = live.viewAt(t0 + 16000);
+      expect(v.online, isFalse, reason: 'LWT nói Online nhưng board đã chết');
+      expect(v.occupied, isNull, reason: 'không được nói "Có người" nữa');
+      expect(v.movingDistance, isNull);
+      expect(v.movingEnergy, isNull);
+      expect(v.staticDistance, isNull);
+      expect(v.staticEnergy, isNull);
+      expect(v.lastSeenMs, t0, reason: 'vẫn cần để hiện "x phút trước"');
+    });
+
+    test('chưa nhận message nào thì coi là cũ', () {
+      expect(const DeviceState(topic: 'x').staleAt(t0), isTrue);
+    });
+
+    // Chốt lý do viewAt dựng object mới: copyWith CỐ Ý giữ giá trị cũ khi tham số
+    // null, nên không thể dùng nó để xoá occupied.
+    test('copyWith(occupied: null) không xoá được — nên viewAt phải dựng mới', () {
+      expect(live.copyWith(occupied: null).occupied, isTrue);
     });
   });
 

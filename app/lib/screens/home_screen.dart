@@ -54,12 +54,14 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Greeting extends StatelessWidget {
+class _Greeting extends ConsumerWidget {
   const _Greeting();
 
   @override
-  Widget build(BuildContext context) {
-    final h = DateTime.now().hour;
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Giờ lấy qua nowProvider, không gọi DateTime.now() trực tiếp: golden test ghim
+    // được giờ, nếu không ảnh so sánh đổi theo buổi chạy (sáng/trưa/chiều/tối).
+    final h = ref.watch(nowProvider)().hour;
     final greet = h < 11
         ? 'Chào buổi sáng!'
         : h < 14
@@ -97,13 +99,14 @@ class _Greeting extends StatelessWidget {
 
 /// Hero card gradient — vai trò như thẻ "Tokyo forecast" trong Travia: một con số/trạng
 /// thái lớn + 3 chip phụ bên dưới.
-class _HeroCard extends StatelessWidget {
+class _HeroCard extends ConsumerWidget {
   final Snapshot snap;
   final bool wsUp;
   const _HeroCard({required this.snap, required this.wsUp});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(nowProvider)();
     final occupied = snap.occupied;
     // Đổi màu theo trạng thái để liếc là biết, không cần đọc chữ.
     final colors = occupied
@@ -197,7 +200,7 @@ class _HeroCard extends StatelessWidget {
               Expanded(
                   child: _MiniStat(
                       icon: Icons.directions_walk_rounded,
-                      value: _ago(snap.lastMotionTs),
+                      value: _ago(snap.lastMotionTs, now),
                       label: 'Chuyển động')),
             ],
           ),
@@ -207,10 +210,10 @@ class _HeroCard extends StatelessWidget {
   }
 
   /// ts=0 = thiết bị publish trước khi NTP sync → không có giờ thật.
-  static String _ago(int ts) {
+  static String _ago(int ts, DateTime now) {
     if (ts <= 0) return '—';
-    final d = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(ts));  // ts đã là mili-giây
+    final d =
+        now.difference(DateTime.fromMillisecondsSinceEpoch(ts));  // ts đã là mili-giây
     if (d.isNegative || d.inSeconds < 60) return 'vừa xong';
     if (d.inMinutes < 60) return '${d.inMinutes}p';
     if (d.inHours < 24) return '${d.inHours}g';
