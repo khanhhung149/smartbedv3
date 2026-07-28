@@ -1,0 +1,21 @@
+// Copy file này thành config.h rồi điền giá trị thật.
+// config.h ĐÃ bị .gitignore — không bao giờ commit credentials.
+#pragma once
+
+#define WIFI_SSID       "ten-wifi"
+#define WIFI_PASS       "mat-khau-wifi"
+
+// MQTT broker (LAN).
+#define MQTT_HOST       "192.168.1.95"
+#define MQTT_PORT       1883
+#define MQTT_USER       "user"
+#define MQTT_PASS       "password"
+#define MQTT_CLIENT_ID  "radar-node"      // phải duy nhất trên broker
+
+// %topic% khuôn tele/stat — dựng tele/<topic>/SENSOR, stat/<topic>/STATUS10, tele/<topic>/LWT.
+// Đây cũng là "topic thiết bị" bạn nhập ở tab "Thiết bị" trong app để nó đọc radar.
+#define DEVICE_TOPIC    "radar_phong_khach"
+
+// OTA — nạp firmware qua WiFi.
+#define OTA_HOSTNAME    "radar-node"
+#define OTA_PASSWORD    "doi-mat-khau-nay"   // trống = ai cùng LAN cũng nạp được
