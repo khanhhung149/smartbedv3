@@ -28,11 +28,18 @@ services:
     restart: unless-stopped
     environment:
       ASR_MODEL: ${ASR_MODEL:-small}
+      # Rỗng = KHÔNG lưu mẫu (mặc định khi chạy thường). Bật lúc cần đo:
+      #   ASR_DUMP_DIR=/samples docker compose up -d asr
+      ASR_DUMP_DIR: ${ASR_DUMP_DIR:-}
     volumes:
       # Cache model HuggingFace (faster-whisper tải về /root/.cache/huggingface trong container
       # chạy bằng root) — tránh tải lại model "small" mỗi lần recreate container.
       - asr-model-cache:/root/.cache/huggingface
+      # Mẫu WAV để chấm điểm model. Named volume chứ KHÔNG bind mount: bộ mẫu phải sống qua
+      # recreate container, vì chính lúc đổi ASR_MODEL để so sánh là lúc container bị tạo lại.
+      - asr-samples:/samples
 
 volumes:
   asr-model-cache:
+  asr-samples:
   home-data:
