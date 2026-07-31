@@ -94,6 +94,9 @@ assets/
 # Firmware secrets — never commit real credentials
 firmware/mqtt/passwd
 firmware/**/config.h
+# Bản sao lưu config khi đổi WiFi/broker cũng chứa mật khẩu. Quy tắc config.h ở trên
+# KHÔNG phủ được tên có đuôi, nên phải khai riêng. config.h.example vẫn track bình thường.
+firmware/**/config.h.bak*
 .pio/
 
 # External repos for study/reference
