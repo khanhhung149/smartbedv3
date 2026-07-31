@@ -39,6 +39,13 @@ func stripDiacritics(s string) string {
 // Khớp: có nhắc tới "điều hòa"/"điều hoà"/"máy lạnh" (đã bỏ dấu: "dieu hoa"/"may lanh")
 // kèm "bật" ("bat") -> ("on", true); kèm "tắt" ("tat") -> ("off", true).
 // Không khớp -> ("", false), caller log rồi bỏ qua (không publish gì).
+//
+// Câu chứa CẢ "bật" lẫn "tắt" bị LOẠI, không được chọn một trong hai. Trước đây switch kiểm
+// "bat" trước nên câu như vậy luôn thành "on" — kết quả do thứ tự case quyết định, không do ngữ
+// nghĩa. Điều đó gây lỗi thật: người dùng nói "tắt điều hòa" (đã publish off), 3 giây sau whisper
+// gặp nhiễu và nhại lại nguyên văn danh sách lệnh trong initial_prompt của service ASR
+// ("... bật máy lạnh, tắt máy lạnh"), câu đó khớp nhánh "bat" -> publish on -> điều hoà bật lại
+// ngay, ngược ý người dùng. Loại câu mơ hồ chặn cả lớp lỗi này bất kể ASR trả về gì.
 func ParseVietCommand(text string) (string, bool) {
 	normalized := stripDiacritics(strings.ToLower(strings.TrimSpace(text)))
 
@@ -46,10 +53,15 @@ func ParseVietCommand(text string) (string, bool) {
 	if !hasAC {
 		return "", false
 	}
+
+	wantOn := strings.Contains(normalized, "bat")
+	wantOff := strings.Contains(normalized, "tat")
 	switch {
-	case strings.Contains(normalized, "bat"):
+	case wantOn && wantOff:
+		return "", false // mơ hồ: không suy ra được ý định, thà không làm gì
+	case wantOn:
 		return "on", true
-	case strings.Contains(normalized, "tat"):
+	case wantOff:
 		return "off", true
 	default:
 		return "", false
