@@ -12,8 +12,8 @@ Bốn lớp:
 1. **Sensor Tier** (Firmware):
    - **radar-node** (Wemos S2 Mini): LD2410C đọc **native UART** → `home/room/presence` + `home/door/motion`
      + `tele/<T>/SENSOR` (số liệu radar cho app).
-   - **voice-node** (ESP32-WROOM-32): INMP441 I2S mic → VAD → stream audio; **subscribe presence → fusion
-     tại board → bắn IR Daikin** (GPIO4).
+   - **voice-node** (ESP32-S3-CAM N16R8): INMP441 I2S mic → VAD → stream audio; **subscribe presence → fusion
+     tại board → bắn IR Daikin** (GPIO8).
 2. **Broker Tier** (MQTT): Mosquitto (auth, no TLS, LAN-only).
 3. **Logic Tier** (Go backend): nhận presence/motion/ac_cmd → state machine nuôi `/api/state` + `/api/ws`,
    **lưu lịch sử SQLite** (`/api/events`), endpoint voice WebSocket → ASR → `ac_cmd`. **KHÔNG tự bắn ac_cmd.**
@@ -24,8 +24,8 @@ Bốn lớp:
 > bộ não duy nhất**. Backend sập thì AC vẫn chạy đúng.
 
 ```
-┌─ radar-node — S2 Mini ───────────────────┐   ┌─ voice-node — WROOM-32 ───────────┐
-│  LD2410C: OUT G16 · UART TX33/RX18       │   │  INMP441 I2S (SCK26/WS25/SD34)    │
+┌─ radar-node — S2 Mini ───────────────────┐   ┌─ voice-node — ESP32-S3-CAM ───────┐
+│  LD2410C: OUT G16 · UART TX33/RX18       │   │  INMP441 I2S (SCK5/WS6/SD7)       │
 │  @256000 · presence hold 300ms           │   │  VAD năng lượng tại board         │
 │  pub home/room/presence (retain,QoS1)    │   │  stream PCM 16k mono → WS backend │
 │  pub home/door/motion (event)            │   │  SUB home/room/presence           │
@@ -160,7 +160,7 @@ Cả 2 node đã có `ArduinoOTA` (password trong `config.h`, **không commit**)
 ```bash
 export OTA_PASSWORD='...'
 cd firmware/radar-node && pio run -e lolin_s2_mini_ota -t upload   # S2
-cd firmware/voice-node && pio run -e esp32dev_ota      -t upload   # WROOM
+cd firmware/voice-node && pio run -e esp32s3           -t upload   # S3 (qua cổng TTL)
 ```
 
 Giữ env USB (`lolin_s2_mini` / `esp32dev`) làm **đường lui** — bản nào làm chết WiFi thì OTA bó tay.
@@ -169,10 +169,13 @@ Giữ env USB (`lolin_s2_mini` / `esp32dev`) làm **đường lui** — bản n�
 
 ## Nguồn điện (Topo A)
 
-**S2 là board nguồn**: cốc sạc ≥2A → USB-C của **S2**; kéo **5V + GND từ S2 sang chân VIN của WROOM**.
-Bơm vào VIN là **đi tắt qua diode nối tiếp** trên WROOM (diode làm chân 5V chỉ còn 4.7V, sát dropout
-AMS1117 → gốc brownout). Chỉ chung 5V+GND, **không chung 3V3**. Không cắm USB WROOM khi dây liên board còn
-nối (2 nguồn đánh nhau) → đó là lý do cần OTA.
+**S2 là board nguồn**: cốc sạc ≥2A → USB-C của **S2**; kéo **5V + GND từ S2 sang chân 5V của S3**.
+Chỉ chung 5V+GND, **không chung 3V3**. Không cắm USB của S3 khi dây liên board còn nối (2 nguồn đánh
+nhau) → đó là lý do cần OTA.
+
+Bắn IR làm 5V tụt **4.6 → 4.0V** (khung Daikin kéo ~150ms ở ~0.1A ⇒ đường nguồn có cỡ 6Ω nối tiếp).
+Chưa gây hỏng: 3.3V vẫn giữ và `esp_reset_reason()` chưa bao giờ ra 9. **Tụ KHÔNG cứu được** tải dài
+150ms — cần ~30.000µF; tụ chỉ cứu xung cỡ mili-giây (xem mục brownout WROOM bên dưới).
 
 > Con WROOM cũ brownout tại `WiFi.mode()` do biên nguồn mỏng; **swap sang WROOM mới thì hết** (cùng
 > firmware, 0 brownout, chạy trọn mic→VAD→IR). Firmware không phải nguyên nhân — đừng đổ cho TX power/CPU freq.
@@ -231,9 +234,11 @@ Pinout chi tiết + cảnh báo điện: [`system-wiring.md`](./system-wiring.md
 
 - **radar-node**: S2 Mini + LD2410C (OUT G16, TX→G33, RX→G18, VCC 5V, **GND phải chung** — mất GND chung
   thì UART chết dù BLE vẫn chạy).
-- **voice-node**: WROOM-32 + INMP441 (SCK26/WS25/SD34, L/R→GND) + IR blaster **GPIO4 (5V)**.
+- **voice-node**: ESP32-S3-CAM N16R8 + INMP441 (**SCK5/WS6/SD7**, L/R→GND, SD có pull-down) + IR blaster
+  **GPIO8 (5V)**. Chân I2S buộc đổi vì bản đồ GPIO của S3 khác: 22-25 không tồn tại, 26-32 là bus SPI
+  flash, 33-37 bị PSRAM octal chiếm.
 - **Vỏ hộp**: `hardware/vo-hop-modular.scad` — xếp lớp modular 3 mảnh (base/face/lid), PETG thành 3mm,
-  ghép vít M3 góc. WROOM giữ bằng 4 trụ-socket xỏ pin (25.4×45.72, lỗ Ø1.4); S2 bắt 2 vít M2 (pitch 18.5);
+  ghép vít M3 góc. S3 bắt 2 vít **M2.5** (pitch 23, trụ Ø8 cao 10); S2 bắt 2 vít M2 (pitch **20**, trụ Ø7);
   radar + mic ngửa gắn dưới nắp (cửa sổ radar chừa 1.5mm cho 24GHz). Bản vỏ sò cũ `vo-so.scad` giữ làm lui.
 
 ---
@@ -250,9 +255,9 @@ Pinout chi tiết + cảnh báo điện: [`system-wiring.md`](./system-wiring.md
 | Backend `/api/events` + SQLite | ✅ |
 | App Android (Home/Settings/History/Thiết bị/Analytics) | ✅ APK build ra Desktop |
 | OTA 2 node | ✅ có code + env; radar-node đã đồng bộ OTA password |
-| WROOM brownout | ✅ hết trên **board mới** (board cũ cần tụ 470-1000µF) |
+| WROOM brownout | ⛔ lịch sử — WROOM chết hẳn 29/07, voice-node đã sang ESP32-S3 |
 | **App staleness tab "Thiết bị"** | ✅ 15s không message ⇒ "Mất tín hiệu" (`DeviceState.viewAt` + nhịp phát lại 1s). Đo trên broker thật 28/07: lật sau **15.1s**, 13 lần phát trong lúc im lặng (`test/mqtt_live_test.dart`) |
-| Vỏ hộp modular | ⏳ STL xuất xong, **chưa in ướm** (chiều cao cổng USB/LED IR còn là giả định) |
+| Vỏ hộp modular | ⏳ v4 (ESP32-S3): đã in ướm khay S3 — chân GPIO chạm sàn ở trụ 8mm nên nâng lên 10. Còn **3 số chưa đo**: pitch 2 cổng USB-C (12.5), pitch 2 lỗ vít (23), tâm lỗ tới mép bo (3). Sai pitch USB thì **face phải in lại** |
 
 ---
 

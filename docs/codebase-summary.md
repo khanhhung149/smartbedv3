@@ -110,8 +110,8 @@ firmware/
 ├── radar-node/    # ⭐ ĐANG CHẠY trên S2 Mini — LD2410C native UART → MQTT
 │   ├── src/main.cpp · src/selftest.cpp (chẩn đoán UART, throwaway)
 │   └── platformio.ini  # env: lolin_s2_mini · lolin_s2_mini_ota · selftest
-├── voice-node/    # ⭐ ĐANG CHẠY trên WROOM-32 — mic + fusion + IR Daikin
-│   └── platformio.ini  # env: esp32dev · esp32dev_ota
+├── voice-node/    # ⭐ ĐANG CHẠY trên ESP32-S3-CAM — mic + fusion + IR Daikin
+│   └── platformio.ini  # env: esp32s3 (chính) · esp32dev/esp32dev_ota (đường lui WROOM)
 ├── room-node/     # ⚠️ NGHỈ HƯU (bản S2 cũ: ESP-NOW/IR-learn) — không flash
 ├── door-node/     # ⚠️ NGHỈ HƯU (tham chiếu ISR PIR)
 └── mqtt/          # cấu hình Mosquitto (passwd.example)
@@ -135,7 +135,8 @@ firmware/
 - Deps: `ncmreynolds/ld2410`, `256dpi/MQTT`. OTA: `ArduinoOTA` (env `lolin_s2_mini_ota`).
 
 ### voice-node — `firmware/voice-node/src/main.cpp`
-**Board**: ESP32-WROOM-32 (`esp32dev`). **Status**: ✅ chạy thật (mic → VAD → ASR → IR; IR vào COOL).
+**Board**: GOOUUU ESP32-S3-CAM N16R8 (`esp32s3`) — WROOM-32 chết 29/07. **Status**: ✅ chạy thật
+(mic → VAD → ASR → IR; IR vào COOL). Nạp qua cổng **TTL** (CH340), không phải OTG.
 
 | Thành phần | Chân | Vai trò |
 |-----------|------|---------|
@@ -172,8 +173,8 @@ hardware/
 
 | Mảnh | Chứa | Ghép bằng |
 |---|---|---|
-| `base` | WROOM (4 trụ-socket 13mm xỏ pin, 25.4×45.72, lỗ Ø1.4) · S2 (2 trụ vít M2, pitch 18.5) · IR (2 gờ) · khe USB-C S2 ở vách sau (nguồn) · 4 trụ góc Ø8 · rãnh trượt face | — |
-| `face` | Khe USB-C WROOM + lỗ LED IR Ø6.5 | **KHÔNG vít** — thả từ trên vào rãnh, nắp đè giữ |
+| `base` | ESP32-S3 (2 trụ Ø8 vít **M2.5**, pitch 23, lỗ mồi rãnh ±0.5, trụ cao 10) · S2 (2 trụ **Ø7** vít M2, **pitch 20**) · IR (2 gờ dày 3 cao 5) · khe USB-C S2 ở vách sau (nguồn) · 4 trụ góc Ø8 · rãnh trượt face | — |
+| `face` | **2 lỗ USB-C** của S3 (TTL+OTG, pitch 12.5) + lỗ LED IR Ø6.5 | **KHÔNG vít** — thả từ trên vào rãnh, nắp đè giữ |
 | `lid` | Cửa sổ radar (chừa **1.5mm** cho 24GHz) + cradle radar ngửa + vòng đỡ mic Ø10 + lỗ thu âm | 4 vít M3 vào **ren đồng ép nhiệt** (lỗ chờ Ø4.2) |
 
 **Vì sao face không vít**: trụ in đứng ⇒ đường lớp nằm ngang ⇒ vít bắt ngang là lực **tách lớp**, hướng
@@ -223,4 +224,4 @@ Credential lấy từ biến môi trường — **không viết vào repo**. Tes
 
 Xem [`project-roadmap.md`](./project-roadmap.md). Việc gần nhất:
 1. **In ướm `vo-hop-base.stl`** rồi chỉnh chiều cao khe USB / lỗ IR nếu lệch.
-2. Đấu nguồn chung Topo A (S2 5V+GND → WROOM VIN) — việc tay.
+2. Đấu nguồn chung Topo A (S2 5V+GND → chân 5V của S3) — việc tay.
