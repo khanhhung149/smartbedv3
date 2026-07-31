@@ -15,7 +15,19 @@ const (
 	bytesPerSample = 2 // PCM 16-bit
 	channels       = 1 // mono
 
-	asrTimeout = 10 * time.Second
+	// 10s -> 30s (31/07). Đo thật trên máy này: faster-whisper "small" mất 7.1s cho một câu 2.3s
+	// khi máy RẢNH. Biên chỉ còn 2.9s, nên máy vừa bận (cắt lát in 3D) là hạn vỡ ngay.
+	//
+	// Không phải nới hạn để che lỗi — công việc VẪN HOÀN THÀNH ĐÚNG, chỉ là kết quả về muộn hơn
+	// hạn nên bị vứt. Log 31/07: backend bỏ cuộc lúc 07:32:21, ASR trả đúng "Tắt máy lạnh." lúc
+	// 07:32:35. Tệ hơn, bỏ cuộc KHÔNG dừng được việc bên ASR (tiến trình CPU-bound, uvicorn không
+	// hủy giữa chừng): nó tiếp tục ngốn ~5 lõi cho một request đã chết, làm câu kế tiếp cũng trễ
+	// và cũng timeout — vòng lặp tự nuôi, kéo dài 07:25→07:32 chứ không tự thoát.
+	//
+	// An toàn vì handleUtterance đã chạy ở goroutine worker riêng: ASR chậm không còn chặn vòng
+	// select đọc frame. Cái giá là lệnh có thể tới muộn; firmware đã có nhịp IR + khoá lệnh tay
+	// nên lệnh muộn không gây hại.
+	asrTimeout = 30 * time.Second
 
 	// silenceCheckInterval — nhịp kiểm tra "đã im lặng đủ lâu chưa" để cắt utterance.
 	// Tách khỏi conn.Read vì coder/websocket ĐÓNG kết nối nếu context của Read hết hạn —
@@ -100,6 +112,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// ASR chạy trong goroutine RIÊNG, không gọi thẳng trong vòng select dưới đây.
+	//
+	// Lý do (đo 31/07): faster-whisper "small" trên CPU này mất 7.1s cho câu 2.3s. Khi gọi đồng bộ
+	// trong select thì suốt 7s đó vòng lặp không đọc frames và ticker không chạy — tiếng nói vẫn
+	// dồn vào channel, rồi được nạp một lượt trong vài mili-giây. Hệ quả: điều kiện cắt theo
+	// wall-clock (MaxUtterMS) KHÔNG BAO GIỜ đúng vì mọi chunk mang cùng một mốc now, và
+	// flushIfSilent cũng không có cơ hội chạy. Đo được utterance dài dần 8.0 -> 10.8 -> 11.6 ->
+	// 13.6s, mỗi file dính 3-4 câu — đúng dạng vòng lặp tự khuếch đại.
+	//
+	// Tác hại thật, không chỉ lúc thu mẫu: nói "tắt điều hòa" ngay sau "bật điều hòa" thì hai câu
+	// dính vào một utterance chứa cả hai động từ -> ParseVietCommand loại vì mơ hồ -> không lệnh nào
+	// chạy, trong khi người dùng đã nói rõ ràng.
+	utterances := make(chan []byte, 1)
+	defer close(utterances) // worker xử nốt phần còn lại rồi tự thoát, không chặn ServeHTTP
+	go func() {
+		// context.Background() chứ không phải r.Context(): câu cuối phải xử xong kể cả khi kết nối
+		// đã đóng. handleUtterance tự bọc asrTimeout nên vẫn có giới hạn.
+		for pcm := range utterances {
+			h.handleUtterance(context.Background(), pcm)
+		}
+	}()
+
 	ticker := time.NewTicker(silenceCheckInterval)
 	defer ticker.Stop()
 
@@ -107,23 +141,47 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case data := <-frames:
 			if utterance, cut := buf.feed(data, time.Now()); cut {
-				h.handleUtterance(ctx, utterance)
+				enqueueUtterance(utterances, utterance)
 			}
 		case <-ticker.C:
 			// Hết câu = im lặng (không frame mới) đủ SilenceMS trong khi đang gom.
 			if utterance, cut := buf.flushIfSilent(time.Now(), silenceLimit); cut {
-				h.handleUtterance(ctx, utterance)
+				enqueueUtterance(utterances, utterance)
 			}
 		case <-readDone:
-			// Kết nối đóng thật -> flush câu dở dang lần cuối. context.Background() vì r.Context()
-			// có thể đã hủy; handleUtterance tự bọc asrTimeout nên vẫn có giới hạn.
+			// Kết nối đóng thật -> flush câu dở dang lần cuối.
 			if pcm := buf.reset(); len(pcm) > 0 {
-				h.handleUtterance(context.Background(), pcm)
+				enqueueUtterance(utterances, pcm)
 			}
 			return
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// enqueueUtterance đẩy utterance sang worker ASR. Hàng đợi chỉ 1 slot: đầy nghĩa là ASR còn bận câu
+// trước, khi đó BỎ câu CŨ và giữ câu MỚI.
+//
+// Giữ câu mới là đúng ngữ nghĩa cho thiết bị chấp hành: lệnh điều hoà chỉ có trạng thái CUỐI là có
+// nghĩa, thi hành một lệnh đã 15 giây tuổi là làm ngược ý người nói. Cùng nguyên tắc với ô chờ IR
+// một slot bên firmware voice-node. Hàng đợi không giới hạn thì độ trễ dồn vô hạn.
+//
+// Chỉ vòng select gọi hàm này nên sau khi rút bớt một phần tử là chắc chắn còn chỗ để đẩy vào.
+func enqueueUtterance(q chan []byte, pcm []byte) {
+	select {
+	case q <- pcm:
+		return
+	default:
+	}
+	select {
+	case <-q:
+		slog.Warn("voice: ASR chưa xử lý kịp, bỏ utterance cũ để giữ câu mới nhất")
+	default:
+	}
+	select {
+	case q <- pcm:
+	default:
 	}
 }
 
