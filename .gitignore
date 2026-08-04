@@ -99,6 +99,14 @@ firmware/**/config.h
 firmware/**/config.h.bak*
 .pio/
 
+# Sinh ra bởi PlatformIO khi build framework = espidf.
+# managed_components/ là component IDF tải qua component manager (441MB) — vai trò như
+# node_modules, dựng lại được từ dependencies.lock nên KHÔNG commit.
+# sdkconfig.<env> sinh ra từ sdkconfig.defaults mỗi lần build; chỉ commit bản defaults.
+firmware/**/managed_components/
+firmware/**/sdkconfig.*
+!firmware/**/sdkconfig.defaults
+
 # External repos for study/reference
 external/
 

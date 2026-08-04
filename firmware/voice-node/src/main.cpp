@@ -245,8 +245,14 @@ void connectMQTT() {
   // thì sau reconnect đầu tiên là điếc vĩnh viễn.
   if (mqtt.connected()) {
     mqtt.subscribe(TOPIC_AC_CMD, 1);
+#ifdef DISABLE_RADAR_FUSION
+    // Radar tắt tạm trong env đo wakeword — xem platformio.ini [env:esp32s3_kws].
+    // Lệnh tay (TOPIC_AC_CMD) vẫn giữ để còn kiểm được đường IR.
+    Serial.printf("MQTT: sub %s (radar TẮT)\n", TOPIC_AC_CMD);
+#else
     mqtt.subscribe(TOPIC_PRESENCE, 1);   // presence từ radar-node -> chính sách AC
     Serial.printf("MQTT: sub %s + %s\n", TOPIC_AC_CMD, TOPIC_PRESENCE);
+#endif
   }
 }
 
@@ -438,6 +444,13 @@ void setup() {
 // Chính sách AC: presence (từ radar-node qua MQTT) ổn định đủ lâu -> bật; vắng đủ lâu -> tắt.
 // Lọc tinh (cự ly/năng lượng, chống báo giả xuyên tường) đã nằm ở radar-node/cấu hình LD2410.
 void updateFusion(uint32_t now) {
+#ifdef DISABLE_RADAR_FUSION
+  // Tắt tạm trong env đo wakeword (esp32s3_kws): ac.send() chặn ~150ms, IR bắn xen ngang
+  // làm bẩn mọi phép đo audio. Code giữ nguyên bên dưới, chỉ không chạy — cờ biên dịch chứ
+  // không phải comment, để không quên bật lại. ⚠️ BẬT LẠI TRƯỚC KHI MERGE.
+  (void)now;
+  return;
+#else
   // Link chết -> coi như KHÔNG có người. Không có timeout này, radar-node chết lúc đang
   // "có người" sẽ làm điều hoà chạy vĩnh viễn.
   uint32_t lastMs = lastRadarMs;
@@ -472,6 +485,7 @@ void updateFusion(uint32_t now) {
       requestAC(occupied, false);
     }
   }
+#endif  // DISABLE_RADAR_FUSION
 }
 
 void loop() {
