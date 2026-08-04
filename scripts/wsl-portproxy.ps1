@@ -32,7 +32,7 @@ netsh interface portproxy show v4tov4
 
 # Cho chay tu dong moi lan dang nhap Windows (chay 1 lan, PowerShell admin):
 #
-#   $me = "$env:USERPROFILE\Desktop\New folder\scripts\wsl-portproxy.ps1"
+#   $me = "$env:USERPROFILE\Desktop\esp32-presence-ac\scripts\wsl-portproxy.ps1"
 #   $a = New-ScheduledTaskAction -Execute "powershell.exe" `
 #          -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$me`""
 #   $t = New-ScheduledTaskTrigger -AtLogOn
