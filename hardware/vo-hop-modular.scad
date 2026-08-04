@@ -47,7 +47,36 @@ s2_usb_gap = 1;                   // hở giữa đầu cổng và mặt trong v
 // GIỮ NGUYÊN 6mm: chiều cao cổng USB-C so với khe ở vách sau phụ thuộc đúng con số này,
 // và khe đã được nghiệm thu là khớp khi in ướm 28/07. Đổi là lệch cổng.
 s2_stand = 6;                     // trụ đỡ S2
-radar_w = 15;  radar_l = 20;      // radar (ngửa dưới nắp)
+// HLK-LD2410C — số 15×20×1.6 dùng suốt từ 24/07 là SAI. Datasheet + 2 nguồn độc lập đều cho
+// 22 × 16 × 3mm, pitch 2.54, chân TX RX OUT GND VCC (khớp silkscreen trên ảnh module thật).
+// Hốc cũ 15.4×20.4 KHÔNG lọt nổi bo 16×22 — thiếu 0.6mm ngang và 1.6mm dọc.
+//
+// ⚠️ Con số 15×18×3 "cm" trong mô tả bán hàng là KÍCH THƯỚC GÓI HÀNG (phong bì xốp 150×180×30mm),
+// không phải module. Đừng lấy nhầm.
+radar_w = 16;  radar_l = 22;      // radar (ngửa dưới nắp), rộng×dài
+radar_t = 3;                      // bề dày cả cụm bo + linh kiện, KHÔNG tính chân header
+// LD2410C bản trần KHÔNG có lỗ vít nào (user xác nhận 31/07) nên không bắt vít được — chỉ định vị
+// bằng hốc rồi dán. Đừng đề xuất trụ vít cho module này.
+//
+// CHIỀU LẮP (ảnh module thật 31/07): ăng-ten ở MỘT mặt, hàng 5 pin chĩa ra mặt ĐỐI DIỆN.
+// Lắp ĂNG-TEN NGỬA LÊN NẮP, chân tự động thõng xuống khoang. KHÔNG cắt pin, KHÔNG khoét lỗ trên
+// nắp — xem ghi chú radar_hdr_h bên dưới.
+//
+// Muốn giữ hoàn toàn bằng cơ khí thay băng keo thì thứ giải đúng là TẤM CHẶN bắt vít ép bo từ dưới
+// lên — chặn đúng phương duy nhất hốc bỏ sót (rơi ra vuông góc). Dưới hốc còn 14.4mm tới bo S3.
+radar_fit = 0.4;                  // khe lắp tổng của hốc (dung sai FDM ~0.2/mặt)
+radar_rim = 1;                    // gờ chặn quanh cửa sổ để bo không trồi lên
+// ĐÃ BỎ hướng khoét lỗ cho hàng pin xỏ lên nắp (từng làm rãnh 2×14, rồi 5 lỗ Ø1.6 bước 2.54).
+//
+// Lý do dứt điểm, xác nhận bằng ảnh module thật 31/07: ăng-ten và hàng pin nằm HAI MẶT ĐỐI NHAU.
+// Muốn sóng xuyên màng thì ăng-ten phải ngửa lên nắp, khi đó chân TỰ ĐỘNG chĩa xuống khoang —
+// không có gì hướng lên nắp để mà xỏ. Lắp ngược lại (chân lên nắp) thì cắm vừa khít nhưng ăng-ten
+// quay vào lòng hộp, bắn sóng vào bo S3 và vách nhựa: radar mù mà nhìn bề ngoài vẫn "vừa khít".
+// Đây là kiểu lỗi không lộ ra khi lắp, chỉ lộ khi radar không báo người.
+//
+// Bỏ được luôn cái giá đi kèm: trước phải thu hẹp cửa sổ màng để lấy chỗ khoan, mất ~15% khẩu độ.
+// Giờ cửa sổ trở lại đối xứng, lấy lại trọn khẩu độ.
+radar_hdr_h = 8.5;                // bao hình cục header + chân thõng xuống DƯỚI mặt bo
 
 // Mic INMP441 bo TRÒN Ø10 (chip MEMS chữ nhật nằm TRÊN bo — bo mới là thứ lọt vào hốc).
 // CỬA ĐÁY: lỗ thu âm nằm ở mặt IN CHỮ (L/R WS SCK SD VDD GND), KHÔNG phải mặt có chip.
@@ -100,8 +129,24 @@ s3_usb_gap = 0.5;                 // hở giữa mặt cổng và mặt TRONG c�
 // 12.5 suy từ hình học: cổng USB-C tiêu chuẩn rộng 8.94mm, hai cổng đối xứng qua tâm bo rộng
 // 26.5 thì mỗi bên còn ~2.5mm mép và ~3.6mm khe giữa — vừa khít và hợp lý.
 s3_usb_pitch = 12.5;              // tâm-tâm 2 cổng USB-C (TTL trái, OTG phải)
-s3_usb_w = 10;                    // bề rộng mỗi lỗ trên face (thân cổng 8.94 + dung sai)
-s3_usb_h = 5.5;                   // chiều cao mỗi lỗ (thân cổng 3.26 + dung sai)
+s3_usb_w = 10;                    // bề rộng thân cổng + dung sai (8.94 + dung sai)
+s3_usb_h = 5.5;                   // chiều cao thân cổng + dung sai (3.26 + dung sai)
+// MỘT cửa thông cả bề dày face, trùm CẢ HAI cổng — không phải 2 lỗ vừa khít thân cổng.
+//
+// Lý do (đo trên bản in thật 31/07): mặt cổng nằm ở y=5.5, mặt ngoài face ở y=2 ⇒ cách 3.5mm.
+// Vỏ kim loại của phích chỉ chìa ~6.5mm khỏi cục nhựa, nên khi cục nhựa chạm mặt face thì đầu vỏ
+// mới tới y=8.5, tức chui vào cổng đúng 3.0mm trong khi cần ~6.5mm mới ăn khớp — THIẾU 3.5mm.
+// Phích không cắm tới nơi.
+//
+// Không dời bo ra sát face được: bo do 2 trụ vít trong BASE định vị, dời bo là phải in lại base.
+// Khoét bậc cũng không đủ: hạ 2mm chừa 1mm nhựa vẫn thiếu 1.5mm, mà chừa 0.5mm thì vách vỡ.
+// Chỉ còn cách khoét THÔNG để cục nhựa của phích lọt vào tới sát cổng ⇒ ăn đủ 6.5mm.
+//
+// Buộc phải gộp 2 lỗ làm 1: cục nhựa phích rộng ~12mm mà tâm-tâm 2 cổng chỉ 12.5mm ⇒ hai lỗ riêng
+// chừa vách 0.5mm ở giữa, sợi nhựa đó gãy khi in hoặc khi cắm.
+s3_usb_plug_clear = 1;            // hở thêm mỗi bên cho vỏ nhựa của phích
+s3_usb_open_w = s3_usb_pitch + s3_usb_w + 2*s3_usb_plug_clear;  // = 24.5
+s3_usb_open_h = 8;                // cao hơn thân cổng để nuốt cả vỏ nhựa phích
 // 2 lỗ vít M2.5 ở đầu USB-C. Pitch CHƯA ĐO CHẮC: user ước 26mm nhưng bất khả trên bo rộng
 // 26.5 (lỗ M2.5 phải cách mép >=2.5mm => tối đa ~21.5); 26 nhiều khả năng là đo mép-ngoài-tới-
 // mép-ngoài. Giữ 23 làm danh nghĩa.
@@ -119,7 +164,22 @@ s3_hole_to_end = 3;               // tâm lỗ vít cách mép ĐẦU USB-C củ
 // sâu cắm của phích chỉ ~6.5mm (3mm dày face + phần hở).
 inner_w = 76;  inner_l = 85;  deck_h = 30;
 wall = 3;  floor_t = 3;  lid_t = 3;
-radar_mem_t = 1.5;            // nhựa chừa lại trên cửa sổ radar để sóng 24GHz xuyên qua
+// 1.5 -> 0.8 (31/07). Tổn hao qua tấm điện môi mỏng chủ yếu do PHẢN XẠ, không phải hấp thụ:
+//   |T|² = 1 / (1 + ((εr−1)²/4εr)·sin²(βt))
+// Bước sóng 24GHz trong không khí 12.5mm; PETG có εr ≈ 2.6-3.0 nên trong nhựa còn ~7.5mm.
+//   t=1.5mm -> βt=72°  -> |T|²≈0.79 -> −1.0 dB một chiều, −2.0 dB KHỨ HỒI (radar đi và về)
+//   t=0.8mm -> βt=38.6° -> |T|²≈0.90 -> −0.46 dB một chiều, −0.9 dB khứ hồi
+// Tầm radar tỷ lệ công suất mũ ¼ nên −2 dB làm tầm giảm ~11%. Mỏng còn 0.8 lấy lại hơn nửa.
+//
+// KHÔNG khoét hở hẳn dù được trọn 2 dB: ăng-ten patch 24GHz rất nhạy với vật lạ áp sát mặt, mà
+// hộp dán sát dàn lạnh nơi có gió + hơi ẩm thổi ra liên tục. Bụi bám lâu ngày làm lệch cộng
+// hưởng, tệ hơn 2 dB. Đổi 2 dB lấy một thứ xuống cấp dần theo thời gian là lỗ vốn.
+//
+// Cũng KHÔNG đuổi theo màng nửa bước sóng (~3.7mm, phản xạ triệt tiêu hoàn toàn): εr của PETG in
+// 3D không biết chính xác nên lệch một chút là hỏng hiệu ứng, mà nắp chỉ dày 3mm cũng không đủ chỗ.
+//
+// In dễ: nắp in úp mặt trên xuống bàn nên màng là 4 lớp đầu nằm trực tiếp trên mặt bàn.
+radar_mem_t = 0.8;            // nhựa chừa lại trên cửa sổ radar để sóng 24GHz xuyên qua
 post_d = 8;                   // trụ góc Ø8: đủ thịt để ép ren đồng M3 (thành còn ~1.9mm)
 post_in = 3.5;                // trụ lùi vào theo X, và theo Y ở phía SAU
 post_in_f = 6;                // trụ TRƯỚC lùi sâu hơn — mặt trước trụ phải nằm sau lưng face
@@ -127,6 +187,7 @@ m25_pilot = 2.1;              // lỗ mồi vít TỰ REN M2.5 (cùng nguyên t�
 m3_free = 3.4;  m2_pilot = 1.7;   // 1.7 = lỗ mồi vít TỰ REN M2 (ren ngoài Ø2.0). Khoét to hơn
                                  // là vít quay tít không bám — muốn dung sai thì nới ĐƯỜNG
                                  // KÍNH TRỤ, không nới lỗ mồi.
+lid_lip_h = 4;                // chiều cao gờ tụt định vị dưới nắp
 m3_insert = 4.2;              // lỗ chờ ép ren đồng M3 (heat-set insert, ép bằng mỏ hàn ~230°C)
 insert_deep = 6;              // chiều sâu lỗ chờ
 
@@ -168,6 +229,36 @@ s3_usb_z = floor_t + s3_stand + s3_pcb_t + 3.26/2; // = 14.23
 s2_hole_y = out_l - wall - s2_usb_gap - s2_hole_to_usb;   // = 55
 s2_y      = out_l - wall - s2_usb_gap - 1 - s2_l;         // mép trước bo; 1 = phần cổng thò khỏi PCB
 radar_cx = wall + 22;    radar_cy = wall + 64;  // radar trên NẮP, vùng trống sau-trái
+// Cửa sổ ĐỐI XỨNG trong hốc, hẹp hơn mỗi bên đúng radar_rim để chừa gờ chặn.
+radar_win_x0 = radar_cx - radar_w/2 + radar_rim;                           // = 18
+radar_win_x1 = radar_cx + radar_w/2 - radar_rim;                           // = 32
+radar_pocket_x0 = radar_cx - (radar_w + radar_fit)/2;                      // = 16.8, mép −x hốc
+
+// === CỬA THOÁT DÂY RADAR (01/08) ===
+// Dây hàn thẳng vào 5 pad ở MẶT ĂNG-TEN (mặt ngửa lên nắp), KHÔNG dùng hàng pin chĩa xuống.
+// Đúng bài toán của hốc mic — xem chú thích "Rãnh thoát dây ra hông" trong lid().
+//
+// Chỗ CHỨA thì đã có sẵn: giữa mặt bo (z=0) và trần cửa sổ (z=lid_t-radar_mem_t) là 2.2mm, đủ cho
+// vảy thiếc bẹt ~1mm + dây 28-30AWG Ø~1.2mm. Thiếu duy nhất là ĐƯỜNG RA — hốc kín 4 phía, khe
+// hông chỉ 0.2mm, mà gờ tụt cắm vào miệng hộp cũng chỉ hở 0.4mm quanh chu vi nên không có khe nào
+// cho dây tụt xuống khoang.
+//
+// Gỡ bằng 2 nhát: RÃNH DÂY hạ gờ chặn trên dải có hàng pad + GIẾNG RƠI đục thủng tường hốc, hở
+// đáy thẳng xuống khoang. Dây bò ngang rồi gập 90° rơi xuống, KHÔNG bẻ 180° quanh mép bo.
+//
+// ⚠️ RÃNH DÂY PHẢI CHỜM QUA CẢ NÓC GIẾNG, không được dừng ở mép hốc. Bản nháp đầu cho rãnh chạy
+// đúng bề rộng gờ chặn (x 16.8..19) rồi để dây gập ngay tại x=16.8. Sai: dây chiếm z 0..1.2 mà ở
+// x<16.8 thì z>0 là nhựa đặc, tức dây phải tụt hết 1.2mm trong vòng 0.2mm chạy ngang — gập bán
+// kính 0, bất khả. Giếng có mà dây không xuống nổi, và render nhìn vẫn thấy "có rãnh, có giếng".
+//
+// Đổi lại rãnh chỉ sâu 1.5 thay vì 2.2: vảy thiếc nằm tại pad (x≈18.3) vốn đã ở trong vùng cửa sổ
+// có sẵn 2.2mm, đoạn chạy ngang chỉ cần lọt thân dây. Nhựa nắp còn 1.5mm thay vì 0.8mm.
+//
+// Đặt ở cạnh dài −x (hàng 5 pad nằm dọc cạnh 22mm, xác nhận 01/08): mép trái bo S3 ở x=13.75 nên
+// gần nửa giếng rơi thẳng xuống sàn trống cạnh bo. Phương +x thì dây đổ lên lưng S3.
+radar_wire_w  = 14;   // bề rộng cửa thoát dọc cạnh; hàng 5 pad trải 2.54*4 + pad ≈ 12.2
+radar_wire_sh = 6;    // bề rộng giếng rơi theo x, tính từ mép hốc ra ngoài
+radar_wire_h  = 1.5;  // chiều sâu rãnh dây ăn vào tấm nắp (nắp còn lid_t - radar_wire_h)
 mic_cx   = wall + 40;    mic_cy   = wall + 15;  // mic trên NẮP, giữa-trước
 
 /* ================= tiện ích ================= */
@@ -260,9 +351,8 @@ module face() {
         // HAI lỗ USB-C của ESP32-S3 (TTL trái, OTG phải) thay khe đơn 12mm của WROOM.
         // y bắt đầu từ face_inset-1: tấm face nằm ở y 2..5, để nguyên y=-1 thì khoét hụt, chừa
         // 1mm nhựa -> hốc mù nhìn render không phát hiện được (đã dính 3 lần, xem probe()).
-        for (dx = [-s3_usb_pitch/2, s3_usb_pitch/2])
-            translate([27 + dx - s3_usb_w/2, face_inset - 1, s3_usb_z - s3_usb_h/2])
-                cube([s3_usb_w, face_t+2, s3_usb_h]);
+        translate([27 - s3_usb_open_w/2, face_inset - 1, s3_usb_z - s3_usb_open_h/2])
+            cube([s3_usb_open_w, face_t+2, s3_usb_open_h]);
         // lỗ LED IR 6.5mm
         translate([ir_x + ir_w/2, face_back+1, floor_t + ir_axis_h]) rotate([90,0,0])
             cylinder(d=6.5, h=face_t+2);
@@ -275,20 +365,40 @@ module lid() {
         union() {
             cube([out_w, out_l, lid_t]);
             // gờ tụt định vị — bắt đầu SAU lưng face, nếu không sẽ đè lên đầu face
-            translate([wall+0.4, face_back+0.4, -4])
-                cube([inner_w-0.8, out_l-wall-0.4 - (face_back+0.4), 4]);
-            // cradle radar ngửa: 4 nub dưới nắp ôm module 15×20 (Ø4 — Ø3 cao 6mm quá mảnh)
-            translate([0,0,-6]) for (dx=[-1, radar_w+1]) for (dy=[-1, radar_l+1])
-                translate([radar_cx - radar_w/2 + dx, radar_cy - radar_l/2 + dy, 0])
-                    cylinder(d=4, h=6);
+            translate([wall+0.4, face_back+0.4, -lid_lip_h])
+                cube([inner_w-0.8, out_l-wall-0.4 - (face_back+0.4), lid_lip_h]);
             // bệ đỡ mic — khối đặc, hốc khoét ở phần difference bên dưới
             translate([mic_cx, mic_cy, -mic_boss_h])
                 cylinder(d=mic_pocket_d+4, h=mic_boss_h);
         }
-        // Cửa sổ radar: khoét TỪ DƯỚI, chừa radar_mem_t nhựa trên mặt (24GHz xuyên tốt).
-        // v2 khoét cao lid_t=3 giữa ở z=1.5 -> ăn thủng cả 3mm, thành lỗ hở trái với chú thích.
-        translate([radar_cx, radar_cy, (lid_t-radar_mem_t)/2])
-            cube([radar_w+2, radar_l+2, lid_t-radar_mem_t], center=true);
+        // === RADAR: hốc xuyên gờ tụt + cửa sổ màng, thay cho 4 nub cũ (v4.1, 31/07) ===
+        //
+        // Lỗi của bản trước, đo được lid ∩ radar = 480mm³ = TRỌN thể tích module: lệnh khoét cửa sổ
+        // chỉ ăn trong tấm nắp (z 0..1.5) mà KHÔNG xuyên gờ tụt dày lid_lip_h ngay dưới nó, nên dưới
+        // cửa sổ vẫn là nhựa đặc — radar không có chỗ đặt. 4 nub cũ cũng sai: tâm đặt cách mép module
+        // 1mm nhưng trụ Ø4 bán kính 2mm nên thân trụ thò VÀO trong 1mm mỗi bên, khe giữa hai trụ chỉ
+        // 13mm trong khi module rộng 15mm. Cả hai lọt vì ghosts() chưa từng có radar.
+        //
+        // Cách mới: HỐC định vị thay vì 4 trụ. Module thả từ dưới lên, 4 vách hốc ôm trọn bề dày bo
+        // nên định vị chắc hơn hẳn nub chỉ chạm ở 4 điểm; gờ 1mm quanh cửa sổ làm mặt chặn để bo
+        // không trồi lên. Vẫn theo triết lý "định vị + dán": hốc lo định vị, băng keo lo giữ.
+        translate([radar_cx, radar_cy, -lid_lip_h/2])
+            cube([radar_w + radar_fit, radar_l + radar_fit, lid_lip_h], center=true);
+        // Cửa sổ màng: HẸP HƠN hốc để chừa gờ chặn 1mm quanh mép bo. Chừa radar_mem_t nhựa trên
+        // mặt cho sóng 24GHz xuyên. v2 từng khoét cao lid_t=3 đặt giữa ở z=1.5 -> ăn thủng cả 3mm.
+        translate([(radar_win_x0 + radar_win_x1)/2, radar_cy, (lid_t-radar_mem_t)/2])
+            cube([radar_win_x1 - radar_win_x0, radar_l - 2*radar_rim, lid_t-radar_mem_t],
+                 center=true);
+        // Cửa thoát dây radar — xem chú thích radar_wire_* ở phần tham số.
+        // Cả hai khối CỐ Ý CHỜM 1mm vào cửa sổ / hốc: cắt đúng bằng mép sẵn có sinh mặt dày 0 và
+        // làm STL mất 2-manifold (đã dính khi cắt test_s3 trùng mép gờ rãnh face).
+        //
+        // RÃNH DÂY: hạ gờ chặn, chạy suốt từ trong cửa sổ ra hết bề rộng giếng để dây có chỗ gập.
+        translate([radar_pocket_x0 - radar_wire_sh, radar_cy - radar_wire_w/2, 0])
+            cube([radar_win_x0 + 1 - (radar_pocket_x0 - radar_wire_sh), radar_wire_w, radar_wire_h]);
+        // GIẾNG RƠI: thủng tường hốc + gờ tụt, hở đáy thẳng xuống khoang.
+        translate([radar_pocket_x0 - radar_wire_sh, radar_cy - radar_wire_w/2, -lid_lip_h])
+            cube([radar_wire_sh + 1, radar_wire_w, lid_lip_h]);
         // Hốc mic: khoét TỪ DƯỚI lên, chừa lại mic_shelf làm mặt tì. Sâu 6mm để chứa đủ
         // bo 1.6 + chip chúc xuống ~1.2 + cục hàn ~1 + lớp đệm — vẫn còn dư.
         translate([mic_cx, mic_cy, -mic_boss_h-1])
@@ -337,9 +447,8 @@ module assembly() {
 // Đầu dò lấy toạ độ từ chính các biến ở trên nên tự bám theo mọi lần sửa tham số.
 module probe(which) {
     if (which=="face-usb")
-        for (dx = [-s3_usb_pitch/2, s3_usb_pitch/2])
-            translate([27+dx-s3_usb_w/2+1, face_inset-1, s3_usb_z-s3_usb_h/2+1])
-                cube([s3_usb_w-2, face_t+2, s3_usb_h-2]);
+        translate([27-s3_usb_open_w/2+1, face_inset-1, s3_usb_z-s3_usb_open_h/2+1])
+            cube([s3_usb_open_w-2, face_t+2, s3_usb_open_h-2]);
     else if (which=="face-ir")
         translate([ir_x+ir_w/2, face_back+1, floor_t+ir_axis_h]) rotate([90,0,0])
             cylinder(d=4, h=face_t+2);
@@ -353,11 +462,28 @@ module probe(which) {
             translate([27+dx, s3_hole_y, 0]) cylinder(d=1.4, h=5);
     else if (which=="lid-mic")
         translate([mic_cx, mic_cy, -mic_boss_h-1]) cylinder(d=3, h=mic_boss_h+lid_t+2);
+    // Đường dây radar phải THÔNG từ mặt bo ra tới khoang: đoạn NGANG trong rãnh dây nối vào đoạn
+    // ĐỨNG trong giếng rơi. Bắt đúng lỗi "giếng có mà dây không xuống nổi" — nóc giếng vẫn là
+    // nhựa đặc thì render nhìn vẫn thấy đủ rãnh lẫn giếng, chỉ đầu dò mới phát hiện.
+    else if (which=="lid-radar-day")
+        union() {
+            translate([radar_pocket_x0 - radar_wire_sh + 0.5, radar_cy - radar_wire_w/2 + 1, 0.3])
+                cube([radar_win_x0 - radar_pocket_x0 + radar_wire_sh, radar_wire_w - 2,
+                      radar_wire_h - 0.6]);
+            translate([radar_pocket_x0 - radar_wire_sh + 0.5, radar_cy - radar_wire_w/2 + 1,
+                       -lid_lip_h + 0.4])
+                cube([radar_wire_sh, radar_wire_w - 2, lid_lip_h - 0.1]);
+        }
     // NGƯỢC LẠI: vùng này phải ĐẶC (màng nhựa chừa cho radar xuyên qua).
-    // Đầu dò lùi vào 0.5mm so với bề dày màng để không chạm đúng mặt cắt: 15×20×1 = 300mm³.
+    // Đầu dò lùi vào 0.5mm so với bề dày màng để không chạm đúng mặt cắt.
+    //
+    // Đo trên vùng CỬA SỔ, KHÔNG phải vùng bo. Bản trước đo cả vùng bo là hỏi sai câu: màng chỉ
+    // cần nguyên ở chỗ sóng xuyên qua, còn mép bo thì không. Script tự chuẩn hoá giá trị nên đổi
+    // kích thước cửa sổ hay bề dày màng không phải sửa hằng số chép tay nữa.
     else if (which=="lid-radar-mang")
-        translate([radar_cx, radar_cy, lid_t - radar_mem_t/2])
-            cube([radar_w, radar_l, radar_mem_t-0.5], center=true);
+        translate([(radar_win_x0 + radar_win_x1)/2, radar_cy, lid_t - radar_mem_t/2])
+            cube([radar_win_x1 - radar_win_x0, radar_l - 2*radar_rim, radar_mem_t-0.5],
+                 center=true);
 }
 
 /* ================= MIẾNG ƯỚM ================= */
@@ -377,6 +503,25 @@ module ghosts() {
     color([0.2,0.6,1,0.45]) translate([s3_x, s3_y, floor_t+s3_stand]) cube([s3_w, s3_l, s3_pcb_t]);
     color([1,0.5,0.2,0.45]) translate([ir_x, ir_y, floor_t+ir_rib_h]) cube([ir_w, ir_l, 1.6]);
     color([0.3,1,0.3,0.45]) translate([s2_x, s2_y, floor_t+s2_stand]) cube([s2_w, s2_l, 1.6]);
+    // Radar áp NGỬA vào mặt dưới nắp, ngay dưới cửa sổ màng. Thiếu bóng này thì script kiểm
+    // KHÔNG hề soi vùng radar — đúng chỗ đã lọt lỗi 4 nub đặt sai và gờ tụt nắp bịt chỗ đặt.
+    // Bao hình GỒM CẢ cục header + chân thõng xuống, không chỉ mỗi PCB. Mô hình hoá thiếu phần
+    // nhô ra là script kiểm xác nhận "không đè nhau" cho một vật thể mỏng hơn thực tế — đúng loại
+    // sai lầm đã để lọt hai defect nặng khi ghosts() còn chưa có radar.
+    // Lấy trọn diện tích bo cho phần header (bảo thủ hơn thực tế, header chỉ chạy dọc một mép).
+    color([1,0.2,0.2,0.45])
+        translate([radar_cx - radar_w/2, radar_cy - radar_l/2, floor_t+deck_h-radar_t-radar_hdr_h])
+            cube([radar_w, radar_l, radar_t + radar_hdr_h]);
+    // Bó dây radar: hàn ở MẶT ĂNG-TEN nên chạy ngang TRÊN mặt bo rồi gập xuống giếng. Không có
+    // bóng này thì cửa thoát chỉ được kiểm bằng mắt trên render — mà đúng cái lỗi vừa bắt được
+    // (nóc giếng còn nhựa, dây không gập xuống nổi) lại nhìn không ra trên render.
+    // Cao 1.2mm = dây 28-30AWG; đây cũng chính là ràng buộc đặt lên tay hàn.
+    color([1,1,0.2,0.45]) {
+        translate([radar_pocket_x0 - radar_wire_sh, radar_cy - 6, floor_t+deck_h])
+            cube([radar_win_x0 + 1.5 - (radar_pocket_x0 - radar_wire_sh), 12, 1.2]);
+        translate([radar_pocket_x0 - radar_wire_sh + 0.5, radar_cy - 6, floor_t+deck_h-lid_lip_h])
+            cube([radar_wire_sh - 1, 12, lid_lip_h + 0.2]);
+    }
 }
 
 // Xem tách rời — dễ thấy rãnh trượt và 4 trụ.

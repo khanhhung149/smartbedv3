@@ -64,7 +64,7 @@ check base-face "base()" "face()"          || fail=1
 check base-lid  "base()" "$LID"            || fail=1
 check face-lid  "face()" "$LID"            || fail=1
 
-echo "Mảnh với board (ghosts = ESP32-S3 + IR + S2):"
+echo "Mảnh với board (ghosts = ESP32-S3 + IR + S2 + radar):"
 check base-board "base()"  "ghosts()"      || fail=1
 check face-board "face()"  "ghosts()"      || fail=1
 check lid-board  "$LID"    "ghosts()"      || fail=1
@@ -76,28 +76,44 @@ hole base-s2-pilot  "base()" base-s2-pilot   || fail=1
 hole base-s2-usb    "base()" base-s2-usb     || fail=1
 hole base-s3-pilot  "base()" base-s3-pilot   || fail=1
 hole lid-mic        "lid()"  lid-mic         || fail=1
+hole lid-radar-day  "lid()"  lid-radar-day   || fail=1
 
-# Ngược lại: màng radar PHẢI còn nhựa. Đầu dò 15×20×1 = 300mm³ nằm trong màng 1.5mm;
-# giao phải bằng đúng 300 thì màng mới đặc. Bằng 0 nghĩa là đã khoét thủng.
+# Ngược lại: màng radar PHẢI còn nhựa ở vùng CỬA SỔ (chỗ sóng xuyên qua), không phải vùng bo.
+#
+# TỰ CHUẨN HOÁ, không hằng số chép tay: render đầu dò MỘT MÌNH lấy thể tích Vp, rồi render phần
+# giao với nắp lấy Vi. Màng đặc <=> Vi == Vp. Trước đây số này viết cứng (300, rồi 198) và phải
+# sửa tay mỗi lần đổi kích thước cửa sổ hay bề dày màng — đúng chỗ chờ sẵn để quên.
 echo "Màng radar có còn nhựa không:"
-printf 'use <%s>\nintersection() { lid(); probe("lid-radar-mang"); }\n' "$MODEL" > "$HW/_fitcheck.scad"
-( cd "$HW" && "$SCAD_BIN" -o "$TMP/mang.stl" _fitcheck.scad ) >/dev/null 2>&1
-python3 - "$TMP/mang.stl" <<'PY' || fail=1
+vol() {  # $1=biểu thức khối -> in thể tích
+  printf 'use <%s>\n%s;\n' "$MODEL" "$1" > "$HW/_fitcheck.scad"
+  ( cd "$HW" && "$SCAD_BIN" -o "$TMP/vol.stl" _fitcheck.scad ) >/dev/null 2>&1
+  python3 - "$TMP/vol.stl" <<'VOLPY'
 import re, sys, os
 path = sys.argv[1]
 if not os.path.exists(path) or os.path.getsize(path) == 0:
-    print("  lid-radar-mang         rỗng  ❌ ĐÃ KHOÉT THỦNG, radar hở ra ngoài"); raise SystemExit(1)
+    print("0"); raise SystemExit
 verts = [tuple(map(float, m.groups()))
          for m in re.finditer(r'vertex\s+(\S+)\s+(\S+)\s+(\S+)', open(path).read())]
 v = 0.0
 for i in range(0, len(verts), 3):
     a, b, c = verts[i:i+3]
     v += (a[0]*(b[1]*c[2]-c[1]*b[2]) - a[1]*(b[0]*c[2]-c[0]*b[2]) + a[2]*(b[0]*c[1]-c[0]*b[1])) / 6.0
-v = abs(v)
-ok = abs(v - 300.0) < 1.0
-print(f"  lid-radar-mang       {v:8.2f} mm³  " + ("✅ đặc, đúng 300" if ok else "❌ thiếu nhựa (cần 300)"))
+print(f"{abs(v):.3f}")
+VOLPY
+  rm -f "$TMP/vol.stl"
+}
+vp=$(vol 'probe("lid-radar-mang")')
+vi=$(vol 'intersection() { lid(); probe("lid-radar-mang"); }')
+python3 - "$vi" "$vp" <<'CMPPY' || fail=1
+import sys
+vi, vp = float(sys.argv[1]), float(sys.argv[2])
+if vp <= 0:
+    print("  lid-radar-mang       đầu dò rỗng — probe() sai, không kiểm được"); raise SystemExit(1)
+ok = abs(vi - vp) < 1.0
+print(f"  lid-radar-mang    {vi:8.2f} / {vp:8.2f} mm³  " +
+      ("✅ đặc, phủ trọn đầu dò" if ok else f"❌ thiếu nhựa (hụt {vp-vi:.2f})"))
 raise SystemExit(0 if ok else 1)
-PY
+CMPPY
 
 echo
 [ $fail -eq 0 ] && echo "TẤT CẢ ĐẠT — in được." || echo "CÓ LỖI — đừng in."
