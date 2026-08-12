@@ -110,6 +110,10 @@ firmware/**/sdkconfig.*
 # External repos for study/reference
 external/
 
+# Kho mẫu audio train wakeword (mẫu giọng thật, mẫu TTS, hard negative, ambient).
+# Hàng nghìn WAV, dựng lại được từ tarball gốc và script sinh mẫu — không commit.
+datasets/
+
 # Git worktrees (local development only)
 worktrees/
 # Gemini CLI settings (contains user-specific config)

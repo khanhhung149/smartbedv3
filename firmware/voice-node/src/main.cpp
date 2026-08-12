@@ -1,9 +1,11 @@
-// Voice node — ESP32-S3 (env esp32s3) hoặc ESP32-WROOM-32 (env esp32dev) + mic INMP441 (I2S)
-// Đọc mic liên tục, tính RMS mỗi buffer làm VAD năng lượng ngay trên board:
-// có tiếng -> mở stream binary PCM16 qua WebSocket tới backend ASR; im lặng
-// một khoảng -> ngừng gửi (không đóng WS) để backend không phải nhận rác lúc
-// không ai nói. Toàn bộ ASR nằm ở backend, board chỉ có nhiệm vụ stream audio
-// sạch — nên không cần PSRAM và chạy được trên cả hai board.
+// Voice node — ESP32-S3 (env esp32s3/esp32s3_kws) hoặc ESP32-WROOM-32 (env esp32dev) + mic INMP441 (I2S)
+// Env esp32s3_kws: mở stream bằng WAKEWORD "vừng ơi" (model microWakeWord chạy tflite-micro tại
+// board, xem wakeword_features.{h,cpp}/wakeword_model.{h,cpp}) thay cho VAD năng lượng cũ.
+// Env esp32dev/esp32s3 (không có esp32s3_kws): KHÔNG build wakeword — env đó là đường lui, giữ
+// nguyên VAD năng lượng cũ (xem #ifdef WAKEWORD_GATE bên dưới).
+// Sau khi mở stream (bằng wakeword hoặc VAD, tuỳ env): gửi binary PCM16 qua WebSocket tới backend
+// ASR; im lặng một khoảng -> ngừng gửi (không đóng WS) để backend không phải nhận rác lúc không ai
+// nói. Toàn bộ ASR nằm ở backend, board chỉ có nhiệm vụ stream audio sạch.
 //
 // Wiring thật (INMP441), xem docs/system-wiring.md. Số chân I2S khác nhau giữa
 // hai board nên lấy từ build_flags, xem khối CFG_I2S_* bên dưới:
@@ -29,6 +31,11 @@
 #include <esp_system.h>        // esp_reset_reason() — chẩn đoán lý do reset (9 = BROWNOUT)
 
 #include "config.h"
+
+#ifdef ENABLE_WAKEWORD
+#include "wakeword_features.h"
+#include "wakeword_model.h"
+#endif
 
 // ---- Phần cứng ----
 // Mặc định là số chân của WROOM-32; env S3 ghi đè qua build_flags. Bản đồ GPIO của
@@ -170,11 +177,19 @@ MQTTClient  mqtt(512);        // payload presence/ac_cmd đều nhỏ (<128B)
 static int32_t i2sRawBuf[I2S_READ_SAMPLES];  // dữ liệu thô từ I2S (32-bit slot)
 static int16_t pcmBuf[I2S_READ_SAMPLES];     // PCM16 sau khi hạ bit, gửi thẳng qua WS
 
-bool     streaming   = false;  // đang trong một utterance -> có gửi frame
-uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng
+// LISTENING: chưa mở stream, chỉ nghe (chờ wakeword hoặc VAD onset, tuỳ env).
+// STREAMING: đang trong một utterance -> có gửi frame qua WS.
+enum class VoiceState : uint8_t { LISTENING, STREAMING };
+VoiceState voiceState = VoiceState::LISTENING;
+
+uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng — vẫn dùng để cắt SILENCE_MS dù mở
+                                // stream bằng wakeword hay VAD (xem comment SILENCE_MS ở loop()).
 uint32_t lastLogMs   = 0;      // throttle log Serial, tránh spam mỗi ~16ms
-uint8_t  onsetFrames = 0;      // số frame liên tiếp đang vượt ngưỡng, chờ đủ VAD_ONSET_FRAMES
 float    noiseFloor  = 0.0f;   // EMA nền nhiễu; 0 = chưa học, seed bằng frame đầu tiên đọc được
+
+#ifndef ENABLE_WAKEWORD
+uint8_t  onsetFrames = 0;      // (chỉ đường lui VAD) số frame liên tiếp vượt ngưỡng, chờ đủ VAD_ONSET_FRAMES
+#endif
 
 // Trạng thái bộ lọc thông cao — phải giữ qua các lần gọi, nếu reset mỗi frame thì mỗi ranh giới
 // frame thành một bước nhảy và tự sinh ra tiếng tách 62.5Hz (16000/256).
@@ -210,49 +225,92 @@ uint32_t lastManualMs   = 0;      // lần lệnh tay cuối (0 = chưa có), đ
 
 uint32_t lastHeartbeatMs = 0;
 
+#ifdef ENABLE_WAKEWORD
+// ---- Wakeword "Vừng ơi" (thay VAD năng lượng làm điều kiện mở stream, xem loop()) ----
+WakewordFeatures wakewordFeatures;
+WakewordModel    wakewordModel;
+bool             wakewordReady   = false;  // false nếu begin() lỗi — loop() bỏ qua wakeword, KHÔNG
+                                            // bao giờ tự mở stream (an toàn hơn là mở nhầm liên tục)
+uint32_t         lastScoreLogMs  = 0;      // throttle log điểm số, cùng nhịp lastLogMs (500ms)
+
+// Từ ROC thật đo kèm model (tflite_streaming_roc.txt, 10/08): ở ngưỡng 0.80, frr=17.65%
+// (bỏ sót ~18% lần gọi), faph=0.75 (đạt mục tiêu <1 lần báo giả/giờ của plan). Đây là điểm khởi
+// đầu tốt hơn placeholder 0.5 gốc trong plan Phase 3, nhưng VẪN LÀ SỐ ĐO OFFLINE (không phải đo
+// tại vị trí lắp đặt thật) — Phase 4 phải tune lại từ số liệu thực địa, không coi đây là chốt cuối.
+static const float WAKEWORD_THRESHOLD = 0.80f;
+
+// Sau khi rời STREAMING (im lặng SILENCE_MS, xem loop()), score dư âm cuối câu vẫn có thể còn cao
+// vài frame — nếu không có cooldown, LISTENING vừa quay lại đã trigger lại ngay, tách MỘT utterance
+// thật thành nhiều TRIGGER giả. Đo thật 2026-08-11: 51 dòng TRIGGER cho ~31-32 lần nói "Vừng ơi"
+// (script scripts/ghi-log-serial-wakeword.py, log tp-counted-0822.log) — log cho thấy rõ pattern
+// STREAMING -> im lặng -> LISTENING -> TRIGGER mới chỉ vài trăm ms sau, score vẫn 0.99x liên tục.
+static const uint32_t WAKEWORD_COOLDOWN_MS = 1200;
+uint32_t wakewordCooldownUntilMs = 0;
+#endif
+
 IRDaikin152 ac(PIN_IR_SEND);   // 152-bit: NGẮN NHẤT trong các biến thể còn setPower thật
                                // (64/128 chỉ có setPowerToggle -> không diễn tả được bật/tắt).
                                // Ngắn hơn Daikin2 (312-bit) >2x -> bắn nhanh hơn, chặn CPU ít hơn,
                                // đỡ làm i2s_read lỡ nhịp khi đang stream mic.
 
 // ---- WiFi: kết nối + tự thử lại, không treo loop khi mất mạng ----
+// Bug thật tìm thấy 10/08 lúc đo true-positive wakeword: bản cũ dùng while(...) { delay(250); } chờ
+// tới 15000ms MỖI LẦN gọi — trái ngay với comment ở trên nó. loop() gọi hàm này vô điều kiện mỗi vòng
+// khi chưa connect (xem chỗ gọi bên dưới), nên khi WiFi không connect được, board bị đứng hình audio/
+// wakeword ~15000/15035ms mỗi chu kỳ (đo bằng log thật, xem plan phase-04). Sửa thành state machine
+// không-block: bắn WiFi.begin() 1 lần rồi return ngay, các lần gọi sau chỉ poll status(), không delay().
 void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return;
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.printf("WiFi: nối tới %s", WIFI_SSID);
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
-    delay(250);
-    Serial.print(".");
+
+  static bool     connecting    = false;
+  static uint32_t attemptStart  = 0;
+  uint32_t now = millis();
+
+  if (!connecting) {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.printf("WiFi: nối tới %s...\n", WIFI_SSID);
+    connecting   = true;
+    attemptStart = now;
+    return;  // KHÔNG block — loop() chạy tiếp audio/wakeword ngay, poll kết quả ở lần gọi sau
   }
-  Serial.println(WiFi.status() == WL_CONNECTED ? " OK" : " FAIL (thử lại sau)");
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi: OK");
+    connecting = false;
+  } else if (now - attemptStart >= 15000) {
+    Serial.println("WiFi: FAIL (thử lại sau)");
+    connecting = false;  // hết timeout -> lần gọi loop() kế tiếp bắn lại WiFi.begin()
+  }
+  // else: vẫn trong cửa sổ chờ connect, không in gì, không delay — trả quyền điều khiển ngay cho loop()
 }
 
 // ---- MQTT: kết nối broker, tự thử lại (không chặn quá lâu để không nghẽn audio) ----
+// Bug thật tìm thấy 10/08 lúc đo true-positive wakeword (cùng dạng bug với connectWiFi() ở trên, xem
+// comment tại đó): for-loop 3 lần retry, mỗi lần `mqtt.connect()` TỰ nó gọi net.connect(host,port) —
+// WiFiClient::connect() mặc định KHÔNG có timeout ngắn, nếu broker không tồn tại trên mạng hiện tại
+// (đổi WiFi khác LAN backend) thì mỗi lần connect() có thể treo nhiều giây, nhân 3 lần trong for-loop
+// == y hệt kiểu đứng hình ~15s/chu kỳ đã đo được ở connectWiFi(). Fix: giới hạn timeout socket qua
+// net.setTimeout() (setup(), gần mqtt.begin()) + đổi thành 1 lần thử/lần gọi + cooldown, không for-loop
+// blocking nữa.
 void connectMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (mqtt.connected()) return;
+
+  static uint32_t lastAttemptMs = 0;
+  uint32_t now = millis();
+  if (now - lastAttemptMs < 5000) return;  // cooldown giữa 2 lần thử, tránh spam connect() liên tục
+  lastAttemptMs = now;
+
   Serial.print("MQTT: nối broker");
-  for (uint8_t i = 0; i < 3 && !mqtt.connected(); i++) {
-    if (mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS)) break;
-    Serial.print(".");
-    delay(500);
-    if (WiFi.status() != WL_CONNECTED) { Serial.println(" mất WiFi"); return; }
-  }
-  Serial.println(mqtt.connected() ? " OK" : " FAIL (thử lại sau)");
+  bool ok = mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS);
+  Serial.println(ok ? " OK" : " FAIL (thử lại sau)");
   // Subscribe PHẢI nằm trong hàm connect: subscription mất khi rớt kết nối, đặt ở setup()
   // thì sau reconnect đầu tiên là điếc vĩnh viễn.
   if (mqtt.connected()) {
     mqtt.subscribe(TOPIC_AC_CMD, 1);
-#ifdef DISABLE_RADAR_FUSION
-    // Radar tắt tạm trong env đo wakeword — xem platformio.ini [env:esp32s3_kws].
-    // Lệnh tay (TOPIC_AC_CMD) vẫn giữ để còn kiểm được đường IR.
-    Serial.printf("MQTT: sub %s (radar TẮT)\n", TOPIC_AC_CMD);
-#else
     mqtt.subscribe(TOPIC_PRESENCE, 1);   // presence từ radar-node -> chính sách AC
     Serial.printf("MQTT: sub %s + %s\n", TOPIC_AC_CMD, TOPIC_PRESENCE);
-#endif
   }
 }
 
@@ -400,7 +458,7 @@ void setupOTA() {
   // tác vụ ghi, còn WS giữ socket mở dễ làm timeout giữa chừng -> bản nạp hỏng.
   ArduinoOTA.onStart([]() {
     Serial.println("\n[ota] bắt đầu — dừng I2S + WS");
-    streaming = false;
+    voiceState = VoiceState::LISTENING;
     webSocket.disconnect();
     i2s_stop(I2S_PORT);
     i2s_driver_uninstall(I2S_PORT);
@@ -436,21 +494,26 @@ void setup() {
   webSocket.onEvent(onWsEvent);
   webSocket.setReconnectInterval(3000);  // tự thử lại mỗi 3s nếu rớt kết nối
 
+  net.setTimeout(1000);  // giới hạn TCP connect() bên trong mqtt.connect() — xem comment connectMQTT()
   mqtt.begin(MQTT_HOST, MQTT_PORT, net);
   mqtt.onMessage(onMqtt);
   connectMQTT();
+
+#ifdef ENABLE_WAKEWORD
+  // Sau I2S (cần SAMPLE_RATE đã cấu hình) — lỗi ở đây chỉ tắt wakeword, KHÔNG chặn boot: board vẫn
+  // lên WiFi/MQTT/OTA/fusion bình thường, chỉ không bao giờ tự mở stream (an toàn, không phải im
+  // lặng-báo-lỗi: log rõ để thấy ngay lúc cắm Serial).
+  bool featOk  = wakewordFeatures.begin(SAMPLE_RATE);
+  bool modelOk = featOk && wakewordModel.begin();
+  wakewordReady = featOk && modelOk;
+  Serial.printf("[wakeword] init: features=%s model=%s -> %s\n", featOk ? "OK" : "LỖI",
+               modelOk ? "OK" : "LỖI", wakewordReady ? "sẵn sàng" : "TẮT");
+#endif
 }
 
 // Chính sách AC: presence (từ radar-node qua MQTT) ổn định đủ lâu -> bật; vắng đủ lâu -> tắt.
 // Lọc tinh (cự ly/năng lượng, chống báo giả xuyên tường) đã nằm ở radar-node/cấu hình LD2410.
 void updateFusion(uint32_t now) {
-#ifdef DISABLE_RADAR_FUSION
-  // Tắt tạm trong env đo wakeword (esp32s3_kws): ac.send() chặn ~150ms, IR bắn xen ngang
-  // làm bẩn mọi phép đo audio. Code giữ nguyên bên dưới, chỉ không chạy — cờ biên dịch chứ
-  // không phải comment, để không quên bật lại. ⚠️ BẬT LẠI TRƯỚC KHI MERGE.
-  (void)now;
-  return;
-#else
   // Link chết -> coi như KHÔNG có người. Không có timeout này, radar-node chết lúc đang
   // "có người" sẽ làm điều hoà chạy vĩnh viễn.
   uint32_t lastMs = lastRadarMs;
@@ -485,7 +548,6 @@ void updateFusion(uint32_t now) {
       requestAC(occupied, false);
     }
   }
-#endif  // DISABLE_RADAR_FUSION
 }
 
 void loop() {
@@ -543,49 +605,108 @@ void loop() {
   float vadThreshold = noiseFloor * VAD_NOISE_MULT;
   if (vadThreshold < VAD_THRESHOLD_MIN) vadThreshold = VAD_THRESHOLD_MIN;
 
+  // lastVoiceMs dùng để cắt SILENCE_MS khi ĐANG STREAMING — cần trong CẢ HAI env dù mở stream
+  // bằng wakeword hay VAD, vì kết thúc utterance luôn dựa vào "hết năng lượng tiếng nói".
   if (rms > vadThreshold) {
     lastVoiceMs = now;
-    if (!streaming && ++onsetFrames >= VAD_ONSET_FRAMES) {
-      streaming   = true;
-      onsetFrames = 0;
-      Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
-      // Gửi bù phần đã giữ TRƯỚC frame hiện tại để chuỗi PCM liền mạch, không mất âm đầu.
-      if (webSocket.isConnected() && preRollFrames > 0) {
-        webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
-                          preRollFrames * I2S_READ_SAMPLES * sizeof(int16_t));
-      }
-      preRollFrames = 0;
-    }
-  } else if (!streaming) {
-    // Chuỗi đứt -> gai nhiễu đơn lẻ, quên hẳn. Không tích lũy qua các lần rời rạc.
-    onsetFrames   = 0;
-    preRollFrames = 0;
   }
 
-  // Học nền nhiễu CHỈ từ frame dưới ngưỡng và CHỈ khi không streaming. Hai điều kiện đều cần:
-  // học lúc streaming sẽ để tiếng nói kéo nền lên rồi tự tắt chính nó, còn học frame trên ngưỡng
-  // sẽ để một tiếng động dài nâng nền lên và bỏ sót câu nói ngay sau đó.
-  if (!streaming && rms <= vadThreshold) {
-    noiseFloor += NOISE_EMA_ALPHA * (rms - noiseFloor);
+#ifdef ENABLE_WAKEWORD
+  // Trích đặc trưng + inference MỖI frame I2S (quyết định Validation Session 1 câu 3 trong plan —
+  // chưa tối ưu sớm khi chưa có số đo CPU thật). Chạy VÔ ĐIỀU KIỆN kể cả khi đã STREAMING để state
+  // nội bộ của frontend (noise/PCAN) và model không bị cold-start mỗi lần quay về LISTENING; điểm
+  // số trong lúc STREAMING bị bỏ qua ở switch dưới (không đánh giá lại wakeword giữa một utterance).
+  if (wakewordReady) {
+    uint16_t wwFeatures[WakewordFeatures::kFramesPerInference][WakewordFeatures::kNumChannels];
+    if (wakewordFeatures.pushSamples(pcmBuf, samples, wwFeatures)) {
+      float score = wakewordModel.infer(wwFeatures);
+      if (now - lastScoreLogMs >= 500) {
+        lastScoreLogMs = now;
+        Serial.printf("[wakeword] score=%.3f state=%s\n", score,
+                      voiceState == VoiceState::LISTENING ? "LISTENING" : "STREAMING");
+      }
+      if (voiceState == VoiceState::LISTENING && score > WAKEWORD_THRESHOLD &&
+          now >= wakewordCooldownUntilMs) {
+        voiceState  = VoiceState::STREAMING;
+        lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
+        Serial.printf("[wakeword] TRIGGER score=%.3f -> STREAMING\n", score);
+        // Gửi bù phần đã giữ TRƯỚC frame hiện tại để chuỗi PCM liền mạch, không mất âm đầu.
+        if (webSocket.isConnected() && preRollFrames > 0) {
+          webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
+                            preRollFrames * I2S_READ_SAMPLES * sizeof(int16_t));
+        }
+        preRollFrames = 0;
+      }
+    }
+  }
+
+  // preRoll: ring buffer trượt, giữ liên tục (VAD_ONSET_FRAMES-1) khung gần nhất trong lúc
+  // LISTENING — khác VAD cũ (chỉ giữ trong cửa sổ debounce ngắn), vì wakeword không có khái niệm
+  // "onset debounce" đếm frame liên tiếp. Flush lúc TRIGGER ở trên để bù độ trễ cố hữu của kiến
+  // trúc streaming (model cần tích luỹ đủ 3 khung mới — 30ms — mới suy luận được một lần).
+  if (voiceState == VoiceState::LISTENING && samples == I2S_READ_SAMPLES) {
+    constexpr int kPreRollFrameCount = VAD_ONSET_FRAMES - 1;
+    if (preRollFrames < kPreRollFrameCount) {
+      memcpy(&preRoll[preRollFrames * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
+      preRollFrames++;
+    } else {
+      memmove(preRoll, preRoll + I2S_READ_SAMPLES,
+              (kPreRollFrameCount - 1) * I2S_READ_SAMPLES * sizeof(int16_t));
+      memcpy(&preRoll[(kPreRollFrameCount - 1) * I2S_READ_SAMPLES], pcmBuf,
+             samples * sizeof(int16_t));
+    }
+  }
+#else
+  // Đường lui VAD năng lượng (env esp32dev/esp32s3, không có wakeword) — logic gốc, chỉ đổi tên
+  // biến trạng thái streaming -> voiceState.
+  if (voiceState == VoiceState::LISTENING) {
+    if (rms > vadThreshold) {
+      if (++onsetFrames >= VAD_ONSET_FRAMES) {
+        voiceState  = VoiceState::STREAMING;
+        onsetFrames = 0;
+        Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
+        if (webSocket.isConnected() && preRollFrames > 0) {
+          webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
+                            preRollFrames * I2S_READ_SAMPLES * sizeof(int16_t));
+        }
+        preRollFrames = 0;
+      }
+    } else {
+      // Chuỗi đứt -> gai nhiễu đơn lẻ, quên hẳn. Không tích lũy qua các lần rời rạc.
+      onsetFrames   = 0;
+      preRollFrames = 0;
+    }
   }
 
   // Đang chờ xác nhận onset: giữ frame lại. Chỉ giữ frame đủ độ dài để bước nhảy trong preRoll
   // luôn đúng I2S_READ_SAMPLES (i2s_read có thể trả về ít hơn khi timeout dở).
-  if (!streaming && onsetFrames > 0 && preRollFrames < VAD_ONSET_FRAMES - 1 &&
-      samples == I2S_READ_SAMPLES) {
+  if (voiceState == VoiceState::LISTENING && onsetFrames > 0 &&
+      preRollFrames < VAD_ONSET_FRAMES - 1 && samples == I2S_READ_SAMPLES) {
     memcpy(&preRoll[preRollFrames * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
     preRollFrames++;
   }
+#endif  // ENABLE_WAKEWORD
 
-  if (streaming) {
+  // Học nền nhiễu CHỈ từ frame dưới ngưỡng và CHỈ khi đang LISTENING. Hai điều kiện đều cần: học
+  // lúc STREAMING sẽ để tiếng nói kéo nền lên rồi tự tắt chính nó, còn học frame trên ngưỡng sẽ để
+  // một tiếng động dài nâng nền lên và bỏ sót câu nói ngay sau đó. Vẫn giữ trong env wakeword dù
+  // không còn dùng để trigger — vadThreshold vẫn quyết định lastVoiceMs (cắt SILENCE_MS) và log debug.
+  if (voiceState == VoiceState::LISTENING && rms <= vadThreshold) {
+    noiseFloor += NOISE_EMA_ALPHA * (rms - noiseFloor);
+  }
+
+  if (voiceState == VoiceState::STREAMING) {
     if (webSocket.isConnected()) {
       webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
     }
     if (now - lastVoiceMs > SILENCE_MS) {
       // Kết thúc utterance: NGỪNG gửi frame, KHÔNG đóng WS — giữ kết nối để
       // câu tiếp theo gửi ngay, không tốn thời gian bắt tay lại.
-      streaming = false;
-      Serial.println("VAD: im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
+      voiceState = VoiceState::LISTENING;
+#ifdef ENABLE_WAKEWORD
+      wakewordCooldownUntilMs = now + WAKEWORD_COOLDOWN_MS;
+#endif
+      Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
     }
   }
 
@@ -593,8 +714,8 @@ void loop() {
   if (now - lastLogMs >= 500) {
     lastLogMs = now;
     // In cả ngưỡng động + nền: không có hai số này thì không cách nào biết VAD đang so với cái gì.
-    Serial.printf("RMS=%.1f nen=%.0f nguong=%.0f streaming=%s ws=%s\n", rms, noiseFloor,
-                  vadThreshold, streaming ? "true" : "false",
+    Serial.printf("RMS=%.1f nen=%.0f nguong=%.0f state=%s ws=%s\n", rms, noiseFloor,
+                  vadThreshold, voiceState == VoiceState::STREAMING ? "STREAMING" : "LISTENING",
                   webSocket.isConnected() ? "up" : "down");
   }
 }
