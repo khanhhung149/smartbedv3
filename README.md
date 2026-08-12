@@ -3,8 +3,9 @@
 Hệ IoT phân tán: phát hiện hiện diện bằng **radar 24GHz (LD2410C)**, **ESP32 tự quyết bật/tắt điều hòa qua
 IR Daikin**, **ra lệnh giọng nói tiếng Việt** qua ASR self-host, và **app Android** giám sát/điều khiển.
 
-**Status** (2026-07-24): ✅ **E2E CHẠY THẬT** — radar → presence → fusion tại board → **IR Daikin vào COOL**;
+**Status** (2026-08-10): ✅ **E2E CHẠY THẬT** — radar → presence → fusion tại board → **IR Daikin vào COOL**;
 voice (mic → whisper → `ac_cmd`) chạy; backend + lịch sử SQLite + app Android xong; OTA cả 2 node.
+🔬 In-progress: custom Vietnamese wakeword ("Vừng ơi") training + edge inference on voice-node (ESP32-S3, 5.4ms latency, model not yet wired into main.cpp).
 ⏳ Còn: in ướm vỏ hộp 3D.
 
 ## Kiến trúc
@@ -14,8 +15,9 @@ radar-node (S2 Mini) ─ home/room/presence (retain) ─┬─→ Mosquitto ─�
   LD2410C native UART  home/door/motion ────────────┤                 (CHỈ hiển thị      Android
                        tele/<T>/SENSOR ─────────────┼──────────────→   + lịch sử SQLite)
                                                     │
-voice-node (WROOM-32) ─ SUB presence ─→ fusion tại BOARD ─→ IR Daikin152 (GPIO4) ─→ Điều hòa
+voice-node (S3-DevKit N16R8) ─ SUB presence ─→ fusion tại BOARD ─→ IR Daikin152 (GPIO8) ─→ Điều hòa
   INMP441 mic ─ WebSocket audio ────────→ /api/voice/stream ─→ asr (whisper) ─→ ac_cmd
+  (wakeword "Vừng ơi" on-device: microWakeWord + esp-nn, benchmark 5.4ms, integration pending)
 ```
 
 **ESP32 là bộ não duy nhất**: voice-node nghe presence rồi tự quyết AC. Backend **không** tự phát `ac_cmd`
@@ -119,6 +121,7 @@ cd app && flutter analyze
 
 | Việc | Ảnh hưởng | Trạng thái |
 |------|-----------|-----------|
+| Wakeword integration (main.cpp loop + MFCC feature parity) | Kích hoạt voice chỉ khi nghe "Vừng ơi", giảm latency từ backend | 🔬 model trained, inference verified (5.4ms), feature extraction parity validation pending |
 | In ướm vỏ hộp `hardware/vo-hop-base.stl` | Chiều cao khe USB / lỗ LED IR còn là giả định | ⏳ in thử rồi chỉnh |
 | Đấu nguồn chung Topo A + (board WROOM cũ) tụ 470-1000µF | 1 cốc sạc nuôi 2 board | ⏳ việc tay |
 
@@ -150,4 +153,4 @@ cd app && flutter analyze
 Chi tiết: [`docs/project-roadmap.md`](./docs/project-roadmap.md).
 
 ---
-**Last updated**: 2026-07-24
+**Last updated**: 2026-08-10

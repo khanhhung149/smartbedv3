@@ -1,200 +1,358 @@
-# Sơ đồ đấu nối IO — Hệ thống presence + AC + voice
+# System Wiring — Physical GPIO Pinout & Hazards
 
-Cập nhật: **2026-07-24 (rev4)** — kiến trúc **2 node WiFi độc lập, KHÔNG ESP-NOW, KHÔNG PIR**:
-S2 Mini (`radar-node`) tự nối WiFi+MQTT đọc LD2410C **native UART**; WROOM (`voice-node`) có **mic + IR**,
-**fusion tại board** (nghe `home/room/presence` → bắn IR Daikin). PIR đã bỏ khỏi hệ.
-
----
-
-# ⚡ BẢNG HÀN — đọc cái này là đủ
-
-## Board 1 — ESP32 WROOM-32 (38 chân) = voice-node (mic + IR)
-
-| Thiết bị | Chân thiết bị | → Chân WROOM | Ghi chú |
-|---|---|---|---|
-| **INMP441 mic** | SCK (BCLK) | **GPIO26** | |
-| | WS (LRCL) | **GPIO25** | |
-| | SD (DOUT) | **GPIO34** | chân chỉ-vào, đúng cho mic |
-| | L/R | **GND** | chọn kênh |
-| | VDD | **3V3** | **KHÔNG 5V** |
-| | GND | GND | |
-| **IR Transmitter** | `DAT` | **GPIO4** | GPIO5 là strapping — không dùng |
-| | `VCC` | **5V** | ✅ module nhãn 5V (tầm 1-2m). 3V3 bị under-drive → tầm ngắn |
-| | `GND` | **GND** | |
-
-> **PIR: BỎ.** GPIO27 để trống, firmware không gắn interrupt nữa.
-
-> **⚠️ Chiều lắp mic (dễ sai, sai là hỏng hết):** module INMP441 dùng ở đây là **bo TRÒN Ø10**
-> (con chip MEMS chữ nhật nằm trên bo). Nó là loại **CỬA ĐÁY** — lỗ thu âm ở **mặt in chữ**
-> (`L/R WS SCK SD VDD GND`), không phải mặt có chip.
-> Lắp vào nắp: **mặt in chữ NGỬA LÊN** áp vào trần hốc, **chip chúc xuống** khoang.
-> Lắp ngược thì lỗ thu âm úp vào trong hộp → mic nghe tiếng khoang thay vì tiếng phòng, và
-> **bịt gioăng càng kín càng tệ**.
-> Dây hàn thẳng vào pad nằm **cùng mặt in chữ** ⇒ cục hàn kênh bo lên. Bù bằng **lớp đệm mềm
-> (xốp 2 mặt)**, đừng bù bằng nhựa in — xốp mới ép quanh được cục hàn. Dây đi ra qua rãnh
-> hông của bệ mic, không bẻ ngoặt quanh mép bo.
-
-## Board 2 — Wemos S2 Mini = radar-node (LD2410C native UART)
-
-| Thiết bị | Chân | → Chân S2 Mini | Ghi chú |
-|---|---|---|---|
-| **LD2410C radar** | OUT | **GPIO16** | presence digital |
-| | TX | **GPIO33** | S2 nhận — UART @256000 (Moving/Static) |
-| | RX | **GPIO18** | S2 gửi |
-| | VCC | **5V** (VBUS) | radar cần 5V |
-| | GND | **GND** | ⚠️ **PHẢI chung GND với S2** — mất GND chung thì UART chết (Moving=0) dù BLE vẫn mượt |
-
-**S2 tự nối WiFi + MQTT** (không ESP-NOW, không IR, không PIR).
-
-## Nguồn chung (Topo A — S2 là board nguồn)
-
-```
-Cốc sạc ≥2A ─C-to-C─► USB-C của S2
-   S2 5V/VBUS ──► WROOM chân 5V/VIN   (đi TẮT qua diode → WROOM ăn 5.0V thay vì 4.7V)
-   S2 GND     ──► WROOM GND
-```
-Chỉ chung **5V + GND**, KHÔNG chung 3V3. **Không cắm USB WROOM khi dây liên board còn nối** (2 nguồn đánh
-nhau) → dùng OTA để nạp. Board WROOM cũ biên nguồn mỏng → cần tụ 470-1000µF ở 5V-GND (board mới không cần).
+**Last Updated**: 2026-08-10  
+**Scope**: Physical hardware assembly only — GPIO pins, power connections, soldering hazards, electrical constraints. For software architecture (MQTT topics, state machines, API contracts), see [`docs/system-architecture.md`](./system-architecture.md).
 
 ---
 
-## Biến thể — S2 Mini native WiFi + MQTT (`firmware/radar-node`)
+## What Changed from Previous Doc
 
-Thay cho lối ESP-NOW (và cho firmware cũ trên con S2): con S2 **tự nối WiFi + MQTT**, đọc
-LD2410C native qua UART rồi bắn thẳng lên broker. Cùng module radar, thêm **2 chân UART**:
+The old `docs/system-wiring.md` (2026-07-24 rev4) claimed:
+- **"2 boards WiFi + shared power (S2 was board source)"** → **Now 4 independent boards, each own USB-C**
+- **"PIR removed from system"** → **WRONG**. Door-node added 2026-07-15 with PIR on GPIO7, still active
 
-| Thiết bị | Chân | → Chân S2 Mini | Ghi chú |
-|---|---|---|---|
-| **LD2410C** | OUT | **GPIO16** | presence digital (INPUT_PULLDOWN) |
-| | TX | **GPIO33** | radar TX → S2 nhận |
-| | RX | **GPIO18** | S2 gửi lệnh cấu hình → radar RX |
-| | VCC | **5V** (VBUS) | radar cần 5V |
-| | GND | **GND** | |
-
-Publish: `home/room/presence {"ts","present"}` (backend Go ăn → đẩy app) **và**
-`tele/<DEVICE_TOPIC>/SENSOR` + trả lời `cmnd/<T>/STATUS 10` (tab "Thiết bị" app đọc thẳng).
-Nạp: `pio run -t upload -e lolin_s2_mini`. ⚠️ **Không hàn radar đè lên cổng USB-C** (đã chập).
+This is a **full rewrite**, not a patch. If returning from git history, ignore the old topology.
 
 ---
 
-# 🔥 Cảnh báo (đều đã trả giá thật)
+## System Overview: 4 Independent ESP32 Boards
 
-### 1. LD2410 PHẢI chung GND với board đọc nó
-23/07: tách nguồn S2 sang cốc riêng mà quên kéo GND chung → **Moving/Static = 0** dù `Detect=1` và **app
-BLE của HLK vẫn xem mượt có energy**. UART cần GND làm return path; BLE không cần nên vẫn chạy → đó là dấu
-hiệu vàng phân biệt "module hỏng" với "mất GND". Luôn nuôi cảm biến **từ chính board đọc nó**.
+Each board runs on its own USB-C power. **No hardwired inter-board power sharing** (old 2-board shared 5V is gone).
 
-### 2. IR Transmitter — module này cấp **5V** (đã kiểm chứng)
-Module `IR Transmitter V1221` nhãn ghi **5V, tầm 1-2m, 940nm** → cấp 5V là **đúng thiết kế**, và thực tế
-**bắn xa hơn thật**. Cấp 3V3 bị under-drive → tầm ngắn.
-> Rev cũ ghi "cấp 3V3, KHÔNG 5V" — **đã sửa**: cảnh báo đó chỉ đúng với module LED-trần không có tầng đệm.
-> Nguyên tắc chung vẫn giữ: **đừng bao giờ đưa 5V vào chân `DAT`** (GPIO chỉ chịu 3.3V) — chỉ VCC ăn 5V.
-
-### 3. LED IR **vô hình với mắt** — đừng tưởng nó không chạy
-940nm mắt người không thấy. Kiểm bằng cách **chĩa camera điện thoại vào đầu LED** → thấy nháy tím/trắng.
-Đã mất nhiều lượt debug vì tưởng "LED không sáng = mạch chết", trong khi firmware vẫn bắn đúng.
-
-### 4. IR phát dùng GPIO4, KHÔNG dùng GPIO5
-Trên WROOM-32, **GPIO5 là chân strapping** (phải HIGH lúc boot) — đèn IR kéo xuống LOW là
-**board không boot**. Strapping của ESP32 theo tài liệu ESP-IDF: **GPIO0, 2, 5, 12, 15**.
-GPIO4 **không** nằm trong đó → an toàn.
-
-> Red-team từng báo "GPIO4 cũng là strapping, phải dùng GPIO17" — **SAI**, đã kiểm chứng
-> bằng tài liệu chính thức Espressif. Giữ GPIO4.
+| Board | Microcontroller | Sensors | Power | Communication |
+|-------|---|---|---|---|
+| **voice-node** | ESP32-S3-DevKitC-1 N16R8 | INMP441 mic, IR transmitter | USB-C 5V | WiFi + MQTT (audio to backend WS) |
+| **radar-node** | Wemos S2 Mini | LD2410C radar | USB-C 5V | WiFi + MQTT (native UART to sensor) |
+| **room-node** | Wemos S2 Mini | LD2410C radar | USB-C 5V | **No WiFi** — ESP-NOW only to voice-node |
+| **door-node** | Wemos S2 Mini | PIR sensor | USB-C 5V | WiFi + MQTT |
 
 ---
 
-# 📍 Đặt ở đâu
+## Pin Tables by Node
 
-| Board | Vị trí | Vì sao |
+### Board 1: Voice-Node (ESP32-S3-DevKitC-1 N16R8)
+
+**Environment**: `firmware/voice-node/platformio.ini`  
+**Source**: `firmware/voice-node/src/main.cpp` lines 1–68
+
+**Fallback env `esp32dev`** (older ESP32-WROOM-32 board) uses different I2S pins but same IR pin (GPIO4).
+
+#### I2S Microphone (INMP441)
+
+| INMP441 Pin | → ESP32-S3 GPIO | Notes |
 |---|---|---|
-| **WROOM** (mic + IR) | **Chĩa vào mắt nhận của dàn lạnh** | Module IR chạy 5V bắn **1-2m**; nếu dàn lạnh trên cao thì nghiêng mặt phát lên ~20-40°. Vẫn nên gần + chĩa thẳng. |
-| **S2 Mini** (radar) | **Trên cao, nhìn bao quát phòng** | LD2410 tầm ~6m |
+| **SCK** (BCLK, clock) | **GPIO5** | I2S bit clock output from ESP |
+| **WS** (LRCL, word select) | **GPIO6** | I2S frame sync output from ESP |
+| **SD** (DOUT, serial data) | **GPIO7** | I2S data in from mic (input-only safe) |
+| **L/R** (channel select) | **GND** | Selects left channel; **do not change** |
+| **VDD** (power) | **3V3** | **NEVER 5V** — destroys mic preamp |
+| **GND** | **GND** | Audio return path |
 
-**Mic nằm cùng WROOM tức là cùng chỗ với điều hoà.** Nếu bạn nằm xa mà nói không nghe rõ,
-đó là đánh đổi của việc gom IR+mic một board. Muốn tách: **kéo dài dây LED IR được**
-(IR không kén dây dài), **đừng kéo dài dây mic** (I2S tốc độ cao, kén dây).
+**Why these pins on S3?**  
+GPIO map of ESP32-S3 differs from ESP32 classic:
+- GPIO22–25 do not exist
+- GPIO26–32 are SPI flash bus (reserved)
+- GPIO33–37 are PSRAM octal (reserved)
 
----
+WROOM-32 used GPIO26/25/34 — all forbidden on S3. Pins 5/6/7 are safe across all S3 variants.
 
-# 🔌 Nguồn — Topo A (S2 là board nguồn)
+**CFG_I2S_CHAN**: Defaults to `I2S_CHANNEL_FMT_ONLY_RIGHT` (microphone drives right channel only, with L/R tied to GND). Verified 2026-07-30: `ONLY_LEFT` on S3 measured RMS=0.0 absolute (with SD pulldown in code) → mic is not driving left. **Do not switch**.
 
-```
-Cốc sạc ≥2A ─C-to-C─► USB-C của S2 (board nguồn duy nhất)
-   S2 5V/VBUS ──► WROOM chân 5V/VIN
-   S2 GND     ──► WROOM GND
-```
+#### IR Transmitter (Daikin AC Control)
 
-**Vì sao S2 làm nguồn, không phải WROOM:** WROOM có **diode nối tiếp USB→5V** rớt ~0.3V nên chân 5V chỉ
-**4.7V**, sát dropout AMS1117 → gốc brownout. **Bơm vào chân VIN là đi TẮT qua diode** → WROOM ăn 5.0V.
-S2 không có diode (chân 5V = 5.0V) nên nó mới là nguồn tốt. (Kế hoạch cũ 16/07 chọn WROOM làm board nguồn —
-**SAI hướng**, dồn thêm tải qua đúng cái diode đang sụt áp.)
+| Pin | → ESP32-S3 GPIO | Notes |
+|---|---|---|
+| **IN** (signal) | **GPIO8** | IR modulation output (3.3V logic) |
+| **VCC** (power) | **5V** | Module is rated 5V (gives 1–2m range) |
+| **GND** | **GND** | |
 
-- **Chỉ chung 5V + GND, KHÔNG chung 3V3** (mỗi board có LDO riêng).
-- **Không cắm USB của board được nuôi cùng lúc** — 2 nguồn 5V đánh nhau → dùng **OTA** để nạp.
-- Nên **hàn** 2 dây liên board (dupont lỏng → gai dòng WiFi làm sụt áp → brownout tái phát).
-- Board WROOM **cũ** brownout tại `WiFi.mode()` → cần **tụ 470-1000µF ở 5V-GND**. Board **mới** không cần
-  (đã kiểm chứng bằng swap: cùng firmware, 0 brownout) → **firmware không phải nguyên nhân**.
+**Why GPIO8?**  
+- GPIO4 is the default (safe on both WROOM and S3).
+- On this specific board (ESP32-S3-CAM N16R8), GPIO4–7 are on the camera header with tight pin spacing → hard to hand-solder.
+- GPIO8 sits in a normal GPIO row → easier soldering.
+- GPIO8 is not a strapping pin and not reserved.
 
----
+**IR Module**: diymore PCB0100 (2-channel, 940nm, 5V-rated). Used as 1-signal module: both LEDs tied to single IN pin (GPIO8). Unmodified.
 
-# Luồng dữ liệu
+#### Strapping Pins (Boot Constraints)
 
-```mermaid
-flowchart LR
-    R[LD2410C radar] -->|OUT G16 + UART 33/18| S2[S2 Mini<br/>radar-node<br/>WiFi + MQTT]
-    S2 -->|MQTT presence + motion + SENSOR| BR{{Mosquitto}}
-    BR -->|SUB presence| W[ESP32 WROOM-32<br/>voice-node<br/>FUSION tại board]
-    M[INMP441 mic] -->|I2S 26/25/34| W
-    W -->|GPIO4, 5V| IR[LED IR → Daikin COOL 25°C]
-    BR <--> B[(Backend Go<br/>chỉ hiển thị + lịch sử)]
-    W <-->|WS audio| B
-    B -->|whisper → ac_cmd| BR
-    BR -->|ac_cmd: lệnh tay + voice| W
-    B --> A[App Flutter Android]
-    BR -.->|tele/SENSOR| A
-```
+| Pin | Status | Constraint |
+|---|---|---|
+| **GPIO0** | Strapping | Must be HIGH at boot (internal pullup) or BOOT pin held. If pulled LOW at boot → bootloader mode. |
+| **GPIO3** | Strapping | Must be HIGH at boot (internal pullup). Low level → download mode. |
+| **GPIO45** | Strapping | Must be HIGH at boot. Low level blocks boot. |
+| **GPIO46** | Strapping | Must be HIGH at boot. Low level blocks boot. |
 
-**ESP32 là nơi DUY NHẤT quyết định bật/tắt điều hoà tự động.** Backend chỉ hiển thị
-(app + lịch sử + chart) và chuyển tiếp lệnh tay. Để cả hai cùng quyết thì chúng lệch nhau
-theo thời gian và không ai biết tin bên nào.
-
-**Điều hoà Daikin** → dùng giao thức có sẵn trong `IRremoteESP8266`, **không cần TSOP,
-không cần học mã**. Mặc định khi tự bật: **25°C, COOL, quạt AUTO** (Daikin gửi trọn 35 byte
-trạng thái mỗi lần, không có "lệnh bật" riêng).
+**Implication**: Do not use GPIO0, 3, 45, 46 for peripherals that actively pull LOW at runtime. IR LED pulling GPIO to LOW = board will not boot.
 
 ---
 
-# Nạp firmware
+### Board 2: Radar-Node (Wemos S2 Mini, ESP32-S2)
 
-**ESP-NOW đã BỎ** — cả 2 board tự nối WiFi + MQTT nên **không còn ràng buộc cùng kênh**, không cần điền
-MAC peer, không có thứ tự nạp bắt buộc. Nạp board nào trước cũng được.
+**Source**: `firmware/radar-node/src/main.cpp` lines 1–38  
+**Sensor**: LD2410C 24GHz millimeter-wave radar
 
-| Board | Cách nạp |
-|---|---|
-| **WROOM** (voice-node) | USB: `pio run -e esp32dev -t upload` · **OTA**: `pio run -e esp32dev_ota -t upload` |
-| **S2 Mini** (radar-node) | USB: giữ BOOT + tap RST, `pio run -e lolin_s2_mini -t upload` · **OTA**: `pio run -e lolin_s2_mini_ota -t upload` |
+#### LD2410C Wiring
 
-OTA cần `export OTA_PASSWORD='...'` (khớp `OTA_PASSWORD` trong `include/config.h`). Giữ env USB làm **đường
-lui** — bản nào làm chết WiFi thì OTA bó tay.
+| LD2410C Pin | → S2 GPIO | Notes |
+|---|---|---|
+| **OUT** (presence digital) | **GPIO16** | HIGH when target detected (INPUT_PULLDOWN in firmware) |
+| **TX** (data transmit) | **GPIO33** | Radar sends data at 256000 baud (connect to S2 RX) |
+| **RX** (command input) | **GPIO18** | S2 sends config commands at 256000 baud (S2 TX → this pin) |
+| **VCC** (power) | **5V** (VBUS) | Radar requires 5V for full range |
+| **GND** | **GND** | **MUST share common GND with S2** (see hazards) |
 
-> WSL: `usbipd attach --wsl --auto-attach --busid <id>`. S2 native-USB **đổi cổng khi reset**
-> (`ttyACM0`→`ttyACM1`) nên cần `--auto-attach`; lần upload đầu hay fail, chạy lại là được.
+**UART Baud**: 256000 (firmware config matches sensor default)
 
-# Kiểm tra sau khi hàn
+**Protocol**:
+- ON boot, firmware initializes UART and sends config commands to radar
+- Firmware reads **both** OUT pin (debounced) and UART (for distance/energy) as presence signal
+- UART failure: ON pin still works, only loses distance/energy diagnostics
+- GPIO16 failure: firmware stops reporting presence entirely
 
-| Việc | Cách |
-|---|---|
-| **IR có bắn không** | **Chĩa camera điện thoại vào LED IR** → thấy nháy tím/trắng (mắt người KHÔNG thấy IR) |
-| **AC vào COOL chưa** | Nghe dàn lạnh **"bíp"** + xem icon ❄ trên dàn lạnh (không phải quạt/giọt nước) |
-| Radar sống không | Sub broker: `tele/<T>/SENSOR` phải có `Detect:1` và **Moving/Static đổi liên tục** khi quơ tay |
-| **Moving=0 mà Detect=1** | → **mất GND chung** (không phải module hỏng). Kiểm chứng: app BLE của HLK vẫn mượt = module khỏe |
-| Presence tới voice-node chưa | Serial WROOM: `[hb] presence=1 link=up occupied=1 seq=N` — `seq` phải tăng |
-| **Rút S2 có tự xử không** | **Rút điện S2** → broker bắn will `present:false` (~15-20s) → Home hết "Có người"; WROOM sau 90s coi vắng → AC tắt |
-| Mic có nghe không | Serial WROOM: nói to → `RMS` vọt lên >2500 + `VAD: phát hiện tiếng nói` |
-| Voice E2E | Nói "bật điều hòa" → serial phải in `[ir] Daikin ON (25C)` |
+---
 
-# Liên quan
-- [`system-architecture.md`](./system-architecture.md)
-- [`project-roadmap.md`](./project-roadmap.md)
-- Vỏ hộp: `hardware/vo-hop-modular.scad` (3 mảnh in rời, PETG 3mm)
+### Board 3: Room-Node (Wemos S2 Mini, ESP32-S2)
+
+**Source**: `firmware/room-node/src/main.cpp` lines 1–69  
+**Sensor**: LD2410C (identical to radar-node)
+
+**Wiring is IDENTICAL to radar-node** (same LD2410C pinout). **Difference is 100% firmware**:
+- **radar-node**: WiFi + MQTT, publishes to broker
+- **room-node**: No WiFi, no MQTT, no OTA. Uses ESP-NOW to relay presence to voice-node only.
+
+**Tradeoff** (user decision 2026-07-17):
+- No WiFi → No OTA (USB-only flashing: hold BOOT pin, tap RST, `pio run -t upload`)
+- No WiFi → No NTP (no real-time clock) → voice-node timestamps all events
+
+**ESP-NOW Channel Hazard**:
+- voice-node stays on WiFi (audio, MQTT, OTA) → radio locked to router's WiFi channel
+- room-node cannot change that channel with ESP-NOW → must scan SSIDs to find matching channel
+- **Wrong channel = packets vanish silently, no error logged**
+
+---
+
+### Board 4: Door-Node (Wemos S2 Mini, ESP32-S2)
+
+**Source**: `firmware/door-node/src/main.cpp` lines 1–8
+
+#### PIR Motion Sensor Wiring
+
+| PIR Pin | → S2 GPIO | Notes |
+|---|---|---|
+| **VCC** (power) | **3V3** | PIR modules are 3.3V-compatible |
+| **OUT** (motion high) | **GPIO7** | HIGH when motion detected |
+| **GND** | **GND** | |
+
+**Power**: USB-C 5V (board uses on-board LDO to supply 3.3V to PIR)
+
+**GPIO7 Status**: Firmware comment notes *"XÁC NHẬN pinout board thật trước khi hàn"* (verify against real board before soldering). GPIO7 is **not** an S2 strapping pin (S2 strapping: GPIO0, 3, 45, 46), but verify board variant before committing to soldering.
+
+**Important Note**: The old doc (2026-07-24) incorrectly stated **"PIR removed from system"** and marked GPIO27 unused. This is **stale and wrong**. Door-node has used PIR since 2026-07-15 (commit `3fc5875`) and remains active in current architecture. Do not re-introduce the old belief.
+
+---
+
+## Power Supply
+
+### Independent USB-C Per Board
+
+```
+Each board:
+  Cốc sạc (≥2A) ─USB-C─► Board USB-C
+                          ├─ 5V rail (powers board logic + peripheral VCC)
+                          └─ GND (signal return)
+```
+
+**No inter-board power links** anymore. Each board powers itself independently.
+
+**Why change from old "S2 as board source"?**  
+Old design (2026-07-24): S2 sourced 5V to WROOM via shared wire.
+- WROOM has a USB diode dropping ~0.3V → VIN only saw 4.7V → risky dropout.
+- S2 native 5V = 5.0V, so it was chosen as source.
+- **Reason for change**: Complicates deployment (must plug S2 first, careful cable order). Independent USB per board is simpler and safer.
+
+### No More Shared Power Rail
+
+- **NEVER** tie multiple boards' 5V rails together (will cause diode conflicts, slow brownout, watchdog reset).
+- Each board has its own USB-C with dedicated charger or hub. Minimum 2A per port for stable 5V.
+- GND is **not** shared between boards (each is isolated by its USB hub's GND).
+- If sensing shared signals across boards (e.g., room-node reading LD2410 and relaying via ESP-NOW to voice-node), only the **signal GPIO** travels; power stays isolated.
+
+---
+
+## Hazards & Lessons Learned
+
+All warnings below have been encountered and verified in production (not theoretical). Specific dates and symptoms included.
+
+### 1. LD2410 Ground Must Be Shared with Host Board
+
+**Date**: 2026-07-23 (production assembly)  
+**Symptom**: `Moving=0, Static=0` in UART output, but `Detect=1` stays on. App's HLK BLE shows radar energy smooth and continuous. **UART reads garbage, BLE works fine** → not a dead sensor.
+
+**Root cause**: Common-mode ground missing between S2 and radar module. UART is differential (needs GND return path). BLE is analog (uses its own EM coupling).
+
+**Fix**: Solder GND wire from radar module to **the same S2 board reading it**. If powering radar from a different board's 5V, the GND return path must still come back to the sensor's I/O host.
+
+**Universal rule**: Power a sensor from the same board that reads its GPIO/UART. Don't split power source and signal host.
+
+### 2. IR Transmitter Module Requires 5V (Verified, Not 3.3V)
+
+**Module**: diymore PCB0100, labeled 5V, 940nm, 1–2m range.
+
+**Voltage**: 5V is **correct** and tested. Feeding 3.3V under-drives the LED array → short range.
+
+- **Signal pin (IN)**: Always 3.3V logic (GPIO drives this).
+- **Power pin (VCC)**: 5V supply only. Feeding 3.3V here degrades range.
+
+**Old doc error**: An earlier revision incorrectly stated "3.3V only." That was overridden once before to 5V. **Do not regress**. Principle: module label is your spec; 5V + 3.3V logic is correct.
+
+### 3. IR LED is Invisible to Naked Eye — Use Phone Camera to Verify
+
+**Wavelength**: 940nm (infrared, beyond human vision).
+
+**Verification**: Aim phone camera (most sensors show IR in near-infrared) at the LED while firmware fires. You should see faint purple/white flicker. **If you see nothing and think the circuit is dead, try the camera test first** — firmware may be firing correctly.
+
+**Debug time saved**: Multiple hours wasted assuming "LED not lit = dead circuit" when firmware was operating fine.
+
+### 4. Strapping Pins Block Boot
+
+**ESP32-S3 strapping pins**: GPIO0, 3, 45, 46 (must be HIGH at boot, or board enters bootloader/download mode).
+
+**Risk**: Peripherals that actively pull LOW → board won't boot. In voice-node, IR LED on GPIO8 is fine. **Never put IR on GPIO3 or GPIO45** (would lock board in boot failure loop).
+
+**Verification**: After moving IR to a new pin, short-circuit the signal to GND with an external wire. If board still boots, the pin is safe. If it freezes, it's a strapping pin.
+
+### 5. Mic Orientation: Inverted = Hears Enclosure, Not Room
+
+**Module**: INMP441 circular Ø10 board (MEMS chip on bottom, solder pads on top).
+
+**Type**: Bottom-port microphone (sound inlet on **same face as printed labels**, not opposite face).
+
+**Correct orientation**:
+- Solder pad face **UP** against enclosure ceiling
+- MEMS chip face **DOWN** into internal cavity
+- Sound inlet hole receives room sound
+
+**Inverted orientation** (common mistake):
+- Solder pad face DOWN (away from ceiling)
+- MEMS chip face UP (exposed to cavity)
+- Sound inlet receives only cavity acoustics, not room sound
+- **Sealing gasket tighter makes it worse** (more trapped air = more cavity resonance)
+
+**Solder blob compensation**: Solder pads are on the same face, so the joint raises that edge off the mounting surface. Use **soft 2-sided foam tape**, not a rigid printed shim — foam flexes around solder blob, rigid shims don't.
+
+**Wire routing**: Route mic wire out through the mic bracket's side channel, **not bent around the board edge** (strain relief).
+
+**Re-verify after changes**: Enclosure changed to v4, board changed WROOM→S3, since this note was written. Mic module itself may be unchanged, but **confirm orientation against the real enclosure before final assembly**.
+
+### 6. No USB Power to Flashed Board While Inter-Board Cables Connected
+
+When powering one board from another board's 5V rail (old topology, no longer used), do not plug the dependent board's USB at the same time. Two 5V sources fight each other.
+
+**Current design (independent USB per board)**: Not an issue, but noted for historical clarity.
+
+### 7. LD2410 Module Placement Away From USB-C Port
+
+**Date**: Early board revisions (pre-2026-07-23)  
+**Incident**: Soldering radar module directly over the USB-C port caused electrical short to 5V rail.
+
+**Rule**: Allocate at least 5mm clearance between radar module and any USB connector. Use board layout or flexible wiring to keep the module away from the port.
+
+---
+
+## Physical Placement
+
+Không có thông số khoảng cách/góc lắp đặt đã đo hoặc chốt trong repo cho mục này — mọi con số
+kiểu "khoảng cách X m, góc Y°" là suy đoán chung chung, không phải số liệu đã kiểm chứng, nên bị
+lược khỏi bản rewrite này để tránh lẫn với các mục hazards ở trên (những mục đó ĐỀU có ngày/số
+liệu thật). Xem `docs/system-architecture.md` cho sơ đồ enclosure v4 hiện tại; nếu cần hướng dẫn
+lắp đặt vật lý cụ thể, ghi lại từ lần lắp thật rồi bổ sung vào đây (đúng phong cách hazards ở trên
+— có ngày, có số đo, không viết mô tả suông).
+
+---
+
+## Flashing Firmware
+
+Each board has USB (TTL) for initial flashing and a fallback OTA path (WiFi).
+
+### Voice-Node (ESP32-S3)
+
+```bash
+# USB (first time or fallback)
+pio run -e esp32s3 -t upload
+
+# OTA (after WiFi configured)
+export OTA_PASSWORD='...'  # from include/config.h
+pio run -e esp32s3_ota -t upload
+```
+
+**USB caveat**: Board has two USB-C ports (TTL and OTA native). **Plug into TTL port only** (the one labeled TTL or next to the CH340 chip). Native USB port causes re-enumeration on every reset (known issue with S3-CAM).
+
+### Radar-Node & Door-Node (Wemos S2 Mini)
+
+```bash
+# USB (first time or fallback)
+pio run -e lolin_s2_mini -t upload
+
+# OTA (after WiFi configured)
+export OTA_PASSWORD='...'
+pio run -e lolin_s2_mini_ota -t upload
+```
+
+**S2 USB caveat**: Native USB port re-enumerates on reset (`ttyACM0` → `ttyACM1`). On WSL, use `usbipd attach --wsl --auto-attach --busid <id>` for auto re-attach. First upload may fail; running again usually succeeds.
+
+### Room-Node (Wemos S2 Mini, No WiFi)
+
+```bash
+# USB only (no OTA — board has no WiFi)
+pio run -e lolin_s2_mini -t upload
+```
+
+No OTA available. To update firmware, must hold BOOT pin, tap RST, then flash via USB.
+
+---
+
+## Verification Checklist After Soldering
+
+| Check | Method | Passed? |
+|---|---|---|
+| **IR fires** | Aim phone camera at IR LED, watch for faint purple/white flicker while firmware runs | ☐ |
+| **IR command sent** | Serial monitor on voice-node: `[ir] Daikin ON (25C)` (or `OFF`) printed — see `main.cpp` line 303 | ☐ |
+| **Radar present signal** | MQTT client: `mosquitto_sub -t 'home/room/presence'` shows `{"present":true\|false}` updating | ☐ |
+| **Radar UART alive** | Subscribe `tele/<DEVICE>/SENSOR`: see `"Detect":1`, `"Moving":N`, `"Static":N` values changing with motion | ☐ |
+| **Missing LD2410 GND** | If `"Moving":0,"Static":0` but `"Detect":1` and BLE app shows energy smooth → **check GND wire, not dead sensor** | ☐ |
+| **Presence reaches voice-node** | Serial monitor on voice-node: nod/wave near radar → `[hb] presence=1 ... seq=N` increments (`main.cpp` line 534) | ☐ |
+| **Mic receives audio** (env `esp32s3`/`esp32dev`, VAD) | Serial monitor: speak near mic → `RMS=... nen=... nguong=600 state=STREAMING ws=...` (`main.cpp` line 678; ngưỡng 600 = `VAD_THRESHOLD_MIN`, đo thực địa 31/07 — xem comment tại chỗ khai báo) | ☐ |
+| **Mic receives audio** (env `esp32s3_kws`, wakeword) | Serial monitor: nói "Vừng ơi" → `[wakeword] TRIGGER score=0.XXX -> STREAMING` (`main.cpp` line 596) | ☐ |
+| **Voice E2E** | Nói lệnh AC rõ ràng → Serial log `[ir] Daikin ON (25C)` xuất hiện sau khi utterance kết thúc | ☐ |
+
+---
+
+## Radar-Node Self-Test Firmware
+
+`firmware/radar-node/platformio.ini` includes an `env:selftest` configuration that builds only `src/selftest.cpp`. Use this to isolate UART/GPIO issues:
+
+```bash
+pio run -e selftest -t upload
+```
+
+This mode scans through multiple baud rates and GPIO configurations to diagnose LD2410 connectivity independent of the main firmware. Useful for:
+- Verifying LD2410 module is powered and responsive
+- Checking UART wiring (TX/RX not swapped)
+- Testing GPIO16 (OUT pin) pullup/pulldown
+
+---
+
+## Related Documentation
+
+- **`docs/system-architecture.md`**: Logical architecture, MQTT topics, state machines, API contracts (software view)
+- **`firmware/voice-node/src/main.cpp`** (lines 1–68): Full hardware comments and strapping pin explanation
+- **`firmware/radar-node/src/main.cpp`** (lines 1–38): LD2410 UART protocol and GPIO layout
+- **`firmware/room-node/src/main.cpp`** (lines 1–69): ESP-NOW relay, channel scanning, tradeoffs
+- **`firmware/door-node/src/main.cpp`** (lines 1–19): PIR configuration and boot note
+- **`plans/260810-0843-voice-node-wakeword-gate/phase-01-*`**: IR module verification (diymore PCB0100 specs, 2026-08-10)
+
+---
+
+**Last verified**: 2026-08-10 by reading all firmware source files  
+**Status**: Reflects current git HEAD (`master` branch)

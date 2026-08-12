@@ -1,281 +1,426 @@
 # Code Standards & Conventions
 
-This document captures the observed patterns in the codebase. Adhere to these standards when contributing to the backend and firmware.
+**Audience**: Contributors and maintainers. Enforce during code review.
 
-## Language Mix & Comment Conventions
+## Principles
 
-**Policy**: Code identifiers are **English**; firmware comments and logs are **Vietnamese**.
+1. **YAGNI**: Don't add abstractions "just in case" — add them when real duplication appears
+2. **KISS**: Prefer simple, obvious code over clever solutions
+3. **No panics**: Backend never panics; firmware loops forever or returns 0
+4. **Testable**: Write code that can be tested (dependency injection, pure functions where possible)
+5. **Documented**: Comments explain **why**, not what (code already says what)
 
-**Rationale**: The project is developed by a Vietnamese-speaking engineer. Firmware comments document practical debugging and operational notes for local context. Backend code follows Go ecosystem conventions (English-language standard library, idiomatic Go docs). This mix is intentional and should be preserved.
+## Language-Specific Standards
 
-**Application**:
-- **Backend (Go)**: All identifiers, package names, function names, and doc comments in English
-- **Firmware (C++)**: All identifiers, function names, variable names in English; inline comments and log messages in Vietnamese
+### Go (Backend)
 
----
+**File organization**:
+- One concern per package (e.g., `statemachine` is separate from `api`)
+- Package `main` only in `cmd/` directories
+- Test files live alongside source (`machine.go` + `machine_test.go`)
 
-## Backend (Go)
-
-### Project Layout
-
-Follow the [Go project layout](https://github.com/golang-standards/project-layout) convention:
-
-```
-backend/
-├── cmd/
-│   └── server/
-│       └── main.go             # Single entry point per binary
-├── internal/                   # Unexported packages (import outside this project = compile error)
-│   ├── {feature}/              # One package per logical feature
-│   ├── config/
-│   ├── events/
-│   ├── mqttclient/
-│   ├── statemachine/
-│   └── api/
-└── Dockerfile, docker-compose.yml
-```
-
-**Rationale**: Organizes code by responsibility, prevents accidental external imports of internal details, aligns with Go community conventions.
-
-### Naming Conventions
-
-| Item | Convention | Example |
-|------|-----------|---------|
-| Package | lowercase, no underscore, 1-2 words | `config`, `mqttclient`, `statemachine` |
-| Function | camelCase, exported = PascalCase | `func (c *Config) Load()` |
-| Variable | camelCase, meaningful names | `enterWindow`, `exitTimeout` |
-| Constant | SCREAMING_SNAKE_CASE for module-level constants | `DefaultExitTimeoutS = 60` |
-| Error | Prefix with package, end with Err | `config.ErrMissingHost` |
-| Interface | PascalCase, describe behavior (often `-er` suffix) | `StateProvider`, `Publisher` |
-| Receiver | Short (1-2 letter abbreviation) | `func (c *Client) Connect()` instead of `func (client *Client)` |
-
-### Interfaces at Point of Use
-
-Define interfaces in the package that **uses** them, not in the package that implements them.
-
-**Example**:
+**Naming**:
 ```go
-// In internal/api/handlers.go
+// Functions & variables: camelCase
+func (m *Machine) OnPresence(present bool) *string
+
+// Interfaces: -er suffix
 type StateProvider interface {
-    GetState() (*state.State, error)
+    Snapshot() Snapshot
 }
 
-// In internal/statemachine/machine.go (implements StateProvider but doesn't define it)
-type Machine struct { ... }
-func (m *Machine) GetState() (*state.State, error) { ... }
+// Constants: SCREAMING_SNAKE_CASE
+const DefaultEnterWindow = 15 * time.Second
+
+// Packages: lowercase, single word if possible
+package statemachine  // good
+package state_machine // bad
 ```
 
-**Rationale**: Decouples concrete implementation from consumer logic, makes testing easier (inject test doubles), aligns with Go idiom.
+**Error handling**:
+```go
+// Always check errors, never ignore
+if err != nil {
+    log.Printf("context: %v", err)
+    // Return early, don't nest
+    return
+}
 
-### Error Handling
+// Use error wrapping (Go 1.13+)
+if err != nil {
+    return fmt.Errorf("operation: %w", err)
+}
 
-- Explicit error returns; never panic except in `main()` for setup failures
-- Errors wrap context: `fmt.Errorf("mqtt: %w", err)` not bare `err`
-- Sentinel errors at module level (unexported): `var errConnectionClosed = errors.New("connection closed")`
-- Consumer logic checks specific errors: `if errors.Is(err, context.Canceled) { ... }`
+// No panics in backend (except init)
+// if condition { panic("...") }  // ❌ NEVER
 
-### Testing
-
-- **Location**: Test files in same package (e.g., `machine_test.go` in `internal/statemachine/`)
-- **Naming**: Test functions are `TestXxx` and sub-tests use scenarios, not numeric IDs
-- **Pattern**: Table-driven tests with scenario descriptions:
-  ```go
-  func TestMachine(t *testing.T) {
-      tests := []struct {
-          name string
-          // fields
-      }{
-          {name: "enter occupancy on motion within window", ...},
-          {name: "exit occupancy after timeout", ...},
-      }
-      for _, tt := range tests {
-          t.Run(tt.name, func(t *testing.T) { ... })
-      }
-  }
-  ```
-- **Coverage**: Aim for test-level code coverage of core logic (state machine, config parsing); APIs tested via integration/E2E.
-
-### Logging
-
-Use Go's `log/slog` (1.21+) or similar structured logging:
-- Never `fmt.Println` or bare `log.Printf`
-- Log levels: DEBUG (verbose), INFO (normal flow), WARN (recoverable issues), ERROR (unrecoverable)
-- Structured fields: `slog.String("topic", "home/room/ac_cmd")`
-
-### Dependencies
-
-- **Constraint**: Use only Go standard library + minimal, well-maintained third-party packages
-- **Current approved**: `paho.mqtt.golang` (MQTT client), `chi` (HTTP router)
-- **Before adding**: Evaluate maturity, maintenance, size, security track record
-- **Vendoring**: Use Go modules; avoid vendoring into repo unless offline builds required
-
-### Code Formatting & Lint
-
-- **Format**: Run `gofmt` before commit (or configure IDE to auto-format on save)
-- **Linting**: Run `golangci-lint` (if configured); fix all warnings
-- **Comments**: Exported functions/types must have doc comments; format: "FunctionName does X."
-
----
-
-## Firmware (C++ / Arduino / PlatformIO)
-
-### Project Structure
-
-Each node is a standalone PlatformIO project:
-
-```
-{node-name}/
-├── src/
-│   └── main.cpp              # Single file per node (MVP size permits)
-├── include/
-│   └── config.h.example      # Secrets template (checked in)
-│   └── config.h              # Actual secrets (gitignored)
-└── platformio.ini            # Board, framework, lib dependencies
+// Backend exceptions: use 500, 503, etc.
+http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 ```
 
-**Rationale**: Each node has distinct sensors and firmware logic; no code sharing reduces complexity for ESP32-constrained environment.
+**Concurrency**:
+```go
+// Protect shared state with sync.RWMutex
+type Machine struct {
+    mu sync.RWMutex
+    // ...
+}
 
-### Naming Conventions
+func (m *Machine) Snapshot() Snapshot {
+    m.mu.RLock()
+    defer m.mu.RUnlock()
+    return Snapshot{...}
+}
 
-| Item | Convention | Example |
-|------|-----------|---------|
-| Function | camelCase | `void sendAC(const char* key)` |
-| Variable | camelCase | `long lastMotionTime`, `bool isPresent` |
-| Constant | SCREAMING_SNAKE_CASE | `#define PIR_PIN 7` |
-| Macro | SCREAMING_SNAKE_CASE | `#define DEBOUNCE_MS 2000` |
+// Channels for goroutine coordination (not locks)
+// Goroutines should not modify mutable state directly
+```
 
-### Code Organization
+**Testing**:
+```go
+// Table-driven tests for multiple cases
+var tests = []struct {
+    name     string
+    input    int
+    expected string
+}{
+    {"case 1", 5, "ok"},
+    {"case 2", -1, "error"},
+}
 
-In `main.cpp`:
-1. Includes + macros
-2. Global variables (WiFi, MQTT, sensor state)
-3. Helper function declarations
-4. `setup()` — initialization
-5. `loop()` — main tick loop
-6. Helper function implementations
-7. ISR handlers (interrupt service routines)
+for _, tt := range tests {
+    t.Run(tt.name, func(t *testing.T) {
+        got := Function(tt.input)
+        if got != tt.expected {
+            t.Errorf("got %q, want %q", got, tt.expected)
+        }
+    })
+}
+```
 
-### Comments & Logging
+### Dart (Flutter App)
 
-- **Inline comments**: Vietnamese, explain non-obvious logic (e.g., why a delay is necessary)
-- **Function blocks**: Brief Vietnamese header describing purpose
-- **Serial debug output**: Vietnamese (e.g., `Serial.println("học IR thành công");`)
-- **Critical operations**: Add timestamp/state prefix for troubleshooting (e.g., `[ts] Reconnecting MQTT`)
+**Naming**:
+```dart
+// Classes: PascalCase
+class HomeScreen extends ConsumerStatefulWidget
 
-### Error Handling
+// Functions/methods: camelCase
+void updateState()
 
-- No exceptions (Arduino uses no standard exception support)
-- Return `bool` for success/failure from functions
-- Log errors to Serial before retrying
-- Auto-reconnect loops for MQTT (don't block loop)
+// Variables: camelCase
+final int screenWidth = 400;
+final _private = "not exported";
 
-### Hard-coded Pins
+// Files: snake_case.dart
+home_screen.dart
+api_client.dart
+```
 
-Document all GPIO assignments in a header comment block at top of `main.cpp`:
+**Riverpod providers**:
+```dart
+// Type providers for testability
+final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
+// State providers for mutable state
+final userNameProvider = StateProvider<String>((ref) => "");
+
+// FutureProviders for async operations
+final stateSnapshotProvider = FutureProvider<Snapshot>((ref) async {
+    final client = ref.watch(apiClientProvider);
+    return await client.fetchState();
+});
+
+// Invalidate on manual refresh
+ref.refresh(stateSnapshotProvider);
+```
+
+**Error handling**:
+```dart
+// Use try/catch, never let exceptions propagate silently
+try {
+    final data = await fetchData();
+} on SocketException catch (e) {
+    log("network error: $e");
+    // Show UI toast or fallback state
+} catch (e) {
+    log("unexpected error: $e");
+}
+
+// Never use bare `catch (e) { }`—always specify exception type
+```
+
+**Testing**:
+```dart
+// Golden tests for UI
+testWidgets('HomeScreen renders correctly', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await expectLater(find.byType(MyApp), matchesGoldenFile('home.png'));
+});
+```
+
+### C/C++ (Firmware)
+
+**Naming**:
 ```cpp
-// ============================================
-// ESP32-S2 (Wemos S2 Mini) — Room node Pin Assignment
-// ============================================
-// GPIO16 — LD2410 radar digital out (input)
-// GPIO5  — IR blaster control (output → transistor)
-// GPIO15 — IR receiver (input, TSOP38238)
-// UART   — GPIO33(TX), GPIO18(RX) for LD2410 UART (if used)
-// (PIR đã dời sang voice-node WROOM-32 GPIO27 — fusion ở backend)
-// ============================================
+// Macros: SCREAMING_SNAKE_CASE
+#define MQTT_PORT 1883
+#define CFG_I2S_SCK 5
+
+// Functions: camelCase
+void setupWiFi()
+void handleMotion()
+
+// Variables: camelCase (no Hungarian notation)
+int motionPin = 25;
+unsigned long lastMotionMs = 0;
+
+// Global state: rare, but if needed, prefix with `g_`
+static int g_acState = 0;  // file-scope static
 ```
 
-### MQTT & Networking
+**Memory & performance**:
+```cpp
+// No malloc/new in loop; use stack or static allocation
+void processAudio(uint16_t* buffer, size_t len) {
+    // OK: fixed-size array on stack
+    uint8_t features[40];
+    // Not OK: malloc in loop
+    // uint8_t* features = malloc(40);
+}
 
-- **Client ID**: Unique per node, set in `config.h` (e.g., `MQTT_CLIENT_ID "home-room-node"`, `"home-voice-node"`)
-- **Payload format**: Hand-built JSON using `snprintf` (no JSON library to save space)
-  ```cpp
-  char payload[64];
-  snprintf(payload, sizeof(payload), R"({"ts":%ld,"motion":true})", millis()/1000);
-  mqttClient.publish("home/door/motion", payload, true, 1); // retain=true, QoS=1
-  ```
-- **Reconnect**: Exponential backoff or simple 5s retry in loop; log each attempt
-- **Topics**: Hardcoded or in `config.h`; match backend contract in [`docs/system-architecture.md`](./system-architecture.md)
+// Avoid String class in tight loops (high memory fragmentation)
+// Use const char* or char arrays
+void logEvent(const char* msg) { Serial.println(msg); }
+```
 
-### Memory & Performance Constraints
+**Error handling**:
+```cpp
+// No exceptions; use return codes or global state
+int connectMQTT() {
+    if (!mqttClient.connect(MQTT_HOST, MQTT_PORT)) {
+        Serial.println("MQTT connect failed");
+        return -1;
+    }
+    return 0;
+}
 
-- **ESP32-S2**: 320 KB SRAM, limited CPU; avoid large buffers or blocking operations
-- **Loop timing**: Keep `loop()` iteration under 100ms; use timers/flags instead of delays
-- **String handling**: Use `char[]` buffers with fixed size; avoid `String` objects if space-critical
-- **Serial baud**: 115200 (standard for debugging)
+// For critical failures, loop forever (watchdog will reboot if needed)
+if (!LittleFS.begin()) {
+    while (1) { Serial.println("FS failed"); delay(1000); }
+}
+```
 
-### Configuration & Secrets
+**Timing**:
+```cpp
+// Use unsigned long for millis(), not int (overflow risk)
+unsigned long start = millis();
+if (millis() - start > 1000) { /* 1 second elapsed */ }
 
-- **Template**: `config.h.example` checked in with dummy values:
-  ```cpp
-  #define WIFI_SSID "SSID_PLACEHOLDER"
-  #define WIFI_PASS "PASS_PLACEHOLDER"
-  #define MQTT_HOST "192.168.1.100"
-  #define MQTT_PORT 1883
-  #define MQTT_USER "user"
-  #define MQTT_PASS "password"
-  #define MQTT_CLIENT_ID "home-room-node"
-  ```
-- **Real file**: Copy template to `config.h`, edit with real values, add to `.gitignore`
-- **Never commit** `config.h` or any file with credentials
+// No delay() in loops; use time-based state machine instead
+unsigned long lastEventMs = 0;
+const unsigned long DEBOUNCE_MS = 100;
+if (digitalRead(pin) && (millis() - lastEventMs > DEBOUNCE_MS)) {
+    handleEvent();
+    lastEventMs = millis();
+}
+```
 
-### Libraries
+### Python (ASR Service)
 
-- **MQTT**: 256dpi/MQTT@^2.5 (prefers QoS1 publish support over PubSubClient)
-- **IR**: crankyoldgit/IRremoteESP8266@^2.8.6 (for raw IR capture/replay)
-- **No JSON library**: Hand-build JSON to conserve space
+**Naming**:
+```python
+# Functions: snake_case
+def transcribe_audio(file_path: str) -> str:
 
-### Testing Strategy (Deferred)
+# Classes: PascalCase
+class WhisperClient:
 
-- Hardware integration testing via real MQTT broker (mosquitto_pub/sub)
-- No unit test framework on embedded; instead, manual serial logging verification
-- Future: Add hardware test harness once all nodes assembled
+# Constants: SCREAMING_SNAKE_CASE
+MAX_FILE_SIZE_MB = 50
+DEFAULT_TIMEOUT_SECONDS = 30
+
+# Private functions/vars: leading underscore
+def _preprocess_audio(data):
+```
+
+**Type hints**:
+```python
+# Always use type hints for public functions
+def score_samples(folder: str, output: str) -> Dict[str, float]:
+
+# Avoid `Any` if possible; be specific
+from typing import List, Dict, Optional
+def process(items: List[str], config: Optional[Dict[str, int]]) -> None:
+```
+
+**Testing**:
+```python
+# Unit tests with pytest
+def test_transcribe_vietnamese():
+    result = transcribe_audio("sample.wav")
+    assert "bật" in result or "tắt" in result
+
+# Fixtures for reusable setup
+@pytest.fixture
+def mock_model():
+    return MagicMock()
+```
+
+## MQTT Payload Standards
+
+**All payloads: JSON with `ts` field**:
+```json
+{
+  "ts": 1700000000000,
+  "<key>": "<value>"
+}
+```
+
+**Timestamp format**: Unix epoch in **milliseconds** (not seconds)
+
+**Topics**: lowercase kebab-case, max 4 segments
+```
+home/room/presence      ✅ good
+home/room/ac-cmd        ❌ bad (use underscore: ac_cmd)
+home/room/ac_cmd        ✅ good
+home/room/ac/cmd        ❌ bad (too many segments)
+```
+
+**Publish contracts** (documented in `firmware/mqtt/README.md`):
+- Verify all topic names match before merge
+- If changing topic, update both firmware + docs + backend
+
+## Testing Standards
+
+### Go Backend
+
+**Minimum coverage**:
+- State machine transitions (all paths in evaluate())
+- MQTT payload parsing (valid + invalid JSON)
+- Voice command parsing (at least 20 test cases per language)
+- Store operations (create, read, list, boundaries)
+
+**Run before commit**:
+```bash
+go test ./...
+go vet ./...
+go fmt ./...
+```
+
+### Firmware (PlatformIO)
+
+**Minimum checks**:
+- Compile without warnings (all platforms)
+- `pio check` (static analysis)
+- Verify on hardware: serial monitor output, MQTT broker observation
+
+**No unit tests on target** (embedded constraint); instead:
+- Test logic in Go (cross-compile state machine validation if needed)
+- Hardware validation via MQTT trace + serial logs
+
+### Flutter App
+
+**Minimum checks**:
+- Golden tests for key screens (Home, Settings)
+- Riverpod provider tests (mock API client)
+- `flutter analyze` (no analyzer warnings)
+
+**Run before commit**:
+```bash
+flutter test
+flutter analyze
+```
+
+## Code Review Checklist
+
+- [ ] Naming: does it follow language conventions?
+- [ ] Testing: are edge cases covered?
+- [ ] Errors: are all errors handled (no silent failures)?
+- [ ] Secrets: no hardcoded API keys, passwords, tokens?
+- [ ] Performance: any O(n²) loops or unbounded allocations?
+- [ ] Concurrency: mutexes protecting shared state?
+- [ ] Documentation: comments explain **why**, not what?
+- [ ] Commits: are messages conventional (feat/fix/docs)?
+
+## Commit Message Format
+
+Use conventional commits:
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types**:
+- `feat`: new feature
+- `fix`: bug fix
+- `docs`: documentation
+- `style`: formatting (no logic change)
+- `refactor`: code reorganization (no behavior change)
+- `test`: add/update tests
+- `ci`: CI/CD config
+- `chore`: build, deps, tooling
+
+**Scope** (optional): module name (api, statemachine, app)
+
+**Subject**: imperative, present tense, lowercase, no period
+```
+✅ feat(voice): add Vietnamese wakeword detection
+❌ feat(voice): Added wakeword feature
+❌ feat(voice): Wakeword detection.
+```
+
+**Body** (if significant):
+- Explain **why**, not what
+- Reference issue numbers (#123)
+- Mention breaking changes (BREAKING CHANGE:)
+
+**Example**:
+```
+feat(statemachine): increase ExitTimeout from 30s to 60s
+
+Radar shows false presence drops every 20-30s when door opens.
+New 60s timeout allows 2-3 drops without toggling occupancy.
+
+Fixes #42
+```
+
+## Documentation Standards
+
+**Inline comments**:
+```go
+// ✅ Explains why
+// Presence can false-trigger through walls (24GHz penetration).
+// Require motion confirmation within 15s to avoid spurious AC toggles.
+if m.present && !m.occupied {
+    if now.Sub(m.lastMotionAt) <= m.cfg.EnterWindow {
+        m.occupied = true
+    }
+}
+
+// ❌ Restates code
+// Set occupied to true if present and motion recent
+```
+
+**Function/method comments**:
+```go
+// OnPresence updates the presence state and evaluates AC decision.
+// Returns a non-nil pointer to "on" or "off" if AC state should change.
+func (m *Machine) OnPresence(present bool, ts int64, now time.Time) *string
+```
+
+**File headers**:
+```go
+// Package statemachine implements a tick-based state machine for
+// occupancy detection. It fuses radar presence and motion data to
+// decide AC on/off with hysteresis to prevent flapping.
+package statemachine
+```
 
 ---
 
-## Cross-Cutting Patterns
-
-### Configuration Management
-
-- **Backend**: Environment variables (12-factor app style); parsed in `internal/config`
-- **Firmware**: Compile-time constants in `config.h` (no runtime env parsing on ESP32)
-- **Broker**: Docker environment vars (docker-compose.yml)
-
-### MQTT Message Contract
-
-All payloads are JSON; all topics and QoS levels documented in [`docs/system-architecture.md`](./system-architecture.md).
-
-### Graceful Shutdown & Cleanup
-
-- **Backend**: Signal handler in main.go; cleanly closes MQTT client + HTTP server
-- **Firmware**: N/A (no graceful shutdown on embedded; power-off is expected)
-
----
-
-## Development Workflow
-
-1. **Write code** following the standards above
-2. **Lint & format**:
-   - Go: `gofmt -w .` + `golangci-lint run`
-   - Firmware: No automatic formatter; manual review
-3. **Test**:
-   - Go: `go test ./...` (all tests must pass)
-   - Firmware: Manual compile check via PlatformIO (`platformio run`)
-4. **Commit**: Concise message, reference GitHub issue if applicable
-5. **Document**: Update `docs/` if behavior, API, or architecture changed
-
----
-
-## Style Review Checklist
-
-Before submitting code for review:
-
-- [ ] Identifiers and functions follow naming conventions
-- [ ] Error handling is explicit; no silent failures
-- [ ] Comments explain "why," not obvious "what"
-- [ ] No hardcoded credentials (use config files)
-- [ ] Tests added/updated for new behavior
-- [ ] Linting passes (Go)
-- [ ] No debug print statements left in code
-- [ ] Documentation updated (if public API changed)
-
+**Last updated**: 2026-08-10
