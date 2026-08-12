@@ -29,6 +29,8 @@
 #include <driver/gpio.h>       // gpio_set_pull_mode() — pulldown chân SD của mic, xem setupI2S()
 #include <math.h>
 #include <esp_system.h>        // esp_reset_reason() — chẩn đoán lý do reset (9 = BROWNOUT)
+#include <esp_heap_caps.h>     // heap_caps_malloc(MALLOC_CAP_SPIRAM) — buffer snore đặt PSRAM, xem bên dưới
+#include <atomic>              // std::atomic cho cờ handoff snoreEventPending/Confidence giữa 2 core
 
 #include "config.h"
 
@@ -75,6 +77,8 @@ static const uint8_t AC_DEFAULT_FAN  = kDaikinFanAuto;
 static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
 // SUBSCRIBE (không publish) — nguồn presence duy nhất là radar-node.
 static const char *TOPIC_PRESENCE = "home/room/presence";
+// TOPIC_SNORE_EVENT khai báo cùng khối #ifdef ENABLE_WAKEWORD với phần state snore khác (bên dưới) —
+// chỉ dùng trong loop() ở nhánh đó, khai riêng ở env esp32dev/esp32s3 (không wakeword) sẽ là biến chết.
 
 // ---- Nguồn radar: radar-node publish home/room/presence ----
 // voice-node chỉ NGHE topic này ({"ts","present"}); mọi lọc tinh (cự ly/năng lượng,
@@ -246,6 +250,57 @@ static const float WAKEWORD_THRESHOLD = 0.80f;
 // STREAMING -> im lặng -> LISTENING -> TRIGGER mới chỉ vài trăm ms sau, score vẫn 0.99x liên tục.
 static const uint32_t WAKEWORD_COOLDOWN_MS = 1200;
 uint32_t wakewordCooldownUntilMs = 0;
+
+// ---- Snore detection: scaffold kiến trúc B+ (CHƯA có model thật) ----
+// Xem docs/voice-node-snore-wakeword-architecture.md mục 4.2 + plans/260812-1029-...-scaffold/.
+// Buffer tích luỹ ~1s cùng cơ chế với preRoll ở trên, nhưng KHÔNG memmove trượt (snore không cần bù
+// độ trễ trigger) — đầy thì cắt snapshot, reset, tích luỹ lại. Task riêng trên core khác chỉ tính
+// "placeholder score" (RMS trung bình cửa sổ, dùng lại computeRms() có sẵn) — chỗ cắm model MFCC thật
+// sau này chỉ cần thay nội dung snoreTask(), không đổi kiến trúc buffer/task xung quanh.
+static const size_t SNORE_WINDOW_SAMPLES = 16000;  // ~1s @ 16kHz mono (SAMPLE_RATE)
+
+// 2 buffer x 16000 x 2 byte = ~62.5KB — đáng kể so với SRAM (~512KB, đã chia sẻ WiFi stack + tensor
+// arena wakeword), không đáng kể so với PSRAM (N16R8 có 8MB) -> đặt thẳng PSRAM, khỏi cần đo SRAM trước
+// rồi mới quyết (xem Validation Log plan.md — PSRAM là lựa chọn rõ ràng, đo trước chỉ tổ mất 1 vòng
+// build). Vẫn log free heap lúc boot để có số liệu thật, không suy đoán suông.
+static int16_t *snoreAccumBuf    = nullptr;  // tích luỹ dần trong loop(), reset về đầu khi đầy
+static int16_t *snoreSnapshotBuf = nullptr;  // snapshot cho snoreTask đọc — xem rào chắn notify dưới
+static size_t   snoreAccumCount  = 0;
+
+// Producer (loop(), core 1) chỉ ghi đè snoreSnapshotBuf SAU khi đã notify lần trước — xTaskNotifyGive/
+// ulTaskNotifyTake làm hàng rào tuần tự, KHÔNG cần mutex vì đúng 1 producer + 1 consumer, không có ghi
+// đồng thời từ 2 phía (xem Risk Assessment phase 1: nếu model thật sau này chạy chậm hơn 1s có thể mất
+// dữ liệu — chấp nhận được với placeholder RMS tính rất nhanh).
+TaskHandle_t snoreTaskHandle = nullptr;
+
+// ---- Event Manager (Phase 2, vẫn placeholder) — debounce/hysteresis trước khi publish MQTT ----
+// Số khởi điểm để test kiến trúc (Validation Session 1 plan phase 2), KHÔNG phải ngưỡng phát hiện ngáy
+// thật — tinh chỉnh khi test tay, đổi hẳn khi có model MFCC thật thay placeholder RMS.
+static const float    SNORE_PLACEHOLDER_THRESHOLD = 500.0f;  // thấp hơn VAD_THRESHOLD_MIN (600.0f) —
+                                                               // dễ trigger khi test tay (vỗ tay/nói to)
+static const uint8_t  SNORE_CONSECUTIVE_WINDOWS   = 3;        // ~3s liên tục mới confirm — tránh 1
+                                                               // tiếng động ngắn kích hoạt (temporal
+                                                               // filtering, xem docs mục 6.3/13)
+static const uint32_t SNORE_COOLDOWN_MS           = 5000;     // khác WAKEWORD_COOLDOWN_MS (1200) vì
+                                                               // snore đặc trưng kéo dài hơn 1 utterance
+uint8_t  snoreConsecutiveCount = 0;
+uint32_t snoreCooldownUntilMs  = 0;
+
+// Hàng rào giữa snoreTask (core 0, producer) và loop() (core 1, consumer/publisher) — KHÔNG gọi
+// mqtt.publish() trực tiếp từ snoreTask: lib 256dpi/MQTT (.pio/libdeps/.../MQTT/src/MQTTClient.h)
+// không có mutex/lock nào trong toàn bộ source, không tài liệu nào xác nhận thread-safe. mqtt.loop()
+// đã chạy trong loop() chính (core 1) — publish cũng phải chạy ở ĐÚNG task đó, tránh race condition
+// không định kỳ trên state nội bộ của lib. snoreTask chỉ ĐẶT CỜ, loop() đọc cờ rồi tự publish.
+//
+// std::atomic thay vì volatile: volatile chỉ chặn compiler cache/reorder truy cập BIẾN ĐÓ, không phải
+// bảo đảm chính thức của C++ memory model qua 2 core — không phát sinh lệnh hàng rào bộ nhớ (memw trên
+// Xtensa) để đảm bảo core 1 thấy đúng thứ tự ghi snoreEventConfidence RỒI MỚI thấy snoreEventPending.
+// release/acquire ở đây đúng vai trò: producer release SAU khi ghi xong payload, consumer acquire
+// TRƯỚC khi đọc payload — loại bỏ hẳn phụ thuộc vào hành vi pipeline cụ thể của Xtensa LX7 (in-order,
+// chưa chắc giữ nguyên nếu code xung quanh đổi hoặc core khác dùng sau này).
+std::atomic<bool>  snoreEventPending{false};
+std::atomic<float> snoreEventConfidence{0.0f};
+static const char *TOPIC_SNORE_EVENT = "home/room/snore_event";
 #endif
 
 IRDaikin152 ac(PIN_IR_SEND);   // 152-bit: NGẮN NHẤT trong các biến thể còn setPower thật
@@ -426,6 +481,42 @@ float computeRms(const int16_t *buf, size_t n) {
   return (float)sqrt(sumSq / (double)n);
 }
 
+#ifdef ENABLE_WAKEWORD
+// ---- Task snore (core 0) — CHƯA phải phát hiện ngáy thật, chỉ scaffold kiến trúc B+ ----
+// Chờ notify từ loop() (core 1) mỗi khi snoreSnapshotBuf có 1 cửa sổ ~1s mới, tính RMS trung bình
+// (placeholder — model MFCC thật thay chỗ này sau, không đổi phần còn lại), log ra Serial để verify
+// task chạy đúng core + không ảnh hưởng nhịp wakeword.
+void snoreTask(void *) {
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    float rms = computeRms(snoreSnapshotBuf, SNORE_WINDOW_SAMPLES);
+    Serial.printf("[snore] rms=%.1f core=%d\n", rms, xPortGetCoreID());
+
+    // Event Manager placeholder (Phase 2): N cửa sổ liên tiếp vượt ngưỡng mới confirm (temporal
+    // filtering), rồi cooldown trước khi confirm event kế tiếp — cùng nguyên tắc WAKEWORD_COOLDOWN_MS.
+    uint32_t now = millis();
+    if (rms > SNORE_PLACEHOLDER_THRESHOLD) {
+      if (snoreConsecutiveCount < 255) snoreConsecutiveCount++;
+    } else {
+      snoreConsecutiveCount = 0;
+    }
+
+    if (snoreConsecutiveCount >= SNORE_CONSECUTIVE_WINDOWS && now >= snoreCooldownUntilMs) {
+      // Chuẩn hoá placeholder 0-1: đạt đúng ngưỡng = 0.5, gấp đôi ngưỡng = 1.0 (kẹp trên). KHÔNG phải
+      // confidence model thật — chỉ để payload có giá trị hợp lệ test contract (xem Risk Assessment).
+      float confidence = rms / (SNORE_PLACEHOLDER_THRESHOLD * 2.0f);
+      if (confidence > 1.0f) confidence = 1.0f;
+      // release: ghi confidence PHẢI thấy được trên core 1 TRƯỚC KHI core 1 thấy pending=true bên dưới.
+      snoreEventConfidence.store(confidence, std::memory_order_relaxed);
+      snoreEventPending.store(true, std::memory_order_release);
+      snoreCooldownUntilMs = now + SNORE_COOLDOWN_MS;
+      snoreConsecutiveCount = 0;
+      Serial.printf("[snore] EVENT confidence=%.3f -> chờ loop() publish\n", confidence);
+    }
+  }
+}
+#endif
+
 // ---- Log trạng thái WS (không gọi logic nghiệp vụ ở đây, chỉ debug) ----
 void onWsEvent(WStype_t type, uint8_t *payload, size_t length) {
   switch (type) {
@@ -508,6 +599,27 @@ void setup() {
   wakewordReady = featOk && modelOk;
   Serial.printf("[wakeword] init: features=%s model=%s -> %s\n", featOk ? "OK" : "LỖI",
                modelOk ? "OK" : "LỖI", wakewordReady ? "sẵn sàng" : "TẮT");
+
+  // Snore scaffold (xem khai báo buffer/task phía trên) — log heap TRƯỚC/SAU cấp phát PSRAM để có
+  // số liệu thật (không suy đoán), lỗi cấp phát chỉ tắt snore task, KHÔNG chặn boot (cùng triết lý
+  // với wakewordReady ở trên: an toàn hơn là tự bật nhầm mà không log rõ).
+  Serial.printf("[snore] heap trước cấp phát: free=%u psram=%u\n",
+                (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
+  snoreAccumBuf = (int16_t *)heap_caps_malloc(SNORE_WINDOW_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+  snoreSnapshotBuf = (int16_t *)heap_caps_malloc(SNORE_WINDOW_SAMPLES * sizeof(int16_t), MALLOC_CAP_SPIRAM);
+  Serial.printf("[snore] heap sau cấp phát: free=%u psram=%u\n",
+                (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
+
+  if (snoreAccumBuf && snoreSnapshotBuf) {
+    // Priority 1 = mặc định loopTask Arduino (tskIDLE_PRIORITY + 1) — snoreTask CÙNG priority nhưng
+    // KHÁC core (0, xem Risk Assessment plan phase 1: WiFi/LWIP task cũng ở core 0, chấp nhận rủi ro
+    // tranh chấp nhẹ, đã xác nhận qua Validation Session 1). Không hạ priority thêm vì không tranh
+    // CPU với loopTask (khác core) — chỉ tranh với WiFi task nếu có, vốn chủ yếu interrupt-driven.
+    xTaskCreatePinnedToCore(snoreTask, "snore", 4096, nullptr, 1, &snoreTaskHandle, 0);
+    Serial.printf("[snore] task tạo xong, core loop()=%d\n", xPortGetCoreID());
+  } else {
+    Serial.println("[snore] LỖI cấp phát PSRAM -> snore task TẮT (wakeword không ảnh hưởng)");
+  }
 #endif
 }
 
@@ -559,6 +671,25 @@ void loop() {
 
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop();  // keepalive MQTT (i2s_read timeout 200ms đảm bảo gọi đủ thường)
+
+#ifdef ENABLE_WAKEWORD
+  // snoreTask (core 0) chỉ đặt cờ — publish LUÔN chạy ở đây (core 1, cùng task với mqtt.loop() ở trên)
+  // vì lib 256dpi/MQTT không có mutex nội bộ nào (xem khai báo snoreEventPending phía trên).
+  // acquire: nếu thấy pending=true, đảm bảo thấy đúng giá trị confidence mà core 0 đã ghi TRƯỚC đó.
+  if (snoreEventPending.load(std::memory_order_acquire)) {
+    snoreEventPending.store(false, std::memory_order_relaxed);  // xoá cờ TRƯỚC khi publish — event kế
+                                 // tiếp từ snoreTask không bị mất dù publish() bên dưới có chặn một lúc.
+    char payload[96];
+    // ts = millis() (uptime), KHÔNG phải unix epoch — voice-node chưa có NTP sync. Khác "ts=0 chưa
+    // sync" của các node khác (giá trị đó CÓ epoch thật khi sync xong); ở đây millis() luôn có ý nghĩa
+    // tương đối (thứ tự/khoảng cách giữa các event), ts=0 cứng sẽ không phân biệt được event nào.
+    snprintf(payload, sizeof(payload), "{\"ts\":%lu,\"confidence\":%.3f,\"duration_ms\":%u}",
+             (unsigned long)millis(), snoreEventConfidence.load(std::memory_order_relaxed),
+             (unsigned)SNORE_CONSECUTIVE_WINDOWS * 1000);
+    bool ok = mqtt.publish(TOPIC_SNORE_EVENT, payload, false, 1);
+    Serial.printf("[snore] publish %s -> %s\n", payload, ok ? "OK" : "LỖI");
+  }
+#endif
 
   updateFusion(now);
   flushIR(now);   // sau updateFusion: gộp được cả lệnh MQTT lẫn quyết định fusion trong cùng vòng
@@ -654,6 +785,24 @@ void loop() {
               (kPreRollFrameCount - 1) * I2S_READ_SAMPLES * sizeof(int16_t));
       memcpy(&preRoll[(kPreRollFrameCount - 1) * I2S_READ_SAMPLES], pcmBuf,
              samples * sizeof(int16_t));
+    }
+  }
+
+  // Snore scaffold: tích luỹ liên tục (không quantize theo khung như preRoll ở trên — chỉ cộng dồn
+  // thẳng, cửa sổ không cần liền mạch tuyệt đối vì placeholder RMS không nhạy với vài mẫu thiếu).
+  // Chạy CẢ HAI trạng thái LISTENING/STREAMING (khác wakeword/preRoll chỉ chạy lúc LISTENING) — snore
+  // không có khái niệm "utterance" để tạm dừng khi voice-node đang stream giọng nói qua wakeword.
+  if (snoreAccumBuf && snoreSnapshotBuf) {
+    size_t toCopy = samples;
+    if (snoreAccumCount + toCopy > SNORE_WINDOW_SAMPLES) {
+      toCopy = SNORE_WINDOW_SAMPLES - snoreAccumCount;  // cắt bớt phần dư, không quan trọng ở placeholder
+    }
+    memcpy(&snoreAccumBuf[snoreAccumCount], pcmBuf, toCopy * sizeof(int16_t));
+    snoreAccumCount += toCopy;
+    if (snoreAccumCount >= SNORE_WINDOW_SAMPLES) {
+      memcpy(snoreSnapshotBuf, snoreAccumBuf, SNORE_WINDOW_SAMPLES * sizeof(int16_t));
+      snoreAccumCount = 0;
+      if (snoreTaskHandle) xTaskNotifyGive(snoreTaskHandle);
     }
   }
 #else

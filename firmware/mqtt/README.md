@@ -51,9 +51,16 @@ Tất cả topic dùng **QoS 1** (đảm bảo delivery khi WiFi chập chờn).
 | `home/room/presence` | Room node | Backend | `{"ts": <unix_ms>, "present": true\|false}` | **true** |
 | `home/room/ac_cmd` | Backend (test: `mosquitto_pub` tay) | Room node | `{"cmd": "on"\|"off"}` | false |
 | `home/room/ac_learn` | Backend (test: `mosquitto_pub` tay) | Room node | `{"button": "on"\|"off"}` | false |
+| `home/room/snore_event` | Voice node | Backend | `{"ts": <unix_ms>, "confidence": <0-1>, "duration_ms": <int>}` | false |
 
 ### Ghi chú schema
 - `ts`: Unix epoch **mili-giây**. Firmware đồng bộ giờ qua NTP (`pool.ntp.org`) lúc boot; nếu chưa sync xong thì `ts` = 0 (backend bỏ qua giá trị 0 được).
+- `home/room/snore_event`: **PLACEHOLDER** (scaffold kiến trúc, xem
+  `docs/voice-node-snore-wakeword-architecture.md`) — `confidence` hiện là RMS chuẩn hoá, KHÔNG phải
+  điểm số từ model snore thật (chưa có model). `voice-node` KHÔNG đồng bộ NTP — `ts` hiện là `millis()`
+  (uptime tương đối từ lúc boot), KHÔNG PHẢI unix epoch thật. Đủ để phân biệt thứ tự/khoảng cách giữa
+  các event, nhưng backend KHÔNG được suy ra ngày giờ thật từ giá trị này.
+  Event Manager debounce N=3 cửa sổ liên tiếp (~3s) + cooldown 5s trước khi gửi event kế tiếp.
 - `home/room/presence` **retain=true**: client mới connect nhận ngay trạng thái hiện diện cuối cùng, không phải đợi lần đổi tiếp theo.
 - `home/door/motion` retain=false: đây là event tức thời, không có "trạng thái cuối".
 - Mã IR học được lưu **local trên NVS của room node** (quyết định MVP) — KHÔNG có topic MQTT cho mã IR trong contract này. Backup/restore qua backend là việc sau.

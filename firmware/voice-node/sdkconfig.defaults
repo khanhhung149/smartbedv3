@@ -37,3 +37,12 @@ CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 # Đã mất một vòng build 32 phút vì chỗ này.
 CONFIG_MBEDTLS_PSK_MODES=y
 CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
+
+# PSRAM Octal 8MB của N16R8 — cần cho buffer snore detection (main.cpp, plans/260812-...-scaffold/).
+# board_build.arduino.memory_type ở platformio.ini KHÔNG có tác dụng cho framework=arduino,espidf
+# (đã thử 2026-08-12, sdkconfig sinh ra không đổi gì) — phải khai trực tiếp ở đây, đúng bài học cùng
+# dạng với board_build.partitions ở platformio.ini (comment env esp32s3_kws). 80MHz vì 120MHz Octal
+# là experimental (Kconfig cảnh báo có thể crash theo nhiệt độ) — không cần tốc độ cao cho buffer 1s.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y

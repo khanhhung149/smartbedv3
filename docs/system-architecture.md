@@ -261,8 +261,15 @@ POST /transcribe
 | `tele/<board>/SENSOR` | radar-node → app | Tasmota-style | ❌ | 1 |
 | `home/room/ac_cmd` | backend/app → voice-node | `{"cmd":"on"\|"off"}` | ❌ | 1 |
 | `home/room/ac_learn` | backend/app → voice-node | `{"button":"on"\|"off"}` | ❌ | 1 |
+| `home/room/snore_event` | voice-node → backend | `{"ts":0,"confidence":0-1,"duration_ms":int}` | ❌ | 1 |
 
-**All timestamps**: Unix epoch in **milliseconds** (not seconds)
+**All timestamps**: Unix epoch in **milliseconds** (not seconds). Exception: `snore_event` — voice-node
+has no NTP sync, `ts` is `millis()` (relative uptime, NOT unix epoch — see contract note in
+`firmware/mqtt/README.md`).
+
+**`snore_event` is a placeholder scaffold** (2026-08-12, see
+`docs/voice-node-snore-wakeword-architecture.md`): `confidence` is normalized RMS, not a trained model
+score — no real snore detection exists yet. Verifies the buffer→task→Event Manager→MQTT pipeline only.
 
 ## Voice Command Parsing
 
