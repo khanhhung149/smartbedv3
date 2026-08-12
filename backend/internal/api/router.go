@@ -50,6 +50,7 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.H
 		ASRURL:     vc.ASRURL,
 		SilenceMS:  vc.ASRSilenceMS,
 		MaxUtterMS: vc.ASRMaxUtterMS,
+		MinUtterMS: vc.ASRMinUtterMS,
 		SampleRate: vc.SampleRate,
 	})
 

@@ -46,6 +46,7 @@ type Config struct {
 	ASRURL     string // endpoint POST WAV multipart -> {"text":...}
 	SilenceMS  int    // im lặng bao lâu (ms) thì coi là hết câu
 	MaxUtterMS int    // trần thời lượng 1 utterance (ms), tránh giữ buffer vô hạn khi VAD không cắt được
+	MinUtterMS int    // SÀN thời lượng (ms) — ngắn hơn thì bỏ, không gọi ASR
 	SampleRate int    // sample rate PCM voice node gửi lên (Hz), dùng để build header WAV
 }
 
@@ -190,6 +191,20 @@ func (h *Handler) handleUtterance(ctx context.Context, pcm []byte) {
 	if len(pcm) == 0 {
 		return
 	}
+
+	// Ghi độ dài MỌI utterance, kể cả cái bị bỏ. Không có con số này thì không cách nào chọn
+	// ngưỡng có căn cứ — chỉ đoán.
+	utterMS := len(pcm) * 1000 / (h.cfg.SampleRate * 2) // PCM16 mono: 2 byte/mẫu
+
+	// Sàn thời lượng: clip quá ngắn làm whisper nhại lại INITIAL_PROMPT, mà câu nhại chứa động
+	// từ nên ParseVietCommand khớp rồi bắn IR THẬT. Đo 07/08: 8 lần bắn từ câu nhại, trong đó
+	// có `"...tắt máy lạnh, tắt máy lạnh."` — lặp hai lần, chắc chắn không phải người nói.
+	// Bật/tắt máy nén liên tục là thứ làm hỏng lốc, nên thà bỏ sót một lệnh còn hơn bắn thừa.
+	if utterMS < h.cfg.MinUtterMS {
+		slog.Info("voice: utterance quá ngắn, bỏ", "utter_ms", utterMS, "san_ms", h.cfg.MinUtterMS)
+		return
+	}
+
 	wav := buildWAV(pcm, h.cfg.SampleRate)
 
 	tctx, cancel := context.WithTimeout(ctx, asrTimeout)
@@ -200,7 +215,7 @@ func (h *Handler) handleUtterance(ctx context.Context, pcm []byte) {
 		slog.Warn("voice: asr lỗi, bỏ qua utterance", "err", err)
 		return
 	}
-	slog.Info("voice: asr text", "text", text)
+	slog.Info("voice: asr text", "text", text, "utter_ms", utterMS)
 
 	cmd, ok := ParseVietCommand(text)
 	if !ok {
