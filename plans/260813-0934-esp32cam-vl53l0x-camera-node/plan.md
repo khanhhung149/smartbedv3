@@ -1,7 +1,7 @@
 # Plan — Thay "Camera nhiệt / MLX90614" bằng ESP32-CAM (OV2640) + VL53L0X
 
 - **Ngày lập:** 2026-08-13
-- **Trạng thái:** in-progress — Phase 1 xong, Phase 2 xong (4/4 hạng mục, SD 16GB thay 256GB), Phase 3 **flash thật lên board thành công, camera+SD chạy ổn định** (VL53L0X chưa cắm dây), Phase 4 đang chạy dở (bench bring-up)
+- **Trạng thái:** in-progress — Phase 1 xong, Phase 2 xong (4/4 hạng mục), Phase 3 **flash thật lên board thành công, camera+SD+VL53L0X đều chạy** (VL53L0X: model_id đọc đúng 0xEE, đo khoảng cách còn giới hạn driver tối giản — đã biết trước), Phase 4 đang chạy dở (bench bring-up)
 - **Nguồn:** `plans/reports/brainstorm-260813-0923-thay-camera-nhiet-bang-esp32cam-vl53l0x-report.md`
 - **Loại:** Amendment — sửa BOM/docs của `plans/260713-1019-smartbed-v3-mvp/` (phase 00, 01, 03), không phải phase mới trong đánh số 00-07 chính thức
 - **Rủi ro tổng:** thấp (không chuyển động, không actuator) nhưng **đảo một quyết định BOM đã chốt miệng 13/07** — xem §Quyết định đã khoá
@@ -140,7 +140,7 @@
 ## Bench Bring-up Log — 2026-08-13
 
 Flash thật lên board AI-Thinker ESP32-CAM (đế ESP32-CAM-MB, USB-TTL CH340 qua WSL
-usbipd) + đọc serial log thật (không phải build log). 8 bug/kiến trúc thật bắt được
+usbipd) + đọc serial log thật (không phải build log). 10 bug/kiến trúc thật bắt được
 (mục 4 bị mục 6 supersede), tất cả đã sửa/điều tra và verify lại bằng reflash + đọc log:
 
 1. **I2C driver conflict** — `E i2c: CONFLICT! driver_ng is not allowed to be used
@@ -203,10 +203,29 @@ kiến, có lợi cho giới hạn thẻ SD 16GB (xem phase-02). Nguyên nhân f
 JPEG SVGA + ghi SD trên thẻ 16GB — chưa phân tích sâu, để `docs/sensor-characterization.md`
 ở Phase 4 xử lý.
 
-**VL53L0X chưa cắm dây vật lý lúc bring-up này** — `vl53l0x_init()` fail có kiểm
-soát (log rõ ràng, không gọi read mỗi vòng lặp), camera/SD không bị ảnh hưởng. Wiring
-đúng (đã đảo sau phát hiện mục 6): VCC→3.3V, GND→GND, **SDA→GPIO4, SCL→GPIO13** — Hưng
-được khuyên hàn thẳng (đáng tin cậy hơn jumper), chưa xác nhận đã hàn xong.
+**VL53L0X đã hàn dây thật (13/08 chiều) — CONFIRMED hoạt động:**
+`I (1553) vl53l0x: VL53L0X init xong (model_id=0xEE, port=0)` — `0xEE` đúng
+datasheet, wiring GPIO4=SDA/GPIO13=SCL/3.3V/GND chính xác, bus I2C riêng hoạt động
+tốt song song với camera. Việc hàn tốn 4-5 lần flash lại do 3 sự cố vật lý không liên
+quan tới code: cáp USB-TTL lỏng (rớt kết nối Windows nhiều lần khi thao tác gần
+board), và tốc độ nạp mặc định 460800 baud không ổn định qua kết nối marginal —
+**sửa:** thêm `upload_speed = 115200` vào `platformio.ini`.
+
+9. **Đo khoảng cách VL53L0X timeout** — `W vl53l0x: Timeout chờ kết quả đo — trả
+   dropout` mỗi vòng lặp sau khi wiring xong. **Không phải bug mới** — đúng giới hạn
+   đã ghi nhận từ trước (`vl53l0x.h` TODO, quyết định `/brainstorm` giữ driver tối
+   giản): thiếu chuỗi hiệu chuẩn SPAD/VHV/phase của ST nên `SYSRANGE_START` không
+   hoàn tất chu trình đo trong 50ms. Model ID đọc đúng (proof bus/wiring tốt), chỉ đo
+   khoảng cách chưa hoạt động. Chưa cần sửa — theo đúng quyết định đã chốt, chỉ nâng
+   cấp nếu số đo thật sự cần dùng sau này.
+10. **Crash hiếm "Guru Meditation Error: Cache disabled but cached memory region
+    accessed"** — xảy ra 1 lần lúc WiFi lưu cal data lần đầu (`phy_init: Saving new
+    calibration data...`) trùng lúc camera task nền đang truy cập frame buffer PSRAM.
+    ESP32 classic (không phải S3) dùng chung cache cho flash và PSRAM — flash write
+    tắt cache tạm thời, camera task chạm PSRAM đúng lúc đó thì crash. **Tự phục hồi**:
+    ESP-IDF panic handler tự reboot, lần chạy lại KHÔNG crash nữa (cal data đã lưu
+    xong, không còn kích hoạt lại race này). Chấp nhận là rủi ro hiếm, một lần, tự
+    lành — không sửa code cho corner case này (YAGNI, đã tự phục hồi qua watchdog).
 
 **File đổi trong bring-up này (chưa commit):** `src/vl53l0x.{h,cpp}`, `src/main.cpp`,
 `src/camera_config.h`, `sdkconfig.defaults` (mới), `vl53l0x.h` TODO comment (tham

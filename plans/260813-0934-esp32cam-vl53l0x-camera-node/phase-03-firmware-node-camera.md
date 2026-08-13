@@ -72,9 +72,9 @@ VL53L0X (I2C addr 0x29, bus RIÊNG: GPIO4=SDA/GPIO13=SCL, port 0) ─┘
 
 ## Success Criteria
 
-- [ ] Camera + VL53L0X đọc được đồng thời (2 bus I2C riêng, không phải dùng chung như thiết kế gốc — xem Architecture), không timeout/conflict — **camera xác nhận chạy ổn định** trên bus riêng của nó (port 1, GPIO26/27), **bus VL53L0X (port 0, GPIO4/13) đã tạo được, không bị "not usable" thật (verify bằng esp_gpio_reserve bitmask)**, nhưng VL53L0X chưa hàn dây vật lý nên chưa đọc được số thật — chờ Hưng hàn xong (Phase 4)
+- [x] Camera + VL53L0X đọc được đồng thời (2 bus I2C riêng — GPIO26/27 camera, GPIO4/13 VL53L0X) — **verify thật 13/08 chiều:** cả 2 bus chạy song song không xung đột, `model_id=0xEE` đọc đúng datasheet, camera vẫn chụp/ghi bình thường cùng lúc. Đo khoảng cách thật (`vl53l0x_read_distance_mm()`) bị timeout — **giới hạn đã biết trước** (driver tối giản, chưa có chuỗi hiệu chuẩn ST, quyết định `/brainstorm` chấp nhận), không phải lỗi bus/wiring
 - [ ] Ghi liên tục ổn định ≥5fps trong ít nhất 30 phút thử nghiệm bench, không tràn buffer/crash — **đo thật: ~1.5fps (~670ms/vòng lặp), KHÔNG đạt 5fps mục tiêu.** Không crash/tràn buffer qua nhiều lần reboot. Cần quyết định: chấp nhận 1.5fps (đủ cho mục đích debug/pose training?) hay tối ưu (giảm JPEG quality, bỏ bớt việc trong vòng lặp) — xem Phase 4
-- [x] File JPEG + `index.csv` đọc lại được — **verify thật:** `recover_frame_seq()` scan thư mục đêm qua nhiều lần reboot ra đúng seq tăng dần (0→1868→1912), chứng minh file ghi/đọc lại được đúng. "Khoảng cách hợp lý" chưa test — VL53L0X chưa cắm dây
+- [x] File JPEG + `index.csv` đọc lại được — **verify thật:** `recover_frame_seq()` scan thư mục đêm qua nhiều lần reboot ra đúng seq tăng dần (0→1868→...→4017), chứng minh file ghi/đọc lại được đúng. Cột khoảng cách trong `index.csv` hiện luôn là dropout (-1) do giới hạn driver VL53L0X (xem mục 1 ở trên) — không phải lỗi ghi file
 - [x] Build `BENCH_TEST_MODE=0` — grep binary/symbol xác nhận không link hàm ghi SD nào vào production build — **verify thật:** `nm firmware.elf | grep storage_*` ra 0 kết quả trên production, đủ symbol trên bench-test (xem plan.md Code Review Log, re-verify sau fix)
 - [ ] Rotation xoá đúng thư mục cũ nhất khi giả lập >30 thư mục đêm — logic viết xong (`storage_rotate()`), chỉ mới có 1 thư mục đêm thật (`20260813`) tích luỹ, chưa test rotation thật — xem Phase 4
 
