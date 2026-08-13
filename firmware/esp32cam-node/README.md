@@ -22,6 +22,11 @@ giai đoạn kỹ sư tự test.
 - WiFi **chỉ** bật để đồng bộ giờ (NTP) lúc boot, tắt hẳn trước vòng ghi chính thức —
   không stream ảnh/video qua mạng.
 - Xem `docs/safety/hazard-analysis.md` hazard **H-25**.
+- **Đèn flash (GPIO4) BẮT BUỘC gỡ vật lý trước khi board chạy với người đang ngủ** — GPIO4
+  vừa là SDA I2C của VL53L0X vừa là chân đèn flash trên AI-Thinker (không tách được bằng
+  code, không còn GPIO nào khác trống để dời sang). Mỗi giao dịch I2C làm đèn nhấp nháy —
+  chấp nhận được lúc bench-test trên bàn, **không chấp nhận được** khi golive thật (ánh
+  sáng nhấp nháy trong phòng tối lúc ngủ). Xem hazard **H-26**.
 
 ## Phần cứng
 
