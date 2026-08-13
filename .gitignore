@@ -1,0 +1,85 @@
+# ── Secrets ────────────────────────────────────────────────────────────────
+.env*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ── OS / editor ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── firmware/ (ESP32 — PlatformIO / ESP-IDF) ───────────────────────────────
+.pio/
+.pioenvs/
+.piolibdeps/
+firmware/**/build/
+firmware/**/sdkconfig.old
+managed_components/
+
+# ── edge/ (Python — Jetson Orin) ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Models are large binaries — track with Git LFS or an artifact store, not git
+*.pt
+*.onnx
+*.engine
+*.tflite
+
+# ── Recorded sleep data — NEVER commit (large + personal biometric data) ────
+# Real overnight recordings from Phase 01 onward. Disk is cheap, git is not,
+# and this is biometric data about identifiable people.
+data/
+recordings/
+*.sqlite
+*.sqlite3
+*.db
+*.csv
+!docs/**/*.csv
+
+# ── cloud/ (K8s) ───────────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+kubeconfig
+*.kubeconfig
+
+# ── app/ (Flutter) ─────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+app/build/
+GoogleService-Info.plist
+google-services.json
+
+# ── mech/ (CAD) ────────────────────────────────────────────────────────────
+# Keep source CAD + exported STEP/STL. Ignore solver/backup churn.
+*.f3d.bak
+*~$*
+mech/**/exports/tmp/
+
+# ── Tooling — not part of the product ──────────────────────────────────────
+# ClaudeKit toolchain, installed per-machine. Track only the repo rules that
+# Claude Code reads, so the team shares conventions without vendoring ~1400 files.
+# (git cannot un-ignore inside an ignored directory, hence /* rather than /)
+/.claude/*
+!/.claude/rules/
+release-manifest.json
+.repomixignore
+repomix-output.xml
+logs.txt
+.gemini/
+.serena/cache
+
+# ── Local scratch (NAS shortcuts, throwaway files) ─────────────────────────
+stuffs/

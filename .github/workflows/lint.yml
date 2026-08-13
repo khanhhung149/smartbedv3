@@ -1,0 +1,48 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    name: Python (edge/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: |
+          if [ -z "$(find edge cloud -name '*.py' -print -quit 2>/dev/null)" ]; then
+            echo "No Python sources yet — skipping."
+            exit 0
+          fi
+          ruff check edge cloud
+          ruff format --check edge cloud
+
+  firmware:
+    name: Firmware format (firmware/)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format
+        run: |
+          files=$(find firmware -type f \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' \) 2>/dev/null)
+          if [ -z "$files" ]; then
+            echo "No firmware sources yet — skipping."
+            exit 0
+          fi
+          sudo apt-get update && sudo apt-get install -y clang-format
+          echo "$files" | xargs clang-format --dry-run --Werror
+
+  markdown:
+    name: Docs links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check relative links in docs/ and plans/ resolve
+        run: bash scripts/check-doc-links.sh
