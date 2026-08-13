@@ -233,26 +233,42 @@ board), và tốc độ nạp mặc định 460800 baud không ổn định qua 
     quality=12, cảnh tối/thiếu sáng nén nhỏ hơn). Cần tính lại dung lượng SD/đêm với
     số thật này khi biết fps ổn định thật (xem mục 12).
 12. **fps không cải thiện dù giảm tần suất poll VL53L0X (1/10 vòng) và giữ `index.csv`
-    mở suốt đêm thay vì fopen("a") mỗi frame** — cả 2 tối ưu hợp lý về mặt code nhưng
-    đo thật fps còn TỆ HƠN (2200ms/vòng, trước đó 1650ms). Nghi vấn thật: thư mục
-    `/sdcard/20260813` đã tích luỹ **~4300 file** qua cả buổi test hôm nay (nhiều lần
-    flash lại, không đổi ngày) — driver FAT phải quét thư mục ngày càng lớn để tìm chỗ
-    trống mỗi lần `fopen(..., "wb")` tạo file JPEG mới, chậm dần theo số file tồn tại.
-    **Chưa xác nhận 100%** (chưa test trên thư mục sạch để so sánh) nhưng là giả
-    thuyết có bằng chứng nhất. **Khuyến nghị bắt buộc trước khi chạy DoD 8 tiếng
-    thật:** xoá sạch thẻ SD hoặc ít nhất xoá thư mục `20260813` hiện tại — số liệu
-    fps/thời gian đo trong buổi bring-up hôm nay (13/08) **không đại diện** cho một
-    đêm chạy sạch từ đầu.
+    mở suốt đêm — CONFIRMED nguyên nhân đúng như nghi ngờ.** Đo trên thư mục cũ tích
+    luỹ ~4300 file: 2200ms/vòng (~0.45fps). Hưng format lại thẻ SD (FAT32, máy tính) →
+    reflash → đo lại trên thư mục sạch: **ổn định ~190.7ms/vòng = ~5.24fps**, gần
+    chạm mục tiêu 5fps ban đầu — xác nhận 100% việc thư mục tích luỹ nhiều file làm
+    FAT chậm dần khi tạo file mới, không phải lỗi code hay VL53L0X. Số liệu chính
+    thức (xem §Số liệu DoD chính thức dưới).
 
 **Tổng kết code đã sửa hôm nay (đã commit qua 3 commit `df779fd`→`4a0f3b2`→`60151b8`,
 cộng các thay đổi mục 11/12 chưa commit tại thời điểm viết đoạn này):**
 `src/vl53l0x.{h,cpp}`, `src/main.cpp`, `src/camera_config.h`, `src/storage.{h,cpp}`,
 `sdkconfig.defaults`, `platformio.ini`.
 
+## Số liệu DoD chính thức (đo trên thẻ SD sạch, 13/08 chiều — sau format FAT32)
+
+| Chỉ số | Giá trị đo thật | Ghi chú |
+|---|---|---|
+| fps | **~5.24fps** (190.7ms/vòng lặp, ổn định qua 150 frame liên tục, không có cảnh báo "chậm hơn target") | Gần chạm mục tiêu 5fps ban đầu — không cần chấp nhận 1.5fps như tưởng trước đó |
+| Kích thước JPEG | **~16.55KB/frame** (16548-16571 byte, rất ổn định qua nhiều mẫu) | SVGA 800×600, quality=12 |
+| Dung lượng/đêm (8h) | **~2.47GB** (16.55KB × 5.24fps × 3600s × 8h) | Thấp hơn nhiều so với ước tính ban đầu ~5GB |
+| Thẻ SD 16GB chịu được | **~6.5 đêm** trước khi rotation phải xoá | Không đạt policy 30 đêm gốc — cần thẻ ≥100GB nếu muốn giữ đúng 30 đêm, nhưng đủ dùng cho bench-test nhiều đêm liên tiếp |
+| VL53L0X model_id | `0xEE` (đúng datasheet) | Bus/wiring xác nhận đúng |
+| VL53L0X đo khoảng cách | Timeout/dropout | Giới hạn driver tối giản đã biết trước, không ảnh hưởng camera/SD |
+
+**Bài học quan trọng cho vận hành thật:** thư mục đêm KHÔNG được để tích luỹ quá nhiều
+file qua nhiều lần dev/test — hiệu năng FAT giảm mạnh theo số file trong 1 thư mục
+(0.45fps ở ~4300 file/thư mục so với 5.24fps ở thư mục sạch, chênh **11.6 lần**). Với
+retention 30 đêm thật (mỗi đêm 1 thư mục riêng, ~150000 frame/đêm ở 5.24fps×8h) mỗi
+thư mục vẫn sẽ tích luỹ rất nhiều file — cần theo dõi fps thực tế qua nhiều đêm liên
+tục thật (không chỉ test ngắn) để xác nhận không tái diễn vấn đề này ở quy mô 1 đêm
+đầy đủ.
+
 **Việc còn lại trước khi đóng Phase 4 DoD:**
-- [ ] Xoá thư mục `20260813` (hoặc format lại thẻ SD) rồi đo lại fps/frame-size trên
-      dữ liệu sạch — số liệu bring-up hôm nay chỉ tham khảo, không phải số DoD chính thức
-- [ ] Chạy 8 tiếng liên tục thật (đêm sạch)
+- [x] Đo fps/frame-size trên thẻ SD sạch — xong, số liệu ở bảng trên
+- [ ] Chạy 8 tiếng liên tục thật (theo dõi xem fps có suy giảm dần trong 1 đêm không —
+      quan trọng, vì ~150K frame tích luỹ trong 1 thư mục CÓ thể tái hiện vấn đề mục 12
+      dù ở mức độ nhỏ hơn 4300 file)
 - [ ] Test rotation với >30 thư mục thật (cần format lại hoặc rút thẻ SD ra máy tính
       tạo thư mục giả — không làm được từ môi trường này, cần Hưng thao tác tay)
-- [ ] Viết `docs/sensor-characterization.md` với số liệu đêm sạch, không phải số bring-up
+- [ ] Viết `docs/sensor-characterization.md` với số liệu ở bảng trên
