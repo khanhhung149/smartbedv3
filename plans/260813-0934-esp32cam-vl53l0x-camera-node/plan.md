@@ -291,9 +291,33 @@ dạng sự cố vật lý đã gặp cả ngày (cáp USB, mối hàn). **Chưa
 thể** — cần Hưng kiểm tra lại các đầu nối nguồn 5V/2A khi làm Phase 4 DoD thật, đặc
 biệt nếu để chạy không giám sát 8 tiếng.
 
+### 15. VL53L0X đọc thẳng trong vòng lặp camera — coupling timing sai (phát hiện qua `/brainstorm`, ĐÃ SỬA)
+
+`/brainstorm` review kiến trúc (13/08, sau khi đã "xong" Phase 3/4 code) phát hiện:
+camera và VL53L0X độc lập hoàn toàn về phần cứng (2 bus I2C khác nhau, port 0 vs SCCB
+nội bộ camera) nhưng bị GHÉP sai về timing — `vl53l0x_read_distance_mm()` (chặn tới
+~850ms khi timeout, xem mục 9) được gọi thẳng trong vòng lặp chụp camera, khiến camera
+"đứng khựng" theo mỗi lần đo dù không có lý do kỹ thuật nào bắt buộc điều đó. Kiểm tra
+lại toàn bộ docs dự án: không có yêu cầu fps cứng nào khác 5fps đã chốt ở §Quyết định
+#4 — quyết định giữ nguyên target, chỉ sửa coupling.
+
+**Sửa:** `vl53l0x_start_background_task()` — chạy `vl53l0x_read_distance_mm()` liên
+tục trên 1 FreeRTOS task riêng (100ms giữa các lần đo), ghi kết quả vào
+`volatile int32_t` dùng chung; vòng lặp camera đọc qua `vl53l0x_get_latest_distance_mm()`
+không chặn. Bus VL53L0X tăng từ 100kHz lên 400kHz (Fast Mode, không còn lý do giữ
+100kHz vì không còn chia sẻ bus với SCCB camera). Commit `ea6e95b`.
+
+**Verify thật trên phần cứng (flash lại + đọc serial log):** task nền khởi động đúng
+(`Task đo ToF nền đã khởi động`), các dòng `Timeout chờ kết quả đo` (mục 9, vẫn còn —
+giới hạn driver, chưa sửa) không còn kèm spike vòng lặp camera theo chu kỳ 1/10 như
+trước; thời gian vòng lặp còn lại (~910-970ms lần test này) giải thích đầy đủ bởi thư
+mục SD lần flash đó chưa sạch (seq tiếp tục từ 1812, xem mục 13) — không phải do ToF
+coupling quay lại.
+
 **Việc còn lại trước khi đóng Phase 4 DoD:**
 - [x] Đo fps/frame-size trên thẻ SD sạch — xong, số liệu ở bảng trên
 - [x] Sửa kiến trúc thư mục giờ, verify hết hiện tượng chậm dần khi thư mục sạch
+- [x] Sửa coupling ToF/camera (mục 15), verify task nền không còn chặn vòng lặp camera
 - [ ] Chạy 8 tiếng liên tục thật — theo dõi fps có ổn định suốt đêm không (mục 13 chưa
       verify đầy đủ), và board có mất điện lại không (mục 14 chưa rõ nguyên nhân)
 - [ ] Test rotation với >30 thư mục thật (cần format lại hoặc rút thẻ SD ra máy tính
