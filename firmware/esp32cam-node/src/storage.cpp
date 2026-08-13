@@ -66,6 +66,13 @@ esp_err_t storage_init() {
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     slot_config.width = 1;  // 1-bit mode — camera AI-Thinker chiếm hết chân cho 4-bit
+    // SDMMC_SLOT_CONFIG_DEFAULT() điền sẵn d1/d2/d3 = GPIO4/12/13 (mặc định slot 1),
+    // driver vẫn "giữ" 3 chân này dù width=1 nếu không tự tay đặt NC — bắt được lỗi
+    // thật "GPIO 4/13 is not usable" khi VL53L0X cần đúng 2 chân đó (13/08). Giải
+    // phóng rõ ràng để VL53L0X dùng được GPIO4 (SDA) + GPIO13 (SCL).
+    slot_config.d1 = GPIO_NUM_NC;
+    slot_config.d2 = GPIO_NUM_NC;
+    slot_config.d3 = GPIO_NUM_NC;
     slot_config.clk = static_cast<gpio_num_t>(14);
     slot_config.cmd = static_cast<gpio_num_t>(15);
     slot_config.d0 = static_cast<gpio_num_t>(2);

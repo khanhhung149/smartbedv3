@@ -26,7 +26,7 @@ Rẻ nhất, nhanh nhất, rủi ro gần bằng không, mà lại mở khoá ch
 | **Piezoelectric pad** | ADC | Dưới nệm, vùng thân | Hiện diện, BCG (ballistocardiogram), chuyển động, trở mình |
 | SHT (SHT10/SHT31) | I2C | Trong khoang, tránh hơi thở trực tiếp | Nhiệt độ + độ ẩm môi trường |
 | **Mic đa hướng** (con Quân đưa) | I2S | **Gắn đầu giường** | Âm thanh thở, ngáy, ồn môi trường |
-| **ESP32-CAM (OV2640) + VL53L0X** | SCCB (I2C, GPIO26/27), địa chỉ VL53L0X `0x29` | Hướng vào vùng ngủ | Frame ảnh JPEG (quan sát hành vi), khoảng cách người-camera. **Node MCU riêng (thứ 6)** — không cắm vào ESP32 thu thập của 4 cụm còn lại |
+| **ESP32-CAM (OV2640) + VL53L0X** | Camera: SCCB nội bộ GPIO26/27 (không ra header). VL53L0X: bus I2C **riêng** GPIO4/13, địa chỉ `0x29` (2 bus tách biệt — sửa 13/08 khi bring-up thật, GPIO26/27 không hàn thêm dây được, xem `plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` Bench Bring-up Log) | Hướng vào vùng ngủ | Frame ảnh JPEG (quan sát hành vi), khoảng cách người-camera. **Node MCU riêng (thứ 6)** — không cắm vào ESP32 thu thập của 4 cụm còn lại |
 
 **Vì sao LD2510B thay LD2410B:** 2410B chỉ cho *approximate distance*. 2510B track được **nhiều người cùng lúc và vị trí thật** — cần thiết cho giường đôi và cho việc phân biệt người nằm vs người đi ngang qua.
 

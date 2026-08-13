@@ -14,7 +14,7 @@
 | 2 | Báo Michael trước khi sửa docs? | **Không cần chờ duyệt lại** — Hưng chốt đây là quyết định kỹ thuật thuộc thẩm quyền mình. Vẫn để 1 việc không-chặn trong Phase 1: báo Michael song song, cho minh bạch |
 | 3 | Bù thân nhiệt cho Phase 03 (mất input MLX90614)? | **Bỏ hẳn**, không thêm MLX90614 rời. Vòng kín điều hoà môi trường Phase 03 dùng SHT (nhiệt độ khoang) một mình |
 | 4 | Video ghi thông số nào? | **SVGA 800×600, giữ rotating 30 đêm** — khớp chính sách retention DoD Phase 01 gốc. Kế hoạch ban đầu ~5fps (~5GB/đêm) → thẻ SD 256GB exFAT. **Cập nhật 13/08 sau bring-up thật:** fps đo được trên phần cứng thật chỉ ~1.5fps (~670ms/vòng lặp, chưa tối ưu, đã chốt chấp nhận — xem plan.md Bench Bring-up Log). Ước tính lại (JPEG size vẫn dùng số giả định ~35KB/frame, **chưa đo thật**): ~1.5GB/đêm → thẻ 16GB hiện có đủ cho **~10 đêm** trước khi rotation phải xoá, không phải ~3 đêm như tính với 5fps |
-| 5 | Kiến trúc node | MCU riêng (node thứ 6), VL53L0X dùng chung bus SCCB (I2C, GPIO26/27) của camera, địa chỉ `0x29` — không cần thêm GPIO trên board AI-Thinker vốn đã ít chân trống khi dùng khe SD |
+| 5 | Kiến trúc node | MCU riêng (node thứ 6). ~~VL53L0X dùng chung bus SCCB (GPIO26/27) của camera~~ **SAI — sửa 13/08 khi bring-up thật:** GPIO26/27 chỉ nối nội bộ tới đầu nối FPC camera, không ra header ngoài để hàn thêm dây. VL53L0X đi bus I2C **riêng** trên GPIO4 (SDA) + GPIO13 (SCL), địa chỉ `0x29` — 2 chân trống khi SD chạy 1-bit mode, verify bằng `esp_gpio_reserve` bitmask thật trên phần cứng (không chỉ đọc code). Tránh GPIO12 (bootstrap MTDI, rủi ro không boot) và GPIO16 (đã bị PSRAM chiếm CS) |
 | 6 | Lưu trữ | microSD cục bộ trên chính node, **không stream WiFi cho luồng ghi chính thức**. Nguồn riêng, không lấy từ laptop (quy tắc phần cứng chuẩn dự án) |
 | 7 | Ngoại lệ lưu video | **Chỉ áp dụng giai đoạn kỹ sư tự test (bench rig)** — cấm khi có người dùng thật, đối lập 5 nguyên tắc riêng tư Phase 05 (không lưu ảnh/video). Phải có cờ/flag rõ ràng trong code + ghi vào hazard-analysis.md |
 | 8 | Toolchain firmware | **PlatformIO với `framework = espidf` thuần** (không Arduino) — theo tiền lệ `esp32-presence-ac/firmware/voice-node/` (project riêng của Hưng, tại `/mnt/d/esp32-presence-ac`). Đóng luôn câu hỏi tồn đọng "Not chosen yet" của Phase 00, áp dụng cho `esp32cam-node/` và cập nhật `firmware/README.md` |
@@ -140,8 +140,8 @@
 ## Bench Bring-up Log — 2026-08-13
 
 Flash thật lên board AI-Thinker ESP32-CAM (đế ESP32-CAM-MB, USB-TTL CH340 qua WSL
-usbipd) + đọc serial log thật (không phải build log). 5 bug/kiến trúc thật bắt được,
-tất cả đã sửa và verify lại bằng reflash + đọc log:
+usbipd) + đọc serial log thật (không phải build log). 8 bug/kiến trúc thật bắt được
+(mục 4 bị mục 6 supersede), tất cả đã sửa/điều tra và verify lại bằng reflash + đọc log:
 
 1. **I2C driver conflict** — `E i2c: CONFLICT! driver_ng is not allowed to be used
    with this old driver` → `abort()`, crash loop ngay khi boot. Nguyên nhân:
@@ -159,20 +159,36 @@ tất cả đã sửa và verify lại bằng reflash + đọc log:
    lặp lại mỗi frame, trong khi thư mục `20260813` (đúng 8 ký tự) vẫn mkdir bình
    thường — FatFs mặc định ESP-IDF chỉ hỗ trợ short filename 8.3, không có Long File
    Name. **Sửa:** thêm `CONFIG_FATFS_LFN_HEAP=y` vào `sdkconfig.defaults`.
-4. **Kiến trúc chia sẻ bus SCCB sai** — `E i2c.common: I2C bus id(1) has already been
-   acquired`. VL53L0X và camera **không thể mỗi bên tự tạo 1 bus i2c_master riêng**
-   trên cùng GPIO26/27 (khác bản chất so với "địa chỉ I2C khác nhau nên không xung
-   đột" — đó là giả định đúng cho code chạy trên 1 bus, nhưng bug này là ở tầng tạo
-   bus, trước cả bước gửi địa chỉ). **Sửa (đúng, có bằng chứng từ source
-   `managed_components/espressif__esp32-camera/driver/sccb-ng.c`):** VL53L0X tạo bus
-   trước (`vl53l0x_init()` chạy trước `esp_camera_init()`), camera cấu hình
-   `pin_sccb_sda=-1`/`sccb_i2c_port=SHARED_SCCB_I2C_PORT` để **dùng lại** bus đã tạo
-   qua `SCCB_Use_Port()` → `i2c_master_get_bus_handle()`, không tự tạo bus mới.
+4. **Kiến trúc chia sẻ bus SCCB sai (lần 1)** — `E i2c.common: I2C bus id(1) has
+   already been acquired`. VL53L0X và camera **không thể mỗi bên tự tạo 1 bus
+   i2c_master riêng** trên cùng GPIO26/27. **Sửa lúc đó:** VL53L0X tạo bus trước,
+   camera dùng lại qua `SCCB_Use_Port()`. **⚠️ Superseded bởi mục 6 dưới** — cách sửa
+   này đúng về mặt driver nhưng dựa trên giả định sai là GPIO26/27 hàn thêm dây được.
 5. **JPEG "NO-SOI" ở vài frame đầu** — `cam_hal: NO-SOI - JPEG start marker missing`
    ngay sau init, do AEC/AGC chưa ổn định. **Sửa:** thêm vòng lặp chụp bỏ 3 frame đầu
    sau `esp_camera_init()` trước khi vào vòng ghi thật — kỹ thuật tham khảo từ
    [benlazzero/Esp32S3-and-VL53L0X](https://github.com/benlazzero/Esp32S3-and-VL53L0X)
    (`takeImage()` throwaway loop), xác nhận qua `/brainstorm` trước khi áp dụng.
+6. **GPIO26/27 không ra header ngoài — kiến trúc "dùng chung bus SCCB" trong plan gốc
+   SAI** — Hưng hỏi hàn thẳng dây vào GPIO26/27, verify bằng WebSearch xác nhận 2 chân
+   này trên AI-Thinker **chỉ nối nội bộ tới đầu nối FPC camera**, không đưa ra header
+   ngoài. Không thể hàn thêm dây VL53L0X vào đó. **Sửa (đảo lại kiến trúc mục 4):**
+   camera quay về tự tạo bus riêng (`pin_sccb_sda=CAM_PIN_SIOD` như code gốc trước khi
+   sửa mục 4), VL53L0X đi bus I2C **hoàn toàn độc lập** trên GPIO4 (SDA) + GPIO13
+   (SCL), port 0 (camera dùng port 1 mặc định, xác nhận qua log `sccb_i2c_port=1`).
+   Tránh GPIO12 (bootstrap MTDI — pull-up của VL53L0X có thể làm board không boot
+   được) và GPIO16 (đã bị PSRAM chiếm làm CS).
+7. **SDMMC giữ ngầm GPIO4/12/13** — `SDMMC_SLOT_CONFIG_DEFAULT()` điền sẵn d1/d2/d3 =
+   GPIO4/12/13 (mặc định slot dù chỉ dùng 1-bit mode). **Sửa (phòng ngừa, chưa xác
+   nhận là nguyên nhân thật):** set rõ `slot_config.d1/d2/d3 = GPIO_NUM_NC` trong
+   `storage_init()`.
+8. **Cảnh báo "GPIO not usable, maybe conflict"** khi VL53L0X init — điều tra bằng
+   `esp_gpio_reserve(0)` (đọc bitmask, không reserve gì) in ra TRƯỚC khi
+   `vl53l0x_init()` chạy: GPIO4/12/13 đều **chưa** bị giữ (chỉ GPIO16/PSRAM đã giữ,
+   đúng dự kiến) — kết luận cảnh báo là driver tự reserve 2 lần trong chính nó (vô
+   hại, không phải xung đột thật với thứ khác). Lỗi đọc VL53L0X (`Không đọc được bus
+   I2C tại 0x29`) là do **VL53L0X chưa cắm dây vật lý**, không phải bug — kỳ vọng hết
+   khi Hưng hàn xong.
 
 **Kết quả sau khi sửa cả 5:** camera + SD ổn định qua nhiều lần reboot trong buổi
 bring-up (seq tự khôi phục đúng: 0 → 1868 → 1912 qua các lần flash/reset, không ghi
@@ -189,8 +205,8 @@ JPEG SVGA + ghi SD trên thẻ 16GB — chưa phân tích sâu, để `docs/sens
 
 **VL53L0X chưa cắm dây vật lý lúc bring-up này** — `vl53l0x_init()` fail có kiểm
 soát (log rõ ràng, không gọi read mỗi vòng lặp), camera/SD không bị ảnh hưởng. Wiring
-đã hướng dẫn (VCC→3.3V, GND→GND, SDA→GPIO26, SCL→GPIO27, đấu song song với camera),
-chưa xác nhận Hưng đã cắm.
+đúng (đã đảo sau phát hiện mục 6): VCC→3.3V, GND→GND, **SDA→GPIO4, SCL→GPIO13** — Hưng
+được khuyên hàn thẳng (đáng tin cậy hơn jumper), chưa xác nhận đã hàn xong.
 
 **File đổi trong bring-up này (chưa commit):** `src/vl53l0x.{h,cpp}`, `src/main.cpp`,
 `src/camera_config.h`, `sdkconfig.defaults` (mới), `vl53l0x.h` TODO comment (tham

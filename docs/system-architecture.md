@@ -196,7 +196,7 @@ Persistence: SQLite to start (TimescaleDB if volume demands). Rotate per night, 
 | SHT10/31 | I2C | In pod, out of the breath stream | Temperature, humidity |
 | **Omnidirectional mic** | I2S | Head of bed | Breathing, snoring, ambient noise |
 | CO₂ | I2C | In pod | Ventilation interlock (§5.3) |
-| **ESP32-CAM (OV2640) + VL53L0X** | SCCB (I2C, shared with camera config) | Aimed at sleep area | Behavior video (JPEG frames, bench-test only, local SD — not synced to this pipeline), distance-to-person |
+| **ESP32-CAM (OV2640) + VL53L0X** | Camera: internal SCCB (GPIO26/27, not header-accessible). VL53L0X: separate I2C bus (GPIO4/13) — corrected 2026-08-13 during real bring-up, see `plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` Bench Bring-up Log | Aimed at sleep area | Behavior video (JPEG frames, bench-test only, local SD — not synced to this pipeline), distance-to-person |
 
 Two upgrades from the 2023 spec worth stating plainly, because they are easy to "correct" back by mistake:
 

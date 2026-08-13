@@ -1,17 +1,13 @@
 // Pin map + cấu hình OV2640 cho board AI-Thinker ESP32-CAM.
-// SIOD/SIOC (GPIO26/27) là bus SCCB — VL53L0X (vl53l0x.cpp) dùng CHUNG bus này.
+// SIOD/SIOC (GPIO26/27) là bus SCCB nội bộ của camera — KHÔNG chia sẻ với VL53L0X.
 //
-// QUAN TRỌNG: 2 driver I2C (esp32-camera SCCB + VL53L0X) KHÔNG thể mỗi bên tự tạo
-// bus riêng trên cùng GPIO26/27 — bắt được lỗi thật "I2C bus id(1) has already been
-// acquired" khi flash lên phần cứng (13/08). Kiến trúc đúng: vl53l0x_init() tạo bus
-// i2c_master TRƯỚC (main.cpp gọi trước esp_camera_init), rồi camera dùng LẠI đúng
-// bus đó qua SCCB_Use_Port() của esp32-camera — kích hoạt bằng cách đặt
-// pin_sccb_sda=-1 (thay vì gán chân) và điền sccb_i2c_port. Xem
-// driver/esp_camera.c:185-190 và driver/sccb-ng.c:187 trong managed_components.
+// Quyết định gốc trong plan (dùng chung bus SCCB cho VL53L0X) SAI: GPIO26/27 trên
+// AI-Thinker chỉ nối nội bộ tới đầu nối FPC của camera, không đưa ra header ngoài để
+// hàn dây thêm (xác nhận qua WebSearch 13/08 khi Hưng hỏi hàn trực tiếp — xem plan.md
+// Bench Bring-up Log). VL53L0X đi bus I2C riêng hẳn, xem vl53l0x.h.
 #pragma once
 
 #include "esp_camera.h"
-#include "vl53l0x.h"  // SHARED_SCCB_I2C_PORT
 
 // AI-Thinker ESP32-CAM — pin map chuẩn, không đổi trừ khi board khác.
 #define CAM_PIN_PWDN 32
@@ -32,19 +28,15 @@
 #define CAM_PIN_PCLK 22
 
 // SVGA 800x600 — quyết định đã chốt khi lập plan (giữ rotating 30 đêm, xem plan.md
-// Quyết định #4). ~35KB/frame JPEG chất lượng vừa, ~5fps mục tiêu -> ~5GB/đêm.
+// Quyết định #4). fps thật đo được ~1.5fps trên phần cứng (không phải 5fps kế hoạch
+// ban đầu — đã chấp nhận, xem plan.md Bench Bring-up Log).
 inline camera_config_t esp32cam_camera_config() {
     camera_config_t config = {};
     config.pin_pwdn = CAM_PIN_PWDN;
     config.pin_reset = CAM_PIN_RESET;
     config.pin_xclk = CAM_PIN_XCLK;
-    // -1 = KHÔNG tự tạo bus SCCB riêng — dùng lại bus i2c_master đã tạo sẵn ở
-    // SHARED_SCCB_I2C_PORT (vl53l0x_init() phải chạy TRƯỚC esp_camera_init(), xem
-    // main.cpp). Đặt pin_sccb_sda/scl thật (CAM_PIN_SIOD/SIOC) sẽ khiến camera tự
-    // tạo bus riêng, xung đột với bus VL53L0X đã tạo — bug thật đã bắt được 13/08.
-    config.pin_sccb_sda = -1;
-    config.pin_sccb_scl = -1;
-    config.sccb_i2c_port = SHARED_SCCB_I2C_PORT;
+    config.pin_sccb_sda = CAM_PIN_SIOD;
+    config.pin_sccb_scl = CAM_PIN_SIOC;
     config.pin_d7 = CAM_PIN_D7;
     config.pin_d6 = CAM_PIN_D6;
     config.pin_d5 = CAM_PIN_D5;

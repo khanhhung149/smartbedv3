@@ -15,8 +15,8 @@ Firmware cho node thứ 6: chụp ảnh OV2640, đọc khoảng cách VL53L0X qu
 ## Requirements
 
 - Functional:
-  - Chụp JPEG SVGA (800×600), tốc độ mục tiêu ~5fps ổn định.
-  - Đọc VL53L0X trên cùng bus I2C/SCCB (GPIO26/27), địa chỉ `0x29`, không xung đột với địa chỉ camera.
+  - Chụp JPEG SVGA (800×600), tốc độ mục tiêu ~5fps (đo thật ~1.5fps, đã chấp nhận — xem plan.md Bench Bring-up Log).
+  - Đọc VL53L0X trên bus I2C **riêng** (GPIO4=SDA, GPIO13=SCL, port 0), địa chỉ `0x29`. **Cập nhật 13/08:** KHÔNG dùng chung bus SCCB với camera như thiết kế ban đầu — GPIO26/27 không ra header ngoài trên AI-Thinker, không hàn thêm dây được ở đó (xem plan.md Bench Bring-up Log mục 6).
   - Ghi mỗi frame + khoảng cách (mm) + timestamp vào SD, có cấu trúc thư mục theo đêm.
   - Rotation: xoá thư mục đêm cũ nhất khi vượt 30 đêm.
 - Non-functional:
@@ -28,13 +28,17 @@ Firmware cho node thứ 6: chụp ảnh OV2640, đọc khoảng cách VL53L0X qu
 ## Architecture
 
 ```
-OV2640 (DVP song song, dữ liệu ảnh)  ──┐
-SCCB/I2C (GPIO26/27, cấu hình)        ─┼─► ESP32-CAM ──► SD (SPI/SDMMC, local)
-VL53L0X (I2C addr 0x29, dùng chung SCCB) ┘
+OV2640 (DVP song song, dữ liệu ảnh)
+SCCB/I2C nội bộ (GPIO26/27, port 1 — không ra header ngoài)  ─► ESP32-CAM ─► SD (SDMMC, local)
+VL53L0X (I2C addr 0x29, bus RIÊNG: GPIO4=SDA/GPIO13=SCL, port 0) ─┘
 ```
 
-- Bus SCCB dùng chung cho cấu hình camera VÀ VL53L0X — tránh chiếm thêm GPIO trên board AI-Thinker vốn đã ít chân trống khi dùng khe SD tích hợp (GPIO2,4,12,13,14,15 bị khe SD chiếm).
-- Timestamp: đồng bộ NTP một lần lúc boot nếu có WiFi (chỉ để set giờ, không dùng cho streaming), sau đó chạy bằng đồng hồ nội bộ (`millis()`) cộng offset.
+- **Cập nhật 13/08 (bring-up thật):** camera và VL53L0X đi 2 bus I2C hoàn toàn độc lập,
+  không chia sẻ. Thiết kế gốc "dùng chung bus SCCB" dựa trên giả định sai rằng
+  GPIO26/27 đưa ra được header ngoài — thực tế chỉ nối nội bộ tới đầu nối FPC camera.
+  VL53L0X dùng GPIO4+GPIO13 (2 chân trống khi SD chạy 1-bit mode: GPIO2,14,15 bị SD
+  chiếm; GPIO12 tránh vì là bootstrap pin rủi ro không boot; GPIO16 đã bị PSRAM chiếm).
+- Timestamp: đồng bộ NTP một lần lúc boot nếu có WiFi (chỉ để set giờ, không dùng cho streaming), sau đó chạy bằng `time(nullptr)` (epoch thật sau NTP, hoặc epoch giả đơn điệu tăng nếu NTP thất bại).
 
 ## Toolchain
 
@@ -68,7 +72,7 @@ VL53L0X (I2C addr 0x29, dùng chung SCCB) ┘
 
 ## Success Criteria
 
-- [ ] Camera + VL53L0X đọc được đồng thời trên cùng bus SCCB, không timeout/conflict — **camera xác nhận chạy ổn định trên bus dùng chung (bug kiến trúc đã sửa, xem plan.md Bench Bring-up Log #4)**, VL53L0X chưa cắm dây vật lý nên chưa test đồng thời thật — chờ Hưng cắm (Phase 4)
+- [ ] Camera + VL53L0X đọc được đồng thời (2 bus I2C riêng, không phải dùng chung như thiết kế gốc — xem Architecture), không timeout/conflict — **camera xác nhận chạy ổn định** trên bus riêng của nó (port 1, GPIO26/27), **bus VL53L0X (port 0, GPIO4/13) đã tạo được, không bị "not usable" thật (verify bằng esp_gpio_reserve bitmask)**, nhưng VL53L0X chưa hàn dây vật lý nên chưa đọc được số thật — chờ Hưng hàn xong (Phase 4)
 - [ ] Ghi liên tục ổn định ≥5fps trong ít nhất 30 phút thử nghiệm bench, không tràn buffer/crash — **đo thật: ~1.5fps (~670ms/vòng lặp), KHÔNG đạt 5fps mục tiêu.** Không crash/tràn buffer qua nhiều lần reboot. Cần quyết định: chấp nhận 1.5fps (đủ cho mục đích debug/pose training?) hay tối ưu (giảm JPEG quality, bỏ bớt việc trong vòng lặp) — xem Phase 4
 - [x] File JPEG + `index.csv` đọc lại được — **verify thật:** `recover_frame_seq()` scan thư mục đêm qua nhiều lần reboot ra đúng seq tăng dần (0→1868→1912), chứng minh file ghi/đọc lại được đúng. "Khoảng cách hợp lý" chưa test — VL53L0X chưa cắm dây
 - [x] Build `BENCH_TEST_MODE=0` — grep binary/symbol xác nhận không link hàm ghi SD nào vào production build — **verify thật:** `nm firmware.elf | grep storage_*` ra 0 kết quả trên production, đủ symbol trên bench-test (xem plan.md Code Review Log, re-verify sau fix)
@@ -78,7 +82,7 @@ VL53L0X (I2C addr 0x29, dùng chung SCCB) ┘
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| SCCB bus không đủ băng thông/ổn định khi chia sẻ giữa camera config và VL53L0X polling liên tục — **chưa test được trên phần cứng thật, đã có thêm nghi vấn GPIO-matrix từ code review** (`i2c_driver_install` trên I2C_NUM_1 có thể remap route camera driver đã set trên GPIO26/27) | Test sớm tuần đầu Phase 4; nếu xung đột thật, fallback: đọc VL53L0X ở tần số thấp hơn (1Hz) xen giữa các lần chụp thay vì polling liên tục. Không sửa mù phần code review nghi ngờ — cần đo thật trước |
+| ~~SCCB bus không đủ băng thông/ổn định khi chia sẻ giữa camera và VL53L0X~~ **Đã loại bỏ 13/08** — VL53L0X không dùng chung bus với camera nữa (GPIO26/27 không ra header ngoài, xem plan.md Bench Bring-up Log mục 6). Rủi ro mới: GPIO4/13 (bus VL53L0X riêng) có thể bị chiếm ngầm bởi driver khác | Đã verify bằng `esp_gpio_reserve` bitmask thật: GPIO4/13 không bị ai giữ trước khi VL53L0X init — an toàn |
 | Ghi SD chậm hơn tốc độ chụp, rớt frame | **Đã sửa (code review Session 1):** vòng lặp chính dùng deadline-based delay (trừ thời gian xử lý thật) thay vì `vTaskDelay` cố định — log cảnh báo khi vòng lặp chậm hơn target thay vì âm thầm chạy chậm |
 | Nhầm build production còn sót đường ghi SD | **Verify thật, không chỉ đọc code:** `nm firmware.elf \| grep storage_*` trên bản `esp32cam_production_check` ra 0 kết quả, trên bản `esp32cam` ra đủ symbol — xem plan.md Code Review Log |
 | Timestamp trôi do không có RTC pin (mất điện reset về 0) | **Đã sửa (code review Session 1):** dùng `time(nullptr)` sau NTP sync thay vì `esp_timer_get_time()` (bug cũ khiến mọi thư mục đêm ra `19700101`); thêm `recover_frame_seq()` khôi phục seq khi thư mục đêm đã tồn tại (reboot giữa đêm không còn ghi đè âm thầm). Nếu NTP thật sự thất bại vẫn chấp nhận epoch giả cho bench-test, có log cảnh báo rõ ràng |

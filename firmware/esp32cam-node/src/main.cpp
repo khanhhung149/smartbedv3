@@ -119,11 +119,10 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(nvs_err);
 
-    // VL53L0X PHẢI init trước camera — nó tạo bus i2c_master trên SHARED_SCCB_I2C_PORT,
-    // camera_config.h cấu hình camera dùng LẠI đúng bus đó (pin_sccb_sda=-1) thay vì tự
-    // tạo bus riêng trên cùng GPIO26/27. Đảo thứ tự sẽ gây lỗi "I2C bus id already
-    // acquired" — bug thật đã bắt được 13/08 (xem camera_config.h).
-    esp_err_t err = vl53l0x_init(SHARED_SCCB_I2C_PORT, CAM_PIN_SIOD, CAM_PIN_SIOC);
+    // VL53L0X đi bus I2C riêng (GPIO4/13, port 0) — KHÔNG chung bus camera (GPIO26/27
+    // không ra header ngoài trên AI-Thinker, không hàn thêm dây được ở đó — xem
+    // vl53l0x.h). Thứ tự init với camera không còn quan trọng, 2 bus độc lập.
+    esp_err_t err = vl53l0x_init(VL53L0X_I2C_PORT, VL53L0X_SDA_GPIO, VL53L0X_SCL_GPIO);
     const bool vl53l0x_ready = (err == ESP_OK);
     if (!vl53l0x_ready) {
         ESP_LOGW(TAG, "VL53L0X init thất bại (0x%x) — tiếp tục chạy, khoảng cách sẽ là dropout "

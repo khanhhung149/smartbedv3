@@ -27,9 +27,9 @@ giai đoạn kỹ sư tự test.
 
 | | |
 |---|---|
-| Camera | OV2640 trên board AI-Thinker ESP32-CAM |
-| ToF | VL53L0X, địa chỉ I2C `0x29`, dùng **chung** bus SCCB với camera (GPIO26=SDA/SIOD, GPIO27=SCL/SIOC) |
-| Lưu trữ | microSD 256GB, format exFAT, gắn ngay trên board (SDMMC 1-bit: CLK=14, CMD=15, D0=2) |
+| Camera | OV2640 trên board AI-Thinker ESP32-CAM, SCCB nội bộ GPIO26/27 (không ra header) |
+| ToF | VL53L0X, địa chỉ I2C `0x29`, bus I2C **riêng** (SDA=GPIO4, SCL=GPIO13, port 0) — GPIO26/27 không đưa ra header ngoài nên không đấu chung được với camera như dự tính ban đầu (xác nhận 13/08, xem plan.md Bench Bring-up Log). Tránh GPIO12 (bootstrap, rủi ro không boot) và GPIO16 (PSRAM CS) |
+| Lưu trữ | microSD 16GB thật (kế hoạch ban đầu 256GB), format FAT32, gắn ngay trên board (SDMMC 1-bit: CLK=14, CMD=15, D0=2) |
 | Nguồn | 5V/2A **riêng**, không lấy từ laptop/Jetson (quy tắc phần cứng chuẩn dự án) |
 
 ## Toolchain
@@ -62,16 +62,23 @@ Rotation tự xoá thư mục đêm cũ nhất khi vượt 30 thư mục — kh�
 
 ## Trạng thái
 
-Skeleton — camera init, SD, rotation, NTP boot-sync, cấu trúc VL53L0X đã có, đã qua 1
-vòng `code-reviewer` (5.5/10 → sửa 1 critical + 3 high + 2 medium, rebuild xong). **Đã
-build thật bằng PlatformIO** (cả 2 env, xem plan.md Quyết định #11), **chưa flash/chạy
-trên board thật** (viết trong lúc chưa có board — xem Phase 2 mua sắm).
+**Đã flash thật lên board AI-Thinker ESP32-CAM, chạy ổn định.** Camera + SD hoạt động
+xuyên suốt nhiều lần reboot trong buổi bring-up 13/08 (fps thật ~1.5fps, không phải
+5fps kế hoạch — đã chấp nhận). Chi tiết đầy đủ + 8 bug/kiến trúc thật đã bắt và sửa:
+`plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` §Bench Bring-up Log.
 
 Đã verify bằng công cụ thật, không phải khẳng định suông:
-- `pio run -e esp32cam` và `pio run -e esp32cam_production_check` — cả 2 SUCCESS.
+- `pio run -e esp32cam` và `pio run -e esp32cam_production_check` — cả 2 SUCCESS, đã flash thật.
 - `nm firmware.elf | grep storage_*|esp_wifi_connect` trên bản production → **0 kết quả**
   (ranh giới riêng tư H-25 đúng như thiết kế); trên bản bench-test → đủ symbol.
+- Serial log thật xác nhận: camera OV2640 nhận diện đúng, SD mount + ghi/đọc lại đúng
+  qua nhiều lần reboot (seq tự khôi phục, không ghi đè), NTP→tắt WiFi đúng thiết kế.
 
-VL53L0X (`vl53l0x.cpp`) mới có sanity-check model ID + đo single-shot tối giản theo
-datasheet, **chưa** cắm chuỗi hiệu chuẩn đầy đủ của ST — xem TODO trong file đó trước
-khi tin số đo khoảng cách. Việc còn lại: Phase 4 (`plans/260813-0934-esp32cam-vl53l0x-camera-node/phase-04-bench-validation-dod.md`).
+**VL53L0X chưa hàn dây vật lý** — bus I2C riêng (GPIO4=SDA, GPIO13=SCL, port 0) đã tạo
+được, verify không bị GPIO nào khác chiếm (`esp_gpio_reserve` bitmask), nhưng chưa đọc
+được cảm biến thật vì chưa cắm. VL53L0X (`vl53l0x.cpp`) mới có sanity-check model ID +
+đo single-shot tối giản theo datasheet, **chưa** cắm chuỗi hiệu chuẩn đầy đủ của ST —
+xem TODO trong file đó trước khi tin số đo khoảng cách.
+
+Việc còn lại: hàn VL53L0X (VCC→3.3V, GND→GND, SDA→GPIO4, SCL→GPIO13), rồi Phase 4
+(`plans/260813-0934-esp32cam-vl53l0x-camera-node/phase-04-bench-validation-dod.md`).
