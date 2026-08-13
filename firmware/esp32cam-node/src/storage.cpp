@@ -21,6 +21,13 @@ int s_frame_seq = 0;
 char s_current_night[16] = {};  // YYYYMMDD của thư mục đêm đã "mở"/khôi phục seq trong
                                  // phiên chạy này — tránh scan lại thư mục mỗi frame.
 
+// Giữ index.csv MỞ suốt đêm thay vì fopen("a")/fclose() mỗi frame. Đo thật 13/08: sau
+// ~4000 dòng tích luỹ, mỗi lần mở lại ở chế độ append tốn ngày càng nhiều thời gian —
+// driver FAT phải duyệt hết chuỗi cluster để tìm cuối file mỗi lần open. Ảnh hưởng trực
+// tiếp DoD "8 tiếng liên tục" — nếu không sửa, fps sẽ giảm dần suốt đêm khi file lớn
+// dần thay vì ổn định.
+FILE* s_index_file = nullptr;
+
 // Reboot giữa đêm (rất thường gặp lúc bench-test) trước đây khiến s_frame_seq reset về 0
 // và ghi đè âm thầm lên frame_000000.jpg... của phiên trước cùng ngày. Scan thư mục tìm
 // seq lớn nhất đã có, tiếp tục từ đó thay vì luôn bắt đầu lại từ 0.
@@ -121,6 +128,16 @@ esp_err_t storage_open_night(int64_t epoch_s, char* out_dir, size_t out_dir_len)
         ESP_LOGI(TAG, "Thư mục đêm %s đã tồn tại, tiếp tục từ seq %d", out_dir, s_frame_seq);
     }
     strncpy(s_current_night, night_name, sizeof(s_current_night) - 1);
+
+    // Mở index.csv MỘT LẦN cho cả đêm (xem giải thích ở s_index_file phía trên).
+    if (s_index_file) fclose(s_index_file);
+    char index_path[300];
+    snprintf(index_path, sizeof(index_path), "%s/index.csv", out_dir);
+    s_index_file = fopen(index_path, "a");
+    if (!s_index_file) {
+        ESP_LOGE(TAG, "Không mở được %s", index_path);
+        return ESP_FAIL;
+    }
     return ESP_OK;
 }
 
@@ -147,17 +164,15 @@ esp_err_t storage_write_frame(const char* night_dir, const uint8_t* jpg_buf, siz
     const int written_seq = s_frame_seq;
     ++s_frame_seq;
 
-    char index_path[300];
-    snprintf(index_path, sizeof(index_path), "%s/index.csv", night_dir);
-    FILE* idx = fopen(index_path, "a");
-    if (!idx) {
-        ESP_LOGE(TAG, "Không mở được %s — frame_%06d.jpg đã ghi nhưng thiếu dòng index",
-                 index_path, written_seq);
+    if (!s_index_file) {
+        ESP_LOGE(TAG, "index.csv chưa mở — frame_%06d.jpg đã ghi nhưng thiếu dòng index",
+                 written_seq);
         return ESP_FAIL;
     }
-    fprintf(idx, "%lld,frame_%06d.jpg,%ld\n", static_cast<long long>(t_ms), written_seq,
+    fprintf(s_index_file, "%lld,frame_%06d.jpg,%ld\n", static_cast<long long>(t_ms), written_seq,
             static_cast<long>(distance_mm));
-    fclose(idx);
+    fflush(s_index_file);  // đẩy xuống lớp FS ngay — rẻ hơn nhiều so với fopen("a") lại
+                            // từ đầu, vẫn chống mất dữ liệu nếu mất điện đột ngột.
 
     return ESP_OK;
 }

@@ -177,9 +177,24 @@ extern "C" void app_main() {
         // -1 nếu dropout (init lỗi hoặc đọc lỗi) — ghi nguyên, không bịa số (nguyên
         // tắc dự án). Không gọi read khi init đã biết thất bại — tránh spam lỗi
         // "i2c handle not initialized" mỗi vòng lặp (bắt được lúc bench-test 13/08).
-        int32_t distance_mm = vl53l0x_ready ? vl53l0x_read_distance_mm() : -1;
+        // Đo thật 13/08: mỗi lần gọi vl53l0x_read_distance_mm() (luôn timeout — driver
+        // tối giản chưa hiệu chuẩn) tốn ~850ms, kéo fps từ ~1.5 xuống ~0.65. Đúng
+        // fallback đã ghi trong Risk Assessment phase-03: giảm tần suất poll thay vì
+        // mỗi vòng lặp — 1/10 vòng vẫn đủ cho mục đích debug/tương lai nâng cấp driver.
+        static int s_vl53l0x_poll_counter = 0;
+        int32_t distance_mm = -1;
+        if (vl53l0x_ready && (++s_vl53l0x_poll_counter % 10 == 0)) {
+            distance_mm = vl53l0x_read_distance_mm();
+        }
         if (fb) {
             storage_write_frame(night_dir, fb->buf, fb->len, distance_mm, t_ms);
+            // Log định kỳ (không phải mỗi frame — spam) — cần số byte/frame thật để
+            // tính lại dung lượng SD/đêm, plan trước đó chỉ giả định ~35KB chưa đo.
+            static int s_frame_count = 0;
+            if (++s_frame_count % 50 == 1) {
+                ESP_LOGI(TAG, "Frame size mẫu: %u byte (đã chụp %d frame)",
+                         static_cast<unsigned>(fb->len), s_frame_count);
+            }
             esp_camera_fb_return(fb);
         } else {
             ESP_LOGW(TAG, "Bỏ 1 frame — esp_camera_fb_get() trả NULL");

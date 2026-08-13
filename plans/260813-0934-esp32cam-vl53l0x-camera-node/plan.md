@@ -140,8 +140,9 @@
 ## Bench Bring-up Log — 2026-08-13
 
 Flash thật lên board AI-Thinker ESP32-CAM (đế ESP32-CAM-MB, USB-TTL CH340 qua WSL
-usbipd) + đọc serial log thật (không phải build log). 10 bug/kiến trúc thật bắt được
-(mục 4 bị mục 6 supersede), tất cả đã sửa/điều tra và verify lại bằng reflash + đọc log:
+usbipd) + đọc serial log thật (không phải build log). 12 bug/kiến trúc/số liệu thật
+bắt được (mục 4 bị mục 6 supersede), tất cả đã sửa/điều tra và verify lại bằng reflash
++ đọc log:
 
 1. **I2C driver conflict** — `E i2c: CONFLICT! driver_ng is not allowed to be used
    with this old driver` → `abort()`, crash loop ngay khi boot. Nguyên nhân:
@@ -227,6 +228,31 @@ board), và tốc độ nạp mặc định 460800 baud không ổn định qua 
     xong, không còn kích hoạt lại race này). Chấp nhận là rủi ro hiếm, một lần, tự
     lành — không sửa code cho corner case này (YAGNI, đã tự phục hồi qua watchdog).
 
-**File đổi trong bring-up này (chưa commit):** `src/vl53l0x.{h,cpp}`, `src/main.cpp`,
-`src/camera_config.h`, `sdkconfig.defaults` (mới), `vl53l0x.h` TODO comment (tham
-chiếu repo brainstorm).
+11. **Kích thước JPEG thật đo được: ~14.5KB/frame** — thêm log định kỳ (mỗi 50 frame,
+    không spam) trong `main.cpp`. Thấp hơn nhiều so với giả định ban đầu ~35KB (SVGA
+    quality=12, cảnh tối/thiếu sáng nén nhỏ hơn). Cần tính lại dung lượng SD/đêm với
+    số thật này khi biết fps ổn định thật (xem mục 12).
+12. **fps không cải thiện dù giảm tần suất poll VL53L0X (1/10 vòng) và giữ `index.csv`
+    mở suốt đêm thay vì fopen("a") mỗi frame** — cả 2 tối ưu hợp lý về mặt code nhưng
+    đo thật fps còn TỆ HƠN (2200ms/vòng, trước đó 1650ms). Nghi vấn thật: thư mục
+    `/sdcard/20260813` đã tích luỹ **~4300 file** qua cả buổi test hôm nay (nhiều lần
+    flash lại, không đổi ngày) — driver FAT phải quét thư mục ngày càng lớn để tìm chỗ
+    trống mỗi lần `fopen(..., "wb")` tạo file JPEG mới, chậm dần theo số file tồn tại.
+    **Chưa xác nhận 100%** (chưa test trên thư mục sạch để so sánh) nhưng là giả
+    thuyết có bằng chứng nhất. **Khuyến nghị bắt buộc trước khi chạy DoD 8 tiếng
+    thật:** xoá sạch thẻ SD hoặc ít nhất xoá thư mục `20260813` hiện tại — số liệu
+    fps/thời gian đo trong buổi bring-up hôm nay (13/08) **không đại diện** cho một
+    đêm chạy sạch từ đầu.
+
+**Tổng kết code đã sửa hôm nay (đã commit qua 3 commit `df779fd`→`4a0f3b2`→`60151b8`,
+cộng các thay đổi mục 11/12 chưa commit tại thời điểm viết đoạn này):**
+`src/vl53l0x.{h,cpp}`, `src/main.cpp`, `src/camera_config.h`, `src/storage.{h,cpp}`,
+`sdkconfig.defaults`, `platformio.ini`.
+
+**Việc còn lại trước khi đóng Phase 4 DoD:**
+- [ ] Xoá thư mục `20260813` (hoặc format lại thẻ SD) rồi đo lại fps/frame-size trên
+      dữ liệu sạch — số liệu bring-up hôm nay chỉ tham khảo, không phải số DoD chính thức
+- [ ] Chạy 8 tiếng liên tục thật (đêm sạch)
+- [ ] Test rotation với >30 thư mục thật (cần format lại hoặc rút thẻ SD ra máy tính
+      tạo thư mục giả — không làm được từ môi trường này, cần Hưng thao tác tay)
+- [ ] Viết `docs/sensor-characterization.md` với số liệu đêm sạch, không phải số bring-up

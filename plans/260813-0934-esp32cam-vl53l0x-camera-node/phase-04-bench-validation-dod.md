@@ -27,6 +27,12 @@ Không đổi. Đây là bước tích hợp vật lý + đo đạc.
 
 ## Implementation Steps
 
+0. **Bắt buộc trước mọi bước dưới đây:** xoá sạch thẻ SD (hoặc format lại) trước khi
+   đo số liệu chính thức. Buổi bring-up 13/08 đã dồn ~4300 file vào 1 thư mục đêm qua
+   nhiều lần flash lại — nghi ngờ có thật (chưa xác nhận 100%) là driver FAT quét thư
+   mục lớn dần làm chậm việc tạo file JPEG mới, khiến fps đo được trong buổi đó
+   (~0.45-0.65fps) không đại diện cho một đêm chạy sạch. Xem plan.md Bench Bring-up
+   Log mục 12.
 1. Lắp ESP32-CAM+VL53L0X lên bench rig, hướng vào vùng ngủ, đi dây gọn, tháo rời được (đúng yêu cầu modular chung của Phase 01).
 2. Cấp nguồn riêng, xác nhận không rơi áp khi camera+SD ghi đồng thời (đo bằng đồng hồ vạn năng nếu nghi ngờ).
 3. Chạy thử 30 phút ban ngày: verify fps thực tế, chất lượng ảnh đủ nhìn rõ tư thế người.
@@ -39,10 +45,10 @@ Không đổi. Đây là bước tích hợp vật lý + đo đạc.
 ## Success Criteria
 
 - [x] Build `BENCH_TEST_MODE=0` không link được hàm ghi SD/WiFi nào — **verify sớm ở Phase 3, không cần phần cứng**: `pio run -e esp32cam_production_check` build SUCCESS, `nm firmware.elf | grep storage_write_frame\|storage_init\|storage_rotate\|storage_open_night\|esp_wifi_connect` ra **0 kết quả** (đối chứng: cùng lệnh trên build `esp32cam` (BENCH_TEST_MODE=1) ra đủ 5 symbol). Env `esp32cam` chính (BENCH_TEST_MODE=1) cũng build SUCCESS — Flash 23.2%, RAM 14.9%.
-- [ ] Ghi liên tục 8 tiếng, dung lượng SD tiêu thụ khớp ước tính (trong khoảng ±30% của ~5GB/đêm)
+- [ ] Ghi liên tục 8 tiếng trên **thẻ SD đã xoá sạch** (bước 0), dung lượng SD tiêu thụ khớp ước tính. **Kích thước JPEG đã đo thật: ~14.5KB/frame** (không phải 35KB giả định) — tính lại: 14.5KB × fps thật đo trên đêm sạch × 3600s × 8h. fps đo trong buổi bring-up (0.45-0.65fps) KHÔNG dùng làm số chính thức — nghi ngờ bị chậm do thư mục cũ tích luỹ quá nhiều file (chưa xác nhận), cần đo lại trên thư mục sạch
 - [ ] Không có frame bị hỏng/corrupt trong 1 đêm test (spot-check ngẫu nhiên ≥20 file)
-- [ ] VL53L0X cho khoảng cách hợp lý khi có người / không người / rời giường
-- [ ] Rotation 30 đêm hoạt động đúng khi giả lập
+- [ ] VL53L0X cho khoảng cách hợp lý khi có người / không người / rời giường — **hiện tại luôn timeout/dropout**, cần chuỗi hiệu chuẩn ST đầy đủ mới đo được số thật (xem vl53l0x.h TODO); model_id đã xác nhận đúng (0xEE), chỉ đo khoảng cách chưa hoạt động
+- [ ] Rotation 30 đêm hoạt động đúng khi giả lập — cần tạo tay ≥31 thư mục `YYYYMMDD` trên thẻ SD (rút thẻ ra đọc bằng máy tính, không làm được từ phiên làm việc này)
 - [ ] `docs/sensor-characterization.md` có mục node camera với số liệu thật, không phải số ước tính
 - [ ] Không phát hiện WiFi streaming ngoài ý muốn trong luồng ghi chính thức (runtime — khác với symbol-absence ở trên, cần phần cứng thật)
 
