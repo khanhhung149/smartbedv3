@@ -194,14 +194,16 @@ Persistence: SQLite to start (TimescaleDB if volume demands). Rotate per night, 
 | HLK-**LD2510B** radar, 24 GHz | UART | Head of bed, aimed down | Presence, **true position**, **multi-person tracking**, respiration amplitude, coarse heart rate |
 | **Piezoelectric pad** | ADC | Under mattress, torso | Presence, BCG, movement, turning over |
 | SHT10/31 | I2C | In pod, out of the breath stream | Temperature, humidity |
-| Thermal / MLX90614 | I2C | Forehead / neck | Surface body temperature |
 | **Omnidirectional mic** | I2S | Head of bed | Breathing, snoring, ambient noise |
 | CO₂ | I2C | In pod | Ventilation interlock (§5.3) |
+| **ESP32-CAM (OV2640) + VL53L0X** | SCCB (I2C, shared with camera config) | Aimed at sleep area | Behavior video (JPEG frames, bench-test only, local SD — not synced to this pipeline), distance-to-person |
 
 Two upgrades from the 2023 spec worth stating plainly, because they are easy to "correct" back by mistake:
 
 - **LD2510B, not LD2410B.** The 2410B reports only an approximate distance. The 2510B tracks **several people at once with true positions** — required for a double bed, and for telling a person lying down apart from a person walking past.
 - **Piezo pad, not a 150 kg loadcell.** The piezo yields BCG, which a loadcell cannot, and does not drift with temperature. Cheaper and simpler to mount.
+
+A third change, decided 2026-08-13 and out of scope for this file's original 13/07 sign-off: the **Thermal / MLX90614** row above is replaced by the camera node. The original cluster's real purpose was observing sleep behavior, not measuring temperature — an MLX90614 cannot substitute for that, and an RGB camera cannot measure temperature. See `plans/260813-0934-esp32cam-vl53l0x-camera-node/` for the full decision record. **This channel does not go through the MQTT bus or the capability manifest (§5)** — video stays on the node's own local SD card, and only during the engineer bench-test period (never once a real user is on the bed, matching the five privacy rules in Phase 05).
 
 ---
 

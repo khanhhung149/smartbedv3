@@ -19,7 +19,7 @@ Ba yếu tố này đều có literature chống lưng ngay trong spec: nhiệt 
 
 ### 1. Nhiệt (giá trị cao nhất trong ba cái)
 - **Máy lạnh monoblock** điều khiển qua relay/Modbus. Michael chốt giữ monoblock (search "monoblock air conditioner"), nhưng **phải chọn loại ít ồn** — đây là ràng buộc mua hàng, không phải mong muốn.
-- Vòng kín: đọc SHT (nhiệt độ + độ ẩm khoang) và MLX90614 (thân nhiệt) → điều chỉnh.
+- Vòng kín: đọc SHT (nhiệt độ + độ ẩm khoang) → điều chỉnh. (Cập nhật 13/08: bỏ MLX90614 — cụm "Camera nhiệt/MLX90614" ở Phase 01 đã thay bằng ESP32-CAM+VL53L0X, không bù lại thân nhiệt cá nhân. Vòng kín không cá nhân hoá theo thân nhiệt người nằm, chỉ theo nhiệt độ khoang.)
 - **Đường cong nhiệt theo pha ngủ:** hạ nhiệt độ khi bắt đầu vào giấc (giúp thân nhiệt lõi giảm, cơ chế sinh lý của việc buồn ngủ), giữ mát trong đêm, ấm dần lại trước giờ dậy.
 - Ràng buộc an toàn: giới hạn cứng 18-30°C, không bao giờ vượt bất kể thuật toán nói gì. Hysteresis chống bật/tắt liên tục (đã có bài học từ project autogate với quạt Proxmox).
 

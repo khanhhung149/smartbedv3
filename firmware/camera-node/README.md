@@ -1,5 +1,7 @@
 # camera-node/ — ESP32 (candidate, unconfirmed scope)
 
+**Not to be confused with `firmware/esp32cam-node/`** — that is a separate physical device for Phase 01 (behavior-recording node, ESP32-CAM + VL53L0X, writes video to local SD, bench-test only). This directory is about the Phase 05 camera below, which never writes anything to disk.
+
 Not started. Directory reserved for the firmware-tier surface of Phase 05 (camera + edge-AI).
 
 Image capture, MediaPipe Pose, and rPPG all run on **Jetson Orin** in [`edge/vision/`](../../edge/README.md) — this directory does not process images. `firmware/README.md`'s module table does not list this directory yet; the scope below is inferred from the Phase 05 privacy principles, not an explicit assignment from Michael. **Confirm scope before implementing.**

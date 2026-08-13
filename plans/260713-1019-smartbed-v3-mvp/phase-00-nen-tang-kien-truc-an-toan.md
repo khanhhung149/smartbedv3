@@ -34,7 +34,7 @@ Nguyên tắc kiến trúc giữ nguyên: **tầng AI (Linux/Jetson) không đư
 | **HLK-LD2510B** (radar 24GHz) | **Giữ, lõi — nâng cấp từ LD2410B** | 2510B track được **nhiều người cùng lúc + vị trí thật**. 2410B chỉ cho khoảng cách gần đúng. Gắn trên đầu giường chiếu xuống. Presence + nhịp thở + nhịp tim (gần đúng) |
 | **Piezoelectric pad** | **Giữ, lõi — thay loadcell** | Thay hoàn toàn loadcell 150kg. Phát hiện hiện diện + BCG (ballistocardiogram) |
 | **Mic đa hướng** | **Giữ** | Dùng con Quân vừa đưa. Gắn đầu giường. **KHÔNG phải mic định hướng** (mic định hướng là loại cục dài kiểu shotgun — không cần) |
-| Camera nhiệt | **Giữ** | Thân nhiệt bề mặt |
+| ~~Camera nhiệt~~ **ESP32-CAM (OV2640) + VL53L0X** | **Thay hẳn** (chốt 13/08, xem `plans/260813-0934-esp32cam-vl53l0x-camera-node/`) | Cụm gốc "Camera nhiệt/MLX90614" thực ra nhắm quan sát hành vi ngủ, không phải đo nhiệt — trùng mục tiêu với thiết bị quan sát hình ảnh. Node camera thứ 6, ghi cục bộ SD, chỉ giai đoạn bench-test (không dùng khi có khách hàng thật) |
 | SHT (nhiệt độ + độ ẩm) | **Giữ** | Môi trường khoang |
 | ~~Loadcell 150kg~~ | **Cắt** | Thay bằng piezo pad |
 | ~~MAX30102 (HR/SpO2)~~ | **Để sau** | Cảm biến tiếp xúc, phải chạm da. Mâu thuẫn triết lý non-contact |

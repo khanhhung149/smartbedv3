@@ -16,8 +16,16 @@ Thumbs.db
 .pioenvs/
 .piolibdeps/
 firmware/**/build/
-firmware/**/sdkconfig.old
 managed_components/
+# sdkconfig.<env> (e.g. sdkconfig.esp32cam) is regenerated from sdkconfig.defaults on
+# every build — only the defaults file is source-controlled. Caught missing here by
+# code review when esp32cam-node became the repo's first pure-ESP-IDF (non-Arduino)
+# node: `git add -n` showed sdkconfig.esp32cam*/sdkconfig.old would be tracked.
+firmware/**/sdkconfig.*
+!firmware/**/sdkconfig.defaults
+# WiFi/credentials — never commit. config.h.example stays tracked (no real values).
+firmware/**/config.h
+firmware/**/config.h.bak*
 
 # ── edge/ (Python — Jetson Orin) ───────────────────────────────────────────
 __pycache__/
