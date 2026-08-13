@@ -1,7 +1,7 @@
 # Plan — Thay "Camera nhiệt / MLX90614" bằng ESP32-CAM (OV2640) + VL53L0X
 
 - **Ngày lập:** 2026-08-13
-- **Trạng thái:** in-progress — Phase 1 xong, Phase 3 code xong/build thật xong nhưng chưa hardware-verified, Phase 2 & 4 chờ hành động vật lý của Hưng
+- **Trạng thái:** in-progress — Phase 1 xong, Phase 2 xong (4/4 hạng mục, SD 16GB thay 256GB), Phase 3 **flash thật lên board thành công, camera+SD chạy ổn định** (VL53L0X chưa cắm dây), Phase 4 đang chạy dở (bench bring-up)
 - **Nguồn:** `plans/reports/brainstorm-260813-0923-thay-camera-nhiet-bang-esp32cam-vl53l0x-report.md`
 - **Loại:** Amendment — sửa BOM/docs của `plans/260713-1019-smartbed-v3-mvp/` (phase 00, 01, 03), không phải phase mới trong đánh số 00-07 chính thức
 - **Rủi ro tổng:** thấp (không chuyển động, không actuator) nhưng **đảo một quyết định BOM đã chốt miệng 13/07** — xem §Quyết định đã khoá
@@ -13,7 +13,7 @@
 | 1 | Thay hẳn hay thêm cụm mới? | **Thay hẳn** cụm "Camera nhiệt / MLX90614" (Phase 01) bằng node camera thứ 6: ESP32-CAM (OV2640) + VL53L0X |
 | 2 | Báo Michael trước khi sửa docs? | **Không cần chờ duyệt lại** — Hưng chốt đây là quyết định kỹ thuật thuộc thẩm quyền mình. Vẫn để 1 việc không-chặn trong Phase 1: báo Michael song song, cho minh bạch |
 | 3 | Bù thân nhiệt cho Phase 03 (mất input MLX90614)? | **Bỏ hẳn**, không thêm MLX90614 rời. Vòng kín điều hoà môi trường Phase 03 dùng SHT (nhiệt độ khoang) một mình |
-| 4 | Video ghi thông số nào? | **SVGA 800×600, ~5fps, giữ rotating 30 đêm** — khớp chính sách retention DoD Phase 01 gốc. ~5GB/đêm, ~150GB ổn định → thẻ SD 256GB exFAT |
+| 4 | Video ghi thông số nào? | **SVGA 800×600, giữ rotating 30 đêm** — khớp chính sách retention DoD Phase 01 gốc. Kế hoạch ban đầu ~5fps (~5GB/đêm) → thẻ SD 256GB exFAT. **Cập nhật 13/08 sau bring-up thật:** fps đo được trên phần cứng thật chỉ ~1.5fps (~670ms/vòng lặp, chưa tối ưu, đã chốt chấp nhận — xem plan.md Bench Bring-up Log). Ước tính lại (JPEG size vẫn dùng số giả định ~35KB/frame, **chưa đo thật**): ~1.5GB/đêm → thẻ 16GB hiện có đủ cho **~10 đêm** trước khi rotation phải xoá, không phải ~3 đêm như tính với 5fps |
 | 5 | Kiến trúc node | MCU riêng (node thứ 6), VL53L0X dùng chung bus SCCB (I2C, GPIO26/27) của camera, địa chỉ `0x29` — không cần thêm GPIO trên board AI-Thinker vốn đã ít chân trống khi dùng khe SD |
 | 6 | Lưu trữ | microSD cục bộ trên chính node, **không stream WiFi cho luồng ghi chính thức**. Nguồn riêng, không lấy từ laptop (quy tắc phần cứng chuẩn dự án) |
 | 7 | Ngoại lệ lưu video | **Chỉ áp dụng giai đoạn kỹ sư tự test (bench rig)** — cấm khi có người dùng thật, đối lập 5 nguyên tắc riêng tư Phase 05 (không lưu ảnh/video). Phải có cờ/flag rõ ràng trong code + ghi vào hazard-analysis.md |
@@ -136,3 +136,62 @@
 **Tier:** Standard (4 phases) — Fact Checker + Contract Verifier, xem bảng verification ở đầu phiên validate. Claims checked: 9, Verified: 8, Failed: 0, Unverified: 1 (external hardware fact, không phải lỗi plan).
 
 **Khuyến nghị:** Sẵn sàng cho `/ck:cook` — không còn mâu thuẫn chưa giải.
+
+## Bench Bring-up Log — 2026-08-13
+
+Flash thật lên board AI-Thinker ESP32-CAM (đế ESP32-CAM-MB, USB-TTL CH340 qua WSL
+usbipd) + đọc serial log thật (không phải build log). 5 bug/kiến trúc thật bắt được,
+tất cả đã sửa và verify lại bằng reflash + đọc log:
+
+1. **I2C driver conflict** — `E i2c: CONFLICT! driver_ng is not allowed to be used
+   with this old driver` → `abort()`, crash loop ngay khi boot. Nguyên nhân:
+   `espressif/esp32-camera@2.1.7` dùng API I2C mới (`driver/i2c_master.h`,
+   "driver_ng") cho SCCB nội bộ; `vl53l0x.cpp` ban đầu viết bằng API cũ
+   (`driver/i2c.h`). ESP-IDF không cho 2 API tồn tại chung 1 firmware. **Sửa:** viết
+   lại toàn bộ `vl53l0x.cpp` dùng `i2c_master_bus_config_t`/`i2c_new_master_bus`/
+   `i2c_master_transmit_receive`.
+2. **PSRAM chưa bật** — `cam_dma_config: frame buffer malloc failed`. Chip có 8MB
+   PSRAM thật (log: `Found 8MB PSRAM device`) nhưng ESP-IDF không tự bật, cần
+   `sdkconfig.defaults` (chưa tạo file này lúc viết skeleton). **Sửa:** thêm
+   `firmware/esp32cam-node/sdkconfig.defaults` với `CONFIG_SPIRAM=y` +
+   `CONFIG_SPIRAM_USE_MALLOC=y` + `CONFIG_SPIRAM_MODE_QUAD=y`.
+3. **FatFs 8.3 filename** — `frame_000000.jpg` (12 ký tự tên) bị `fopen()` từ chối
+   lặp lại mỗi frame, trong khi thư mục `20260813` (đúng 8 ký tự) vẫn mkdir bình
+   thường — FatFs mặc định ESP-IDF chỉ hỗ trợ short filename 8.3, không có Long File
+   Name. **Sửa:** thêm `CONFIG_FATFS_LFN_HEAP=y` vào `sdkconfig.defaults`.
+4. **Kiến trúc chia sẻ bus SCCB sai** — `E i2c.common: I2C bus id(1) has already been
+   acquired`. VL53L0X và camera **không thể mỗi bên tự tạo 1 bus i2c_master riêng**
+   trên cùng GPIO26/27 (khác bản chất so với "địa chỉ I2C khác nhau nên không xung
+   đột" — đó là giả định đúng cho code chạy trên 1 bus, nhưng bug này là ở tầng tạo
+   bus, trước cả bước gửi địa chỉ). **Sửa (đúng, có bằng chứng từ source
+   `managed_components/espressif__esp32-camera/driver/sccb-ng.c`):** VL53L0X tạo bus
+   trước (`vl53l0x_init()` chạy trước `esp_camera_init()`), camera cấu hình
+   `pin_sccb_sda=-1`/`sccb_i2c_port=SHARED_SCCB_I2C_PORT` để **dùng lại** bus đã tạo
+   qua `SCCB_Use_Port()` → `i2c_master_get_bus_handle()`, không tự tạo bus mới.
+5. **JPEG "NO-SOI" ở vài frame đầu** — `cam_hal: NO-SOI - JPEG start marker missing`
+   ngay sau init, do AEC/AGC chưa ổn định. **Sửa:** thêm vòng lặp chụp bỏ 3 frame đầu
+   sau `esp_camera_init()` trước khi vào vòng ghi thật — kỹ thuật tham khảo từ
+   [benlazzero/Esp32S3-and-VL53L0X](https://github.com/benlazzero/Esp32S3-and-VL53L0X)
+   (`takeImage()` throwaway loop), xác nhận qua `/brainstorm` trước khi áp dụng.
+
+**Kết quả sau khi sửa cả 5:** camera + SD ổn định qua nhiều lần reboot trong buổi
+bring-up (seq tự khôi phục đúng: 0 → 1868 → 1912 qua các lần flash/reset, không ghi
+đè). WiFi→NTP→tắt WiFi hoạt động đúng thiết kế (`time_synced=1`, IP thật
+`192.168.1.119`, SSID `mp`). Thư mục đêm ra đúng ngày thật `20260813` (xác nhận bug
+timestamp đã sửa ở vòng code-review trước đó hoạt động đúng trên phần cứng thật).
+
+**Số liệu thật khác giả định trong plan:** fps thực đo được **~1.5fps** (~670ms/vòng
+lặp), không phải 5fps mục tiêu ban đầu (§Quyết định #4). Chưa đo kích thước JPEG
+thật để tính lại dung lượng/đêm — nhưng fps thấp hơn 3.3x nghĩa là ít frame hơn dự
+kiến, có lợi cho giới hạn thẻ SD 16GB (xem phase-02). Nguyên nhân fps thấp — capture
+JPEG SVGA + ghi SD trên thẻ 16GB — chưa phân tích sâu, để `docs/sensor-characterization.md`
+ở Phase 4 xử lý.
+
+**VL53L0X chưa cắm dây vật lý lúc bring-up này** — `vl53l0x_init()` fail có kiểm
+soát (log rõ ràng, không gọi read mỗi vòng lặp), camera/SD không bị ảnh hưởng. Wiring
+đã hướng dẫn (VCC→3.3V, GND→GND, SDA→GPIO26, SCL→GPIO27, đấu song song với camera),
+chưa xác nhận Hưng đã cắm.
+
+**File đổi trong bring-up này (chưa commit):** `src/vl53l0x.{h,cpp}`, `src/main.cpp`,
+`src/camera_config.h`, `sdkconfig.defaults` (mới), `vl53l0x.h` TODO comment (tham
+chiếu repo brainstorm).

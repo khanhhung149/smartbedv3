@@ -68,11 +68,11 @@ VL53L0X (I2C addr 0x29, dùng chung SCCB) ┘
 
 ## Success Criteria
 
-- [ ] Camera + VL53L0X đọc được đồng thời trên cùng bus SCCB, không timeout/conflict — cần phần cứng thật, xem Phase 4
-- [ ] Ghi liên tục ổn định ≥5fps trong ít nhất 30 phút thử nghiệm bench, không tràn buffer/crash — cần phần cứng thật, xem Phase 4
-- [ ] File JPEG + `index.csv` đọc lại được, khoảng cách hợp lý (so tay bằng thước) — cần phần cứng thật, xem Phase 4
+- [ ] Camera + VL53L0X đọc được đồng thời trên cùng bus SCCB, không timeout/conflict — **camera xác nhận chạy ổn định trên bus dùng chung (bug kiến trúc đã sửa, xem plan.md Bench Bring-up Log #4)**, VL53L0X chưa cắm dây vật lý nên chưa test đồng thời thật — chờ Hưng cắm (Phase 4)
+- [ ] Ghi liên tục ổn định ≥5fps trong ít nhất 30 phút thử nghiệm bench, không tràn buffer/crash — **đo thật: ~1.5fps (~670ms/vòng lặp), KHÔNG đạt 5fps mục tiêu.** Không crash/tràn buffer qua nhiều lần reboot. Cần quyết định: chấp nhận 1.5fps (đủ cho mục đích debug/pose training?) hay tối ưu (giảm JPEG quality, bỏ bớt việc trong vòng lặp) — xem Phase 4
+- [x] File JPEG + `index.csv` đọc lại được — **verify thật:** `recover_frame_seq()` scan thư mục đêm qua nhiều lần reboot ra đúng seq tăng dần (0→1868→1912), chứng minh file ghi/đọc lại được đúng. "Khoảng cách hợp lý" chưa test — VL53L0X chưa cắm dây
 - [x] Build `BENCH_TEST_MODE=0` — grep binary/symbol xác nhận không link hàm ghi SD nào vào production build — **verify thật:** `nm firmware.elf | grep storage_*` ra 0 kết quả trên production, đủ symbol trên bench-test (xem plan.md Code Review Log, re-verify sau fix)
-- [ ] Rotation xoá đúng thư mục cũ nhất khi giả lập >30 thư mục đêm — logic viết xong (`storage_rotate()`), chỉ chạy được trên filesystem thật của thẻ SD/ESP32, cần phần cứng để verify — xem Phase 4
+- [ ] Rotation xoá đúng thư mục cũ nhất khi giả lập >30 thư mục đêm — logic viết xong (`storage_rotate()`), chỉ mới có 1 thư mục đêm thật (`20260813`) tích luỹ, chưa test rotation thật — xem Phase 4
 
 ## Risk Assessment
 

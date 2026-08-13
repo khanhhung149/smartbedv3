@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Mua sắm phần cứng"
-status: pending
+status: completed  # 4/4 hạng mục trong tay; thẻ SD 16GB thay vì 256GB kế hoạch — xem ghi chú
 priority: P1
 dependencies: [1]
 ---
@@ -34,20 +34,19 @@ Không đổi kiến trúc. Đây là bước mua sắm thuần tuý.
 5. Format thẻ SD **exFAT** trước khi lắp (FAT32 giới hạn 4GB/file và thường bị Windows giới hạn format ở ~32GB — không đủ cho 256GB).
 6. Ghi lại giá thật + nhà cung cấp vào bảng dưới, cộng tổng.
 
-### Bảng mua sắm (điền giá thật khi mua)
+### Bảng mua sắm
 
-| Linh kiện | Số lượng | Giá tham khảo | Nhà cung cấp | Ghi chú |
-|---|---|---|---|---|
-| ESP32-CAM (AI-Thinker, OV2640) | 1 | — | — | — |
-| VL53L0X breakout | 1 | — | — | Địa chỉ mặc định `0x29` |
-| MicroSD 256GB Class10/U3 | 1 | — | — | Format exFAT |
-| Nguồn 5V/2A riêng | 1 | — | — | Không dùng chung laptop/Jetson |
-| **Tổng** | | | | |
+| Linh kiện | Số lượng | Trạng thái | Ghi chú |
+|---|---|---|---|
+| ESP32-CAM (AI-Thinker, OV2640) | 1 | **Đã mua, đã flash thật** | Chạy ổn định trên bench — xem plan.md Bench Bring-up Log 13/08 |
+| VL53L0X breakout | 1 | **Đã mua** | Địa chỉ mặc định `0x29`, **chưa cắm dây vật lý** |
+| MicroSD | 1 | **Đã có — 16GB, đã format & chạy thật** | FAT32 (không exFAT). **Cập nhật 13/08:** fps thật đo được ~1.5fps (không phải 5fps kế hoạch) → ~1.5GB/đêm (JPEG size vẫn giả định, chưa đo thật) → 16GB đủ **~10 đêm** trước khi rotation phải xoá, không phải ~3 đêm như tính ban đầu. Đã ghi/đọc lại thật qua nhiều lần reboot (seq tự khôi phục đúng) |
+| Nguồn 5V/2A riêng | 1 | **Đã có, đã cắm và chạy thật** | — |
 
 ## Success Criteria
 
-- [ ] Đủ 4 hạng mục trong tay (ESP32-CAM, VL53L0X, thẻ SD 256GB đã format exFAT, nguồn riêng)
-- [ ] Bảng giá đã điền đầy đủ, tổng chi phí biết trước
+- [x] Đủ 4 hạng mục trong tay — **16GB thay vì 256GB đã lên kế hoạch**, đủ cho bring-up, chưa đủ cho DoD retention 30 đêm (xem Phase 4)
+- [ ] Thẻ SD đã format FAT32, verify đọc/ghi được từ máy tính trước khi lắp vào ESP32-CAM
 
 ## Risk Assessment
 

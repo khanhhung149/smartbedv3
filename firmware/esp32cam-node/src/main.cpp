@@ -14,6 +14,8 @@
 #include "esp_camera.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs_flash.h"
 
 #include "camera_config.h"
@@ -24,8 +26,6 @@
 #include "esp_netif.h"
 #include "esp_netif_sntp.h"
 #include "esp_wifi.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "storage.h"
 #include "config.h"  // "../include" đã có trong INCLUDE_DIRS (src/CMakeLists.txt)
@@ -34,11 +34,6 @@
 namespace {
 const char* TAG = "esp32cam-node";
 
-constexpr int I2C_PORT_VL53L0X = 1;  // camera SCCB dùng I2C nội bộ riêng của esp32-camera
-                                      // driver; VL53L0X đi qua port I2C thường (port 1)
-                                      // trên CÙNG hai chân GPIO26/27. Nếu xung đột thật
-                                      // (xem Risk Assessment phase-03), giảm tần suất
-                                      // poll VL53L0X thay vì đổi bus.
 constexpr int MAX_NIGHTS = 30;
 constexpr int TARGET_FPS = 5;
 
@@ -124,17 +119,32 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(nvs_err);
 
+    // VL53L0X PHẢI init trước camera — nó tạo bus i2c_master trên SHARED_SCCB_I2C_PORT,
+    // camera_config.h cấu hình camera dùng LẠI đúng bus đó (pin_sccb_sda=-1) thay vì tự
+    // tạo bus riêng trên cùng GPIO26/27. Đảo thứ tự sẽ gây lỗi "I2C bus id already
+    // acquired" — bug thật đã bắt được 13/08 (xem camera_config.h).
+    esp_err_t err = vl53l0x_init(SHARED_SCCB_I2C_PORT, CAM_PIN_SIOD, CAM_PIN_SIOC);
+    const bool vl53l0x_ready = (err == ESP_OK);
+    if (!vl53l0x_ready) {
+        ESP_LOGW(TAG, "VL53L0X init thất bại (0x%x) — tiếp tục chạy, khoảng cách sẽ là dropout "
+                      "(không gọi read mỗi vòng lặp nữa, tránh spam log lỗi i2c handle)",
+                 err);
+    }
+
     camera_config_t cam_config = esp32cam_camera_config();
-    esp_err_t err = esp_camera_init(&cam_config);
+    err = esp_camera_init(&cam_config);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Camera init thất bại (0x%x)", err);
         return;
     }
 
-    err = vl53l0x_init(I2C_PORT_VL53L0X, CAM_PIN_SIOD, CAM_PIN_SIOC);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "VL53L0X init thất bại (0x%x) — tiếp tục chạy, khoảng cách sẽ là dropout",
-                 err);
+    // Vài frame đầu sau init chưa có AEC/AGC ổn định, JPEG hay lỗi "NO-SOI" (bắt
+    // được lúc bench-test 13/08) — kỹ thuật chụp bỏ đã thấy dùng ở
+    // github.com/benlazzero/Esp32S3-and-VL53L0X (takeImage(), throwaway loop).
+    for (int i = 0; i < 3; ++i) {
+        camera_fb_t* warmup_fb = esp_camera_fb_get();
+        if (warmup_fb) esp_camera_fb_return(warmup_fb);
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 
 #if BENCH_TEST_MODE
@@ -165,8 +175,10 @@ extern "C" void app_main() {
         storage_open_night(epoch_s, night_dir, sizeof(night_dir));
 
         camera_fb_t* fb = esp_camera_fb_get();
-        int32_t distance_mm = vl53l0x_read_distance_mm();  // -1 nếu dropout — ghi nguyên,
-                                                              // không bịa số (nguyên tắc dự án)
+        // -1 nếu dropout (init lỗi hoặc đọc lỗi) — ghi nguyên, không bịa số (nguyên
+        // tắc dự án). Không gọi read khi init đã biết thất bại — tránh spam lỗi
+        // "i2c handle not initialized" mỗi vòng lặp (bắt được lúc bench-test 13/08).
+        int32_t distance_mm = vl53l0x_ready ? vl53l0x_read_distance_mm() : -1;
         if (fb) {
             storage_write_frame(night_dir, fb->buf, fb->len, distance_mm, t_ms);
             esp_camera_fb_return(fb);

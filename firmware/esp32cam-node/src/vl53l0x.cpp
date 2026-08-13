@@ -1,14 +1,21 @@
 #include "vl53l0x.h"
 
 #include "driver/gpio.h"
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+// Dùng driver/i2c_master.h ("driver_ng") — KHÔNG dùng driver/i2c.h (API cũ). ESP-IDF
+// 5.x không cho phép 2 driver I2C tồn tại chung 1 firmware; espressif/esp32-camera
+// (SCCB nội bộ) đã dùng driver_ng, dùng API cũ ở đây gây abort() thật lúc boot
+// ("CONFLICT! driver_ng is not allowed to be used with this old driver") — bug đã
+// bắt được khi flash lên phần cứng thật lần đầu (13/08).
+
 namespace {
 const char* TAG = "vl53l0x";
-int s_port = I2C_NUM_1;
+i2c_master_bus_handle_t s_bus = nullptr;
+i2c_master_dev_handle_t s_dev = nullptr;
 
 // Thanh ghi dùng trong bản tối giản này — đúng theo datasheet VL53L0X (ST AN4907),
 // KHÔNG phải chuỗi hiệu chuẩn đầy đủ (xem cảnh báo trong vl53l0x.h).
@@ -20,34 +27,39 @@ constexpr uint8_t REG_SYSTEM_INTERRUPT_CLEAR = 0x0B;
 
 esp_err_t write_reg8(uint8_t reg, uint8_t value) {
     uint8_t buf[2] = {reg, value};
-    return i2c_master_write_to_device(static_cast<i2c_port_t>(s_port), VL53L0X_I2C_ADDR, buf,
-                                       sizeof(buf), pdMS_TO_TICKS(50));
+    return i2c_master_transmit(s_dev, buf, sizeof(buf), 50);
 }
 
 esp_err_t read_regn(uint8_t reg, uint8_t* out, size_t len) {
-    esp_err_t err = i2c_master_write_to_device(static_cast<i2c_port_t>(s_port), VL53L0X_I2C_ADDR,
-                                                &reg, 1, pdMS_TO_TICKS(50));
-    if (err != ESP_OK) return err;
-    return i2c_master_read_from_device(static_cast<i2c_port_t>(s_port), VL53L0X_I2C_ADDR, out,
-                                        len, pdMS_TO_TICKS(50));
+    return i2c_master_transmit_receive(s_dev, &reg, 1, out, len, 50);
 }
 }  // namespace
 
 esp_err_t vl53l0x_init(int i2c_port, int sda_gpio, int scl_gpio) {
-    s_port = i2c_port;
+    i2c_master_bus_config_t bus_config = {};
+    bus_config.i2c_port = static_cast<i2c_port_t>(i2c_port);
+    bus_config.sda_io_num = static_cast<gpio_num_t>(sda_gpio);
+    bus_config.scl_io_num = static_cast<gpio_num_t>(scl_gpio);
+    bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus_config.glitch_ignore_cnt = 7;
+    bus_config.flags.enable_internal_pullup = true;
 
-    i2c_config_t conf = {};
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = sda_gpio;
-    conf.scl_io_num = scl_gpio;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = 100000;  // 100kHz — an toàn để chia sẻ bus với SCCB camera
+    esp_err_t err = i2c_new_master_bus(&bus_config, &s_bus);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_new_master_bus lỗi (0x%x)", err);
+        return err;
+    }
 
-    esp_err_t err = i2c_param_config(static_cast<i2c_port_t>(s_port), &conf);
-    if (err != ESP_OK) return err;
-    err = i2c_driver_install(static_cast<i2c_port_t>(s_port), conf.mode, 0, 0, 0);
-    if (err != ESP_OK) return err;
+    i2c_device_config_t dev_config = {};
+    dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_config.device_address = VL53L0X_I2C_ADDR;
+    dev_config.scl_speed_hz = 100000;  // an toàn để chia sẻ bus với SCCB camera
+
+    err = i2c_master_bus_add_device(s_bus, &dev_config, &s_dev);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_bus_add_device lỗi (0x%x)", err);
+        return err;
+    }
 
     uint8_t model_id = 0;
     err = read_regn(REG_IDENTIFICATION_MODEL_ID, &model_id, 1);
@@ -65,7 +77,7 @@ esp_err_t vl53l0x_init(int i2c_port, int sda_gpio, int scl_gpio) {
     // Không có bước này, cảm biến vẫn đo được (single-shot polling dưới đây) nhưng độ
     // chính xác thấp hơn số liệu datasheet.
 
-    ESP_LOGI(TAG, "VL53L0X init xong (model_id=0x%02X, port=%d)", model_id, s_port);
+    ESP_LOGI(TAG, "VL53L0X init xong (model_id=0x%02X, port=%d)", model_id, i2c_port);
     return ESP_OK;
 }
 
