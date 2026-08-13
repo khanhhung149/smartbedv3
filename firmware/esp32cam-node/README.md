@@ -53,12 +53,15 @@ pio run -e esp32cam_production_check
 ## Cấu trúc dữ liệu ghi ra
 
 ```
-/sdcard/<YYYYMMDD>/frame_<seq6>.jpg
-/sdcard/<YYYYMMDD>/index.csv        # t_ms,frame_file,distance_mm
+/sdcard/<YYYYMMDD>/<HH>/frame_<seq6>.jpg
+/sdcard/<YYYYMMDD>/<HH>/index.csv        # t_ms,frame_file,distance_mm
 ```
 
-Rotation tự xoá thư mục đêm cũ nhất khi vượt 30 thư mục — khớp chính sách retention
-30 đêm của Phase 01 gốc.
+Cấp thư mục giờ (`HH`) thêm 13/08 sau khi đo thật: gộp phẳng cả đêm (~144K file ở
+~5fps×8h) vào 1 thư mục làm FAT chậm dần liên tục theo số file tồn tại (0→5.24fps,
+~1594→1.16fps, ~4300→0.45fps — đo thật, không phải suy đoán). Mỗi thư mục giờ giờ chỉ
+còn tối đa ~18K file. Rotation tự xoá NGUYÊN thư mục đêm (đệ quy qua các thư mục giờ
+con) cũ nhất khi vượt 30 thư mục — khớp chính sách retention 30 đêm của Phase 01 gốc.
 
 ## Trạng thái
 

@@ -249,26 +249,53 @@ cộng các thay đổi mục 11/12 chưa commit tại thời điểm viết đo
 
 | Chỉ số | Giá trị đo thật | Ghi chú |
 |---|---|---|
-| fps | **~5.24fps** (190.7ms/vòng lặp, ổn định qua 150 frame liên tục, không có cảnh báo "chậm hơn target") | Gần chạm mục tiêu 5fps ban đầu — không cần chấp nhận 1.5fps như tưởng trước đó |
-| Kích thước JPEG | **~16.55KB/frame** (16548-16571 byte, rất ổn định qua nhiều mẫu) | SVGA 800×600, quality=12 |
-| Dung lượng/đêm (8h) | **~2.47GB** (16.55KB × 5.24fps × 3600s × 8h) | Thấp hơn nhiều so với ước tính ban đầu ~5GB |
-| Thẻ SD 16GB chịu được | **~6.5 đêm** trước khi rotation phải xoá | Không đạt policy 30 đêm gốc — cần thẻ ≥100GB nếu muốn giữ đúng 30 đêm, nhưng đủ dùng cho bench-test nhiều đêm liên tiếp |
+| fps | **~5.0-5.24fps** (190-200ms/vòng lặp) | Đạt mục tiêu 5fps ban đầu — không cần chấp nhận 1.5fps như tưởng trước đó |
+| Kích thước JPEG | **~13-16.5KB/frame** (dao động theo nội dung khung hình) | SVGA 800×600, quality=12 |
+| Dung lượng/đêm (8h, dùng 15KB trung bình) | **~2.16GB** (15KB × 5.1fps × 3600s × 8h) | Thấp hơn nhiều so với ước tính ban đầu ~5GB |
+| Thẻ SD 16GB chịu được | **~7.4 đêm** trước khi rotation phải xoá | Không đạt policy 30 đêm gốc — cần thẻ ≥100GB nếu muốn giữ đúng 30 đêm, nhưng đủ dùng cho bench-test nhiều đêm liên tiếp |
 | VL53L0X model_id | `0xEE` (đúng datasheet) | Bus/wiring xác nhận đúng |
 | VL53L0X đo khoảng cách | Timeout/dropout | Giới hạn driver tối giản đã biết trước, không ảnh hưởng camera/SD |
 
-**Bài học quan trọng cho vận hành thật:** thư mục đêm KHÔNG được để tích luỹ quá nhiều
-file qua nhiều lần dev/test — hiệu năng FAT giảm mạnh theo số file trong 1 thư mục
-(0.45fps ở ~4300 file/thư mục so với 5.24fps ở thư mục sạch, chênh **11.6 lần**). Với
-retention 30 đêm thật (mỗi đêm 1 thư mục riêng, ~150000 frame/đêm ở 5.24fps×8h) mỗi
-thư mục vẫn sẽ tích luỹ rất nhiều file — cần theo dõi fps thực tế qua nhiều đêm liên
-tục thật (không chỉ test ngắn) để xác nhận không tái diễn vấn đề này ở quy mô 1 đêm
-đầy đủ.
+### 13. Kiến trúc thư mục phẳng làm FAT chậm dần theo số file — ĐÃ SỬA
+
+3 điểm dữ liệu thật đo được trước khi sửa cho thấy suy giảm **liên tục** theo số file
+tồn tại trong 1 thư mục (không phải ngưỡng đột ngột):
+
+| Số file trong thư mục | fps đo được |
+|---|---|
+| 0 (thẻ vừa format) | 5.24fps |
+| ~1594 (sau khi board mất điện đột ngột giữa chừng rồi chạy lại) | ~1.16fps |
+| ~4300 (dồn từ nhiều lần flash lại trong ngày) | 0.45fps |
+
+Với retention 30 đêm thật, mỗi đêm 8h ở ~5fps tích luỹ **~144,000 file** nếu gộp phẳng
+vào 1 thư mục `/YYYYMMDD/` — gần chắc chắn tái hiện suy giảm này, ngày càng nặng suốt
+đêm. **Sửa (`storage.cpp`, không chờ đủ 2 tiếng đo thêm — 3 điểm dữ liệu đủ rõ xu
+hướng):** thêm cấp thư mục theo **giờ** — `/sdcard/<YYYYMMDD>/<HH>/frame_*.jpg` +
+`.../<HH>/index.csv`. Mỗi thư mục giờ chỉ còn tối đa ~18000 file (144000/8) thay vì
+144000 dồn 1 chỗ; `s_frame_seq` reset về 0 mỗi giờ (tên file vẫn duy nhất nhờ path
+khác nhau); `recover_frame_seq()` chỉ quét trong giờ hiện tại. `storage_rotate()` xoá
+nguyên thư mục đêm (đệ quy qua các thư mục giờ con) khi vượt 30 đêm — không đổi logic
+cấp đêm. **Verify thật sau khi sửa:** flash lại trên thư mục hoàn toàn mới (không có
+dữ liệu recovery từ hàng nghìn file cũ) → **~5.0-5.02fps ngay từ frame đầu tiên**,
+không có "Thư mục đã tồn tại, tiếp tục từ seq N" (đúng ý đồ — thư mục giờ sạch mỗi
+lần).
+
+**Chưa verify:** liệu ~18000 file/giờ có đủ thấp để tránh suy giảm hoàn toàn hay chỉ
+giảm nhẹ — cần chạy 8h thật để xác nhận fps ổn định xuyên suốt, không chỉ ở phút đầu.
+
+### 14. Board mất điện đột ngột giữa buổi (POWERON_RESET, không phải software crash)
+
+Log cho `rst:0x1 (POWERON_RESET)` (khác `rst:0x3 SW_RESET` của crash Guru Meditation
+trước đó) — board thật sự mất nguồn rồi có điện lại, không phải lỗi phần mềm. Đúng
+dạng sự cố vật lý đã gặp cả ngày (cáp USB, mối hàn). **Chưa xác định nguyên nhân cụ
+thể** — cần Hưng kiểm tra lại các đầu nối nguồn 5V/2A khi làm Phase 4 DoD thật, đặc
+biệt nếu để chạy không giám sát 8 tiếng.
 
 **Việc còn lại trước khi đóng Phase 4 DoD:**
 - [x] Đo fps/frame-size trên thẻ SD sạch — xong, số liệu ở bảng trên
-- [ ] Chạy 8 tiếng liên tục thật (theo dõi xem fps có suy giảm dần trong 1 đêm không —
-      quan trọng, vì ~150K frame tích luỹ trong 1 thư mục CÓ thể tái hiện vấn đề mục 12
-      dù ở mức độ nhỏ hơn 4300 file)
+- [x] Sửa kiến trúc thư mục giờ, verify hết hiện tượng chậm dần khi thư mục sạch
+- [ ] Chạy 8 tiếng liên tục thật — theo dõi fps có ổn định suốt đêm không (mục 13 chưa
+      verify đầy đủ), và board có mất điện lại không (mục 14 chưa rõ nguyên nhân)
 - [ ] Test rotation với >30 thư mục thật (cần format lại hoặc rút thẻ SD ra máy tính
       tạo thư mục giả — không làm được từ môi trường này, cần Hưng thao tác tay)
 - [ ] Viết `docs/sensor-characterization.md` với số liệu ở bảng trên

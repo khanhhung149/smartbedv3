@@ -18,8 +18,15 @@ const char* TAG = "storage";
 const char* MOUNT_POINT = "/sdcard";
 sdmmc_card_t* s_card = nullptr;
 int s_frame_seq = 0;
-char s_current_night[16] = {};  // YYYYMMDD của thư mục đêm đã "mở"/khôi phục seq trong
-                                 // phiên chạy này — tránh scan lại thư mục mỗi frame.
+// YYYYMMDDHH của thư mục giờ đang "mở" trong phiên chạy hiện tại — tránh mkdir/scan
+// lại mỗi frame. Đo thật 13/08: 1 đêm 8h ở ~5.24fps tích luỹ ~150K file nếu gộp phẳng
+// vào 1 thư mục /YYYYMMDD — 3 điểm dữ liệu thật (0 file→5.24fps, ~1594→~1.16fps,
+// ~4300→0.45fps) cho thấy suy giảm LIÊN TỤC theo số file, không phải ngưỡng đột ngột,
+// nên 150K/đêm gần như chắc chắn làm fps sụp nặng dần suốt đêm. Sửa: thêm cấp thư mục
+// theo GIỜ (/YYYYMMDD/HH/) — mỗi thư mục giờ chỉ còn tối đa ~19K file (150K/8), và seq
+// reset về 0 mỗi giờ (tên file vẫn duy nhất nhờ path khác nhau) nên recover_frame_seq()
+// cũng chỉ quét trong 1 giờ thay vì cả đêm.
+char s_current_period[16] = {};
 
 // Giữ index.csv MỞ suốt đêm thay vì fopen("a")/fclose() mỗi frame. Đo thật 13/08: sau
 // ~4000 dòng tích luỹ, mỗi lần mở lại ở chế độ append tốn ngày càng nhiều thời gian —
@@ -54,15 +61,22 @@ bool is_night_dirname(const char* name) {
     return true;
 }
 
-// FAT không rmdir được thư mục còn file bên trong — xoá hết file con trước.
+// FAT không rmdir được thư mục còn file/thư mục con bên trong — xoá đệ quy 1 cấp
+// (thư mục đêm giờ chứa các thư mục giờ HH, mỗi thư mục giờ chứa file phẳng).
 void remove_dir_recursive(const char* path) {
     DIR* d = opendir(path);
     if (!d) return;
     struct dirent* entry;
     char child[300];
     while ((entry = readdir(d)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
         snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
-        unlink(child);  // thư mục đêm chỉ chứa file phẳng (jpg + index.csv), không có thư mục con
+        struct stat st;
+        if (stat(child, &st) == 0 && S_ISDIR(st.st_mode)) {
+            remove_dir_recursive(child);  // thư mục giờ HH — 1 cấp con, không sâu hơn
+        } else {
+            unlink(child);
+        }
     }
     closedir(d);
     rmdir(path);
@@ -106,30 +120,42 @@ esp_err_t storage_open_night(int64_t epoch_s, char* out_dir, size_t out_dir_len)
     struct tm tm_info;
     gmtime_r(&t, &tm_info);
     char night_name[16];
+    char period_name[16];  // YYYYMMDDHH — đổi mỗi khi sang giờ mới, không chỉ khi sang ngày
     snprintf(night_name, sizeof(night_name), "%04d%02d%02d", tm_info.tm_year + 1900,
              tm_info.tm_mon + 1, tm_info.tm_mday);
-    snprintf(out_dir, out_dir_len, "%s/%s", MOUNT_POINT, night_name);
+    snprintf(period_name, sizeof(period_name), "%s%02d", night_name, tm_info.tm_hour);
 
-    if (strcmp(night_name, s_current_night) == 0) {
-        return ESP_OK;  // đã mở/khôi phục seq cho đêm này trong phiên chạy hiện tại
+    char night_dir[64];
+    snprintf(night_dir, sizeof(night_dir), "%s/%s", MOUNT_POINT, night_name);
+    snprintf(out_dir, out_dir_len, "%s/%02d", night_dir, tm_info.tm_hour);
+
+    if (strcmp(period_name, s_current_period) == 0) {
+        return ESP_OK;  // đã mở/khôi phục seq cho giờ này trong phiên chạy hiện tại
+    }
+
+    // Thư mục đêm (YYYYMMDD) có thể đã có từ giờ trước — mkdir bỏ qua lỗi "đã tồn tại".
+    struct stat st_night;
+    if (stat(night_dir, &st_night) != 0) {
+        mkdir(night_dir, 0755);
     }
 
     struct stat st;
     if (stat(out_dir, &st) != 0) {
         if (mkdir(out_dir, 0755) != 0) {
-            ESP_LOGE(TAG, "Không tạo được thư mục đêm %s", out_dir);
+            ESP_LOGE(TAG, "Không tạo được thư mục giờ %s", out_dir);
             return ESP_FAIL;
         }
         s_frame_seq = 0;
     } else {
-        // Thư mục đã tồn tại từ trước (reboot giữa đêm, hoặc quay lại đêm cũ) — khôi
-        // phục seq thay vì ghi đè từ 0.
+        // Thư mục giờ đã tồn tại từ trước (reboot giữa giờ, hoặc quay lại giờ cũ) —
+        // khôi phục seq thay vì ghi đè từ 0. Chỉ quét TRONG thư mục giờ này (tối đa
+        // ~19K file/giờ ở 5.24fps), không phải cả đêm.
         s_frame_seq = recover_frame_seq(out_dir);
-        ESP_LOGI(TAG, "Thư mục đêm %s đã tồn tại, tiếp tục từ seq %d", out_dir, s_frame_seq);
+        ESP_LOGI(TAG, "Thư mục giờ %s đã tồn tại, tiếp tục từ seq %d", out_dir, s_frame_seq);
     }
-    strncpy(s_current_night, night_name, sizeof(s_current_night) - 1);
+    strncpy(s_current_period, period_name, sizeof(s_current_period) - 1);
 
-    // Mở index.csv MỘT LẦN cho cả đêm (xem giải thích ở s_index_file phía trên).
+    // Mở index.csv MỘT LẦN cho cả giờ (xem giải thích ở s_index_file phía trên).
     if (s_index_file) fclose(s_index_file);
     char index_path[300];
     snprintf(index_path, sizeof(index_path), "%s/index.csv", out_dir);
