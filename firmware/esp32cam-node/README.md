@@ -65,10 +65,11 @@ con) cũ nhất khi vượt 30 thư mục — khớp chính sách retention 30 �
 
 ## Trạng thái
 
-**Đã flash thật lên board AI-Thinker ESP32-CAM, chạy ổn định.** Camera + SD hoạt động
-xuyên suốt nhiều lần reboot trong buổi bring-up 13/08 (fps thật ~1.5fps, không phải
-5fps kế hoạch — đã chấp nhận). Chi tiết đầy đủ + 8 bug/kiến trúc thật đã bắt và sửa:
-`plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` §Bench Bring-up Log.
+**Đã flash thật lên board AI-Thinker ESP32-CAM, chạy ổn định.** Camera + SD + VL53L0X
+đều hoạt động xuyên suốt nhiều lần reboot trong buổi bring-up 13/08. Trên thẻ SD sạch:
+**~5.0-5.24fps** (đạt mục tiêu ban đầu). Chi tiết đầy đủ + toàn bộ bug/kiến trúc thật
+đã bắt và sửa: `plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` §Bench
+Bring-up Log + §Số liệu DoD chính thức.
 
 Đã verify bằng công cụ thật, không phải khẳng định suông:
 - `pio run -e esp32cam` và `pio run -e esp32cam_production_check` — cả 2 SUCCESS, đã flash thật.
@@ -77,11 +78,15 @@ xuyên suốt nhiều lần reboot trong buổi bring-up 13/08 (fps thật ~1.5f
 - Serial log thật xác nhận: camera OV2640 nhận diện đúng, SD mount + ghi/đọc lại đúng
   qua nhiều lần reboot (seq tự khôi phục, không ghi đè), NTP→tắt WiFi đúng thiết kế.
 
-**VL53L0X chưa hàn dây vật lý** — bus I2C riêng (GPIO4=SDA, GPIO13=SCL, port 0) đã tạo
-được, verify không bị GPIO nào khác chiếm (`esp_gpio_reserve` bitmask), nhưng chưa đọc
-được cảm biến thật vì chưa cắm. VL53L0X (`vl53l0x.cpp`) mới có sanity-check model ID +
-đo single-shot tối giản theo datasheet, **chưa** cắm chuỗi hiệu chuẩn đầy đủ của ST —
-xem TODO trong file đó trước khi tin số đo khoảng cách.
+**VL53L0X đã hàn dây thật, bus I2C riêng hoạt động đúng** (GPIO4=SDA, GPIO13=SCL, port
+0, `model_id=0xEE` đúng datasheet). Đo khoảng cách thật hiện luôn timeout/dropout —
+**giới hạn driver tối giản đã biết trước** (thiếu chuỗi hiệu chuẩn SPAD/VHV/phase của
+ST, xem TODO trong `vl53l0x.cpp`), không phải lỗi wiring/code. Đo (kể cả khi
+dropout) chạy trên **1 FreeRTOS task nền riêng** (`vl53l0x_start_background_task()`),
+tách khỏi vòng lặp camera từ 13/08 sau khi `/brainstorm` phát hiện coupling sai (ToF
+timeout ~850ms từng làm camera "đứng khựng" dù 2 cảm biến độc lập phần cứng hoàn
+toàn) — xem `vl53l0x.h`/`vl53l0x.cpp` để hiểu kiến trúc.
 
-Việc còn lại: hàn VL53L0X (VCC→3.3V, GND→GND, SDA→GPIO4, SCL→GPIO13), rồi Phase 4
-(`plans/260813-0934-esp32cam-vl53l0x-camera-node/phase-04-bench-validation-dod.md`).
+Việc còn lại: chạy test 8 tiếng liên tục thật (Phase 4 DoD), điều tra 1 lần
+POWERON_RESET chưa rõ nguyên nhân, xem
+`plans/260813-0934-esp32cam-vl53l0x-camera-node/phase-04-bench-validation-dod.md`.

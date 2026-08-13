@@ -37,6 +37,19 @@
 
 esp_err_t vl53l0x_init(int i2c_port, int sda_gpio, int scl_gpio);
 
-// Trả về khoảng cách (mm), hoặc -1 nếu đọc lỗi/timeout (đánh dấu dropout — KHÔNG bịa số 0,
-// đúng nguyên tắc "dropout đánh dấu, không bịa" của toàn dự án).
+// Đo 1 lần, CHẶN tới khi xong hoặc timeout (~850ms thực đo — driver tối giản không có
+// calibration nên mỗi lần gọi đều chạy hết chu trình timeout). KHÔNG gọi thẳng từ vòng
+// lặp camera — dùng vl53l0x_start_background_task() + vl53l0x_get_latest_distance_mm()
+// thay thế, xem giải thích dưới. Trả -1 nếu đọc lỗi/timeout (dropout — KHÔNG bịa số 0).
 int32_t vl53l0x_read_distance_mm();
+
+// Chạy vl53l0x_read_distance_mm() liên tục trên 1 FreeRTOS task riêng, không chặn task
+// chính (vòng lặp chụp camera). Camera và VL53L0X độc lập hoàn toàn về phần cứng (bus
+// I2C riêng) nhưng trước đây bị GHÉP timing sai — gọi read thẳng trong vòng lặp camera
+// khiến camera "đứng khựng" theo mỗi lần ToF timeout dù không có lý do kỹ thuật nào bắt
+// buộc điều đó. Phải gọi SAU vl53l0x_init() thành công.
+void vl53l0x_start_background_task();
+
+// Đọc giá trị khoảng cách mới nhất mà task nền vừa đo được — KHÔNG CHẶN, an toàn gọi
+// mỗi vòng lặp camera. -1 nếu chưa có phép đo nào hoặc lần gần nhất dropout.
+int32_t vl53l0x_get_latest_distance_mm();

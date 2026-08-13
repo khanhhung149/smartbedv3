@@ -33,7 +33,28 @@ esp_err_t write_reg8(uint8_t reg, uint8_t value) {
 esp_err_t read_regn(uint8_t reg, uint8_t* out, size_t len) {
     return i2c_master_transmit_receive(s_dev, &reg, 1, out, len, 50);
 }
+
+// int32_t đọc/ghi 1 lệnh máy là atomic trên Xtensa — 1 task ghi (background), 1 task
+// đọc (vòng lặp camera), không cần mutex cho use-case đơn giản này (KISS).
+volatile int32_t s_latest_distance_mm = -1;
+
+void vl53l0x_poll_task(void*) {
+    while (true) {
+        s_latest_distance_mm = vl53l0x_read_distance_mm();
+        // Đo xong (hoặc timeout ~850ms) thì nghỉ ngắn rồi đo tiếp — không cần đo dồn
+        // dập, ToF không phải nguồn dữ liệu chính. Không có công việc nào khác trên
+        // task này nên không cần tự giới hạn tần suất chặt hơn.
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
 }  // namespace
+
+void vl53l0x_start_background_task() {
+    xTaskCreate(vl53l0x_poll_task, "vl53l0x_poll", 3072, nullptr, 1, nullptr);
+    ESP_LOGI(TAG, "Task đo ToF nền đã khởi động — không còn chặn vòng lặp camera");
+}
+
+int32_t vl53l0x_get_latest_distance_mm() { return s_latest_distance_mm; }
 
 esp_err_t vl53l0x_init(int i2c_port, int sda_gpio, int scl_gpio) {
     i2c_master_bus_config_t bus_config = {};
@@ -53,7 +74,9 @@ esp_err_t vl53l0x_init(int i2c_port, int sda_gpio, int scl_gpio) {
     i2c_device_config_t dev_config = {};
     dev_config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
     dev_config.device_address = VL53L0X_I2C_ADDR;
-    dev_config.scl_speed_hz = 100000;  // an toàn để chia sẻ bus với SCCB camera
+    // Bus RIÊNG (không còn chia sẻ SCCB camera từ 13/08) — VL53L0X hỗ trợ Fast Mode
+    // 400kHz theo datasheet, không có lý do gì giữ 100kHz nữa.
+    dev_config.scl_speed_hz = 400000;
 
     err = i2c_master_bus_add_device(s_bus, &dev_config, &s_dev);
     if (err != ESP_OK) {

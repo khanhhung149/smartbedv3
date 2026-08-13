@@ -123,10 +123,14 @@ extern "C" void app_main() {
     // không ra header ngoài trên AI-Thinker, không hàn thêm dây được ở đó — xem
     // vl53l0x.h). Thứ tự init với camera không còn quan trọng, 2 bus độc lập.
     esp_err_t err = vl53l0x_init(VL53L0X_I2C_PORT, VL53L0X_SDA_GPIO, VL53L0X_SCL_GPIO);
-    const bool vl53l0x_ready = (err == ESP_OK);
-    if (!vl53l0x_ready) {
-        ESP_LOGW(TAG, "VL53L0X init thất bại (0x%x) — tiếp tục chạy, khoảng cách sẽ là dropout "
-                      "(không gọi read mỗi vòng lặp nữa, tránh spam log lỗi i2c handle)",
+    if (err == ESP_OK) {
+        // Task nền riêng — ToF và camera độc lập phần cứng (bus I2C khác nhau), không
+        // có lý do gì để camera "đứng khựng" chờ ToF. Đo thật 13/08: gọi
+        // vl53l0x_read_distance_mm() thẳng trong vòng lặp camera tốn ~850ms/lần dù chỉ
+        // 1/10 vòng — coupling sai giữa 2 cảm biến không liên quan.
+        vl53l0x_start_background_task();
+    } else {
+        ESP_LOGW(TAG, "VL53L0X init thất bại (0x%x) — tiếp tục chạy, khoảng cách sẽ là dropout",
                  err);
     }
 
@@ -174,18 +178,10 @@ extern "C" void app_main() {
         storage_open_night(epoch_s, night_dir, sizeof(night_dir));
 
         camera_fb_t* fb = esp_camera_fb_get();
-        // -1 nếu dropout (init lỗi hoặc đọc lỗi) — ghi nguyên, không bịa số (nguyên
-        // tắc dự án). Không gọi read khi init đã biết thất bại — tránh spam lỗi
-        // "i2c handle not initialized" mỗi vòng lặp (bắt được lúc bench-test 13/08).
-        // Đo thật 13/08: mỗi lần gọi vl53l0x_read_distance_mm() (luôn timeout — driver
-        // tối giản chưa hiệu chuẩn) tốn ~850ms, kéo fps từ ~1.5 xuống ~0.65. Đúng
-        // fallback đã ghi trong Risk Assessment phase-03: giảm tần suất poll thay vì
-        // mỗi vòng lặp — 1/10 vòng vẫn đủ cho mục đích debug/tương lai nâng cấp driver.
-        static int s_vl53l0x_poll_counter = 0;
-        int32_t distance_mm = -1;
-        if (vl53l0x_ready && (++s_vl53l0x_poll_counter % 10 == 0)) {
-            distance_mm = vl53l0x_read_distance_mm();
-        }
+        // Đọc giá trị mới nhất từ task nền — KHÔNG CHẶN (xem vl53l0x_start_background_task
+        // trong app_main). -1 nếu chưa có phép đo nào hoặc lần gần nhất dropout — ghi
+        // nguyên, không bịa số (nguyên tắc dự án).
+        int32_t distance_mm = vl53l0x_get_latest_distance_mm();
         if (fb) {
             storage_write_frame(night_dir, fb->buf, fb->len, distance_mm, t_ms);
             // Log định kỳ (không phải mỗi frame — spam) — cần số byte/frame thật để
