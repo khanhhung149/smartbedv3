@@ -1,10 +1,15 @@
 # Kiến trúc đề xuất: Snore Detection + Wakeword chung 1 mic trên voice-node
 
-**Trạng thái: ĐỀ XUẤT KIẾN TRÚC — CHƯA TRIỂN KHAI.** Tài liệu này ghi lại thiết kế đã thống nhất qua
-brainstorm (2026-08-12), chỉnh sửa lại từ 1 tài liệu tham khảo bên ngoài (nội dung gốc dùng board/pin
-giả định, không phải project này) cho khớp với `firmware/voice-node` thật. Chưa có dòng code nào cho
-snore detection tồn tại trong repo tại thời điểm viết tài liệu này — mọi số liệu (accuracy, false
-alarm/hour, latency inference) đều là **mục tiêu cần đo thật**, không phải kết quả đã có.
+**Trạng thái (2026-08-12): model TFLite Micro THẬT đã tích hợp, đã flash + verify trên board thật —
+pipeline kỹ thuật chạy đúng (arena/op resolver/tensor type xác nhận qua log thật, latency đo được
+~114ms/lần). CHƯA test tay với âm thanh ngáy thật (chỉ mới đo được ở phòng yên tĩnh).** Tài liệu này
+ban đầu là đề xuất kiến trúc thuần (brainstorm 2026-08-12), sau đó scaffold bằng placeholder RMS
+(`plans/260812-1029-...-scaffold/`), và nay (`plans/260812-1401-voice-node-snore-model-integration/`)
+đã thay placeholder bằng model pretrained thật từ
+[`alek6kun/snore-recognition`](https://github.com/alek6kun/snore-recognition) (Apache-2.0, TensorFlow
+Authors — bản retrain ví dụ TFLite Micro `micro_speech` trên dataset Khan 2019, 500 mẫu ngáy/500 mẫu
+không ngáy). Xem mục 6a. Số liệu accuracy thực địa (test tay với âm thanh ngáy thật) **CHƯA có** — cần
+người thao tác phát âm thanh gần mic, ghi rõ ở mục 6a khi có.
 
 ## 1. Bối cảnh
 
@@ -145,9 +150,86 @@ người xuất hiện ở cả train và test, accuracy đo được không ph�
   dải tần 100-4000Hz / 200-4000Hz / 300-3800Hz, MFCC vs MFE — chọn dựa trên precision/recall/false
   alarm-per-hour/latency/RAM/Flash đo thật, đúng cách wakeword threshold đã được chốt (đo thật, không
   suy đoán).
-- Quantization INT8 — không đặt mục tiêu cứng "model < 32KB, RAM < 80KB" như tài liệu cũ gợi ý; N16R8 có
-  16MB Flash/8MB PSRAM, dư địa đủ lớn. Ngân sách tài nguyên nên tính trên toàn hệ thống (audio buffer +
-  tensor arena wakeword + tensor arena snore + WiFi/MQTT stack), không phải mục tiêu model nhỏ nhất.
+- Quantization — model snore thật (mục 6a) dùng UINT8 full-integer (không phải INT8 như wakeword) —
+  không đặt mục tiêu cứng "model < 32KB, RAM < 80KB" như tài liệu cũ gợi ý; N16R8 có 16MB Flash/8MB
+  PSRAM, dư địa đủ lớn. Ngân sách tài nguyên nên tính trên toàn hệ thống (audio buffer + tensor arena
+  wakeword + tensor arena snore + WiFi/MQTT stack), không phải mục tiêu model nhỏ nhất.
+
+## 6a. Model snore thật — TÍCH HỢP XONG (code), CHƯA FLASH/TEST HARDWARE (2026-08-12)
+
+**Trạng thái: đã tích hợp, KHÔNG còn là đề xuất.** Xem
+`plans/260812-1401-voice-node-snore-model-integration/` cho chi tiết implementation.
+
+Model: [`alek6kun/snore-recognition`](https://github.com/alek6kun/snore-recognition) (Apache-2.0) — bản
+retrain ví dụ TFLite Micro `micro_speech` chính thức của Google trên dataset Khan 2019 (T. H. Khan, "A
+deep learning model for snoring detection and vibration notification using a smart wearable gadget",
+Electronics, vol. 8, no. 9, 2019). README repo gốc công bố accuracy 95% trên tập test CỦA HỌ (không phải
+đo tại nhà user) — số này KHÔNG được coi là bằng chứng độ chính xác thật tại vị trí lắp đặt, chỉ là điểm
+khởi đầu hợp lý để KHÔNG train từ đầu.
+
+**Đã xác minh trực tiếp** (không suy đoán từ README):
+- `firmware/voice-node/models/snore.tflite` — 171832 byte, magic `TFL3` đúng offset 4 (chuyển từ
+  `model.cc` định dạng `xxd -i` của repo gốc bằng script Python dùng 1 lần, không commit).
+- 2 lớp output `{"snoring", "background"}` (index 0 = snoring), qua `Logistic` ở lớp cuối.
+- `kAudioSampleFrequency=16000` khớp `SAMPLE_RATE` hiện tại — KHÔNG cần resample.
+- Feature extraction: window 32ms/step 16ms/30 kênh mel/dải 40-6000Hz — KHÁC hẳn wakeword (30ms/10ms/40
+  kênh/125-7500Hz), 2 instance `FrontendState` độc lập (`SnoreFeatures` vs `WakewordFeatures`).
+- Input model là uint8 **THÔ đã rescale thủ công** lúc train (`(frontend_raw*128)/335`, clamp
+  [0,255]), KHÔNG phải affine-quantize chuẩn TFLite qua scale/zero_point như input wakeword (int8) —
+  đọc trực tiếp từ `main/micro_features_generator.cc` repo gốc, cài trong `SnoreFeatures::pushSamples()`
+  (`firmware/voice-node/src/snore_features.cpp`).
+- Output NGƯỢC LẠI dequantize qua `scale`/`zero_point` thật đọc từ tensor (`SnoreModel::infer()`,
+  `firmware/voice-node/src/snore_model.cpp`) — an toàn hơn cách repo gốc so thẳng uint8 thô với ngưỡng
+  128 (ngầm định zero_point=0/scale=1/255).
+- Op resolver 11 op (`Conv2D/FullyConnected/Reshape/MaxPool2D/Shape/StridedSlice/Pack/ResizeBilinear/
+  Quantize/Dequantize/Logistic`), đọc trực tiếp từ `main/main_functions.cc` repo gốc — KHÔNG có
+  resource-variable ops (`VarHandle`/`CallOnce`) như wakeword vì model này KHÔNG streaming.
+- `SNORE_SCORE_THRESHOLD = 0.5f` (thay `SNORE_PLACEHOLDER_THRESHOLD=500.0f` đơn vị RMS cũ) — điểm giữa
+  hợp lý cho sigmoid/Logistic, khớp gần đúng ngưỡng 128/255≈0.502 mà repo gốc dùng. Đây là số KHỞI ĐIỂM,
+  cần tinh chỉnh khi có test tay thật với âm thanh ngáy (chưa làm — xem "Việc còn thiếu" bên dưới).
+
+**Build đã xác nhận** (`pio run -e esp32s3_kws`, nhiều lần qua các vòng sửa lỗi thật — xem dưới).
+
+**Code review (2026-08-12, agent `code-reviewer`) tìm 2 vấn đề, đã sửa**: output tensor type chưa được
+validate trước khi đọc `data.uint8` (đọc sai kiểu không crash, chỉ cho điểm số vô nghĩa — thêm check
+`g_output->type == kTfLiteUInt8` vào `SnoreModel::begin()`); stack `snoreTask` 4096 byte kế thừa từ
+placeholder RMS cũ, không đủ cho `Invoke()` thật — tăng lên 8192 byte.
+
+**Flash board thật + đo THẬT (2026-08-12, ESP32-S3-CAM N16R8, board thật gắn qua TTL/CH340)**:
+- Lần flash đầu tiên (arena 100KB tĩnh DIRAM) **LỖI THẬT** đúng như rủi ro plan cảnh báo: `Failed to
+  resize buffer. Requested: 152384, available 98580, missing: 53804` — 100KB không đủ, `[snore] model
+  init: features=OK model=LỖI -> TẮT`. DIRAM lúc đó chỉ còn ~57KB trống, không đủ tăng tĩnh lên mức cần
+  → quyết định (xem
+  `plans/reports/brainstorm-260812-1542-wakeword-arena-psram-migration-report.md`) chuyển
+  `kTensorArenaSize` sang 200KB cấp phát ĐỘNG trên PSRAM (`heap_caps_aligned_alloc(...,
+  MALLOC_CAP_SPIRAM)` trong `SnoreModel::begin()`) thay vì mảng tĩnh — PSRAM 8MB gần như trống, DIRAM chỉ
+  còn ~57KB. Nhân tiện dời luôn wakeword arena (34KB) sang PSRAM cùng cách (xem mục "Wakeword gate" ở
+  `docs/system-architecture.md`) — RAM tĩnh toàn firmware giảm từ 58.6% xuống **16.7%** (192024→54816
+  byte) vì 2 arena không còn tính vào ảnh linker.
+- Sau fix: `[snore] model sẵn sàng: arena dùng=156332/204800 byte, input type=3 bytes=1830, output
+  type=3 bytes=1` — `input type=3`/`output type=3` = `kTfLiteUInt8` xác nhận đúng giả định (không phải
+  suy luận từ upstream nữa, đọc trực tiếp từ model đã convert). `bytes=1830` = đúng 61×30 (khớp
+  `SnoreFeatures::kFeatureSliceCount × kNumChannels`). `[snore] model init: features=OK model=OK ->
+  sẵn sàng`.
+- **Latency `SnoreModel::infer()` đo thật**: 105-129ms, trung bình ~114ms (so với wakeword 5-12ms, ~17-20x
+  nặng hơn — đúng dự đoán "nặng hơn hẳn do Conv2D/MaxPool2D/ResizeBilinear" trong plan). Chạy 1 lần/~1s
+  nên KHÔNG ảnh hưởng nhịp I2S/wakeword (khác core, task riêng).
+- `uxTaskGetStackHighWaterMark(snoreTaskHandle)` **đã đo trực tiếp** (2026-08-13, xem mục 11) —
+  3804 byte free / 8192 byte khai báo (dùng ~53.6%), xác nhận không cần suy luận gián tiếp qua
+  stack-canary nữa.
+- `SnoreFeatures`/`SnoreModel` pipeline: score = 0.000 liên tục qua nhiều chục lần đọc — **phòng yên
+  tĩnh lúc đo, CHƯA có tiếng ngáy thật để test dương tính**. Không phân biệt được đây là "model đúng,
+  đang im lặng thật" hay "pipeline luôn trả 0 bất kể input" chỉ từ số liệu này — cần test tay đối chứng
+  âm thanh có/không ngáy (xem dưới), đúng cảnh báo Risk Assessment của plan.
+
+**Việc còn thiếu (CẦN người thao tác phát âm thanh, không tự động hoá được)**:
+- Test tay âm thanh ngáy thật + test đối chứng (nói chuyện/TV/im lặng) — xác nhận score đổi hợp lý theo
+  input (không phải hằng số 0 bất kể input), đo số lần trigger giả ban đầu qua MQTT
+  `home/room/snore_event`. Dataset train (Khan 2019) khác acoustic phòng ngủ thật của user — test tay
+  ban đầu chỉ xác nhận PIPELINE kỹ thuật, KHÔNG phải bằng chứng độ chính xác dùng hàng đêm (cần soak
+  test riêng, ngoài phạm vi hiện tại).
+- Tinh chỉnh `SNORE_SCORE_THRESHOLD`/`SNORE_CONSECUTIVE_WINDOWS`/`SNORE_COOLDOWN_MS` dựa trên kết quả
+  test tay ở trên — số hiện tại (0.5f/3/5000ms) là điểm khởi đầu, chưa phải số đã tune.
 
 ## 7. Event Manager + mở rộng MQTT contract — ĐÃ SCAFFOLD XONG (2026-08-12)
 
@@ -158,8 +240,10 @@ tiết + số liệu đo thật.
 `firmware/voice-node` đã có 1 dạng Event Manager tối giản cho wakeword: `WAKEWORD_COOLDOWN_MS` (thêm
 2026-08-11, xem `docs/system-architecture.md`) — chặn 1 utterance thật bị tách thành nhiều trigger giả
 do score dư âm còn cao vài frame sau khi kết thúc. Nguyên tắc y hệt áp dụng cho snore, đã cài đặt trong
-`snoreTask()`: N=3 cửa sổ liên tiếp vượt `SNORE_PLACEHOLDER_THRESHOLD` (500.0f, thấp hơn
-`VAD_THRESHOLD_MIN`=600.0f) mới confirm event, sau đó cooldown 5s trước khi gửi event kế tiếp.
+`snoreTask()`: N=3 cửa sổ liên tiếp vượt `SNORE_SCORE_THRESHOLD` (0.5f — **đã đổi từ**
+`SNORE_PLACEHOLDER_THRESHOLD`=500.0f đơn vị RMS cũ, xem mục 6a) mới confirm event, sau đó cooldown 5s
+trước khi gửi event kế tiếp. Kiến trúc Event Manager (N cửa sổ + cooldown) GIỮ NGUYÊN 100% từ scaffold —
+chỉ đổi NGUỒN của giá trị so ngưỡng, từ RMS placeholder sang score model thật.
 
 **Topic đã thêm vào contract thật** (`firmware/mqtt/README.md`, canonical source, VÀ
 `docs/system-architecture.md`):
@@ -169,14 +253,16 @@ do score dư âm còn cao vài frame sau khi kết thúc. Nguyên tắc y hệt 
 | `home/room/snore_event` | voice-node → backend | `{"ts":millis(),"confidence":0-1,"duration_ms":int}` | ❌ | 1 |
 
 `ts` = `millis()` (uptime tương đối, KHÔNG phải unix epoch — voice-node không có NTP sync, xem
-`firmware/mqtt/README.md`). `confidence` = RMS chuẩn hoá (đạt ngưỡng = 0.5, gấp đôi ngưỡng = 1.0, kẹp
-trên) — KHÔNG phải điểm số model thật, sẽ đổi hẳn khi có model MFCC.
+`firmware/mqtt/README.md`). `confidence` = điểm số lớp "snoring" của model thật, đã dequantize về [0,1]
+(xem mục 6a) — **đã thay** mô tả cũ "RMS chuẩn hoá" (placeholder trước 2026-08-12).
 
-**Đo thật xác nhận (test tay, vỗ tay/hét to sát mic, 2026-08-12)**: publish thành công qua
-`mqtt.publish()` (thread-safety xử lý bằng cờ `snoreEventPending`, KHÔNG gọi publish trực tiếp từ
-`snoreTask` — lib `256dpi/MQTT` không có mutex nội bộ nào, xác nhận qua đọc source). Subscriber
-`mosquitto_sub` nhận đúng 2 message riêng biệt trong 60s (`confidence=0.628` và `0.701`), không bị dồn
-dập — xác nhận cooldown hoạt động, không kẹt trạng thái.
+**Đo thật xác nhận (test tay, vỗ tay/hét to sát mic, giai đoạn placeholder RMS, trước 2026-08-12)**:
+publish thành công qua `mqtt.publish()` (thread-safety xử lý bằng cờ `snoreEventPending`, KHÔNG gọi
+publish trực tiếp từ `snoreTask` — lib `256dpi/MQTT` không có mutex nội bộ nào, xác nhận qua đọc
+source). Subscriber `mosquitto_sub` nhận đúng 2 message riêng biệt trong 60s (`confidence=0.628` và
+`0.701`), không bị dồn dập — xác nhận cooldown hoạt động, không kẹt trạng thái. Cơ chế MQTT/cooldown này
+KHÔNG đổi khi thay placeholder bằng model thật (mục 6a) — chỉ nguồn `confidence` đổi, đợi test tay lại
+với model thật để có số liệu mới (xem "Việc còn thiếu" ở mục 6a).
 
 ## 8. Chỉ số đánh giá (áp dụng khi đo thật, không phải số mục tiêu cố định)
 
@@ -188,23 +274,73 @@ event/hour, latency, ổn định theo từng người. Với theo dõi giấc n
 thường có ý nghĩa thực tế hơn 1 accuracy tổng quát — đúng bài học đã áp dụng cho wakeword false-trigger
 rate (mục tiêu <1/h, thực đo 2.48/h, chấp nhận có lý do ghi rõ).
 
-## 9. Quy trình triển khai đề xuất (nếu làm — chưa bắt đầu)
+## 9. Quy trình triển khai (cập nhật trạng thái 2026-08-12)
 
-1. **Hardware validation**: xác nhận raw audio ổn định dài hạn (đã có sẵn qua wakeword đang chạy, không
-   cần lặp lại bước này).
-2. **Buffer tích luỹ cho snore**: thêm buffer trượt kiểu preRoll trong `main.cpp`, CHƯA có inference —
-   xác nhận không mất mẫu I2S khi buffer tích luỹ chạy song song wakeword.
-3. **Snore model**: dataset → DSP → training → validation → quantization → chạy thử inference trên
-   board (chưa nối vào pipeline audio thật, test độc lập bằng mẫu ghi sẵn).
-4. **Tích hợp task core 0**: nối snore inference vào task riêng như mục 4.2, đo latency + tác động lên
-   nhịp I2S (mục tiêu: KHÔNG tăng false-trigger/miss của wakeword so với baseline đã đo).
-5. **Chạy đồng thời thật**: soak test wakeword + snore cùng lúc, xác nhận cả 2 không suy giảm so với đo
-   riêng lẻ.
-6. **MQTT**: chỉ tích hợp Event Manager → `home/room/snore_event` sau khi bước 5 ổn định.
-7. **Soak test qua đêm**: chạy thật nhiều đêm, đo memory leak/heap/PSRAM/WiFi-MQTT reconnect/false
-   event — theo đúng văn hoá đo số liệu thật của dự án, không chốt ngưỡng sau vài lần thử qua loa.
+1. **Hardware validation** — ✅ Xong (audio ổn định dài hạn qua wakeword đang chạy).
+2. **Buffer tích luỹ cho snore** — ✅ Xong (`plans/260812-1029-...-scaffold/`).
+3. **Snore model** — ✅ Xong CODE + đã chạy thật trên board (`begin()`/`AllocateTensors()`/`Invoke()`
+   xác nhận qua log thật, xem mục 6a) — ❌ CHƯA test tay âm thanh ngáy thật (chỉ mới đo phòng yên tĩnh).
+4. **Tích hợp task core 0** — ✅ Xong, latency đo thật ~114ms/lần, không ảnh hưởng nhịp I2S/wakeword
+   (khác core, task riêng, xác nhận qua log wakeword vẫn chạy bình thường song song).
+5. **Chạy đồng thời thật** (soak test wakeword + snore cùng lúc) — ✅ Đã xác nhận chạy song song ổn định
+   trong lúc đo (cả 2 log liên tục không lỗi/crash) — ❌ CHƯA soak test dài hạn (qua đêm).
+6. **MQTT**: Event Manager → `home/room/snore_event` — ✅ Cơ chế giữ nguyên từ scaffold — ❌ CHƯA test
+   publish với confidence từ model thật (cần score đủ cao đủ lâu — cần âm thanh ngáy thật để trigger).
+7. **Soak test qua đêm** — ❌ Chưa làm, ngoài phạm vi plan hiện tại.
 
 ## 10. Việc tiếp theo
 
-Tài liệu này dừng ở mức kiến trúc đề xuất. Chưa tạo plan triển khai (`plans/`), chưa đụng code. Khi cần
-triển khai thật, lập plan qua `/ck:plan` dựa theo quy trình 7 bước ở mục 9.
+Bước kế tiếp DUY NHẤT đang chặn: test tay với âm thanh ngáy thật + đối chứng (nói chuyện/TV/im lặng) gần
+mic — cần người thao tác phát âm thanh, không tự động hoá được (xem "Việc còn thiếu" ở mục 6a). Firmware
+đã flash sẵn trên board (2026-08-12), chỉ cần bật `pio device monitor -e esp32s3_kws` (hoặc
+`screen /dev/ttyUSB0 115200`) để xem log `[snore] score=...` trong lúc test.
+
+## 11. Ngân sách bộ nhớ toàn hệ thống (đo thật, 2026-08-13)
+
+Số liệu dưới đo trực tiếp trên board thật qua log `[hb][perf]` (heartbeat, xem `main.cpp`), KHÔNG suy
+đoán — xem `plans/260812-1619-power-memory-architecture-review/phase-01-instrumentation-baseline.md`
+cho bối cảnh. Board chạy `ENABLE_WAKEWORD` + snore song song, mẫu lấy qua ~3 phút có kích hoạt wakeword
+vài lần.
+
+### PSRAM (Octal, 8MB = 8388608 byte)
+
+| Vùng cấp phát | Kích thước | Ghi chú |
+|---|---|---|
+| Wakeword tensor arena | 34 KiB (34816 byte) | `heap_caps_aligned_alloc(..., MALLOC_CAP_SPIRAM)`, `wakeword_model.cpp` |
+| Snore tensor arena | 200 KiB (204800 byte) | Cấp dư — dùng thật 156332 byte (log `[snore] model sẵn sàng`) |
+| Snore accum + snapshot buffer | 62.5 KiB (64000 byte) | 2× `SNORE_WINDOW_SAMPLES` (16000 mẫu × 2 byte), `main.cpp` |
+| **Tổng cấp phát chủ động** | **~296.5 KiB (303616 byte)** | ~3.6% của 8MB |
+| **Free PSRAM đo thật** | **8080064 byte (~7.7 MiB)** | Log `[hb][perf] psramFree=...` |
+| Chênh lệch (allocator overhead) | ~4.8 KiB (4928 byte) | MicroAllocator/MicroResourceVariables bookkeeping của 2 interpreter TFLM |
+
+Kết luận: PSRAM dư rất nhiều (~96.4% còn trống), không phải điểm nghẽn cho kiến trúc hiện tại.
+
+### SRAM nội bộ (320 KiB = 327680 byte)
+
+| Chỉ số | Giá trị | Ghi chú |
+|---|---|---|
+| RAM tĩnh (.data+.bss, link-time) | 54848 byte (16.7%) | `pio run` size report, sau khi dời 2 arena sang PSRAM |
+| Free heap runtime đo thật | ~189000 byte (dao động 188823–189099) | Log `[hb][perf] heapFree=...`, không có xu hướng giảm rõ trong 3 phút quan sát (cần Phase 2 soak test dài hạn để kết luận leak/không leak) |
+
+### Stack high-water-mark (đo thật, board S3/Xtensa — API trả byte, KHÔNG nhân 4)
+
+| Task | Khai báo | Free đo thật | Đã dùng | Tỷ lệ dùng |
+|---|---|---|---|---|
+| `loopTask` (core 1, Arduino main loop) | 8192 byte | 5232 byte | 2960 byte | 36.1% |
+| `snoreTask` (core 0) | 8192 byte | 3804 byte | 4388 byte | 53.6% |
+
+Cả 2 task còn dư margin an toàn (>36%), không cần tăng kích thước stack.
+
+### Latency `WakewordModel::infer()` sau khi dời arena sang PSRAM (đo thật)
+
+| Chỉ số | Giá trị | So với baseline DIRAM 5.4ms (journal 08/08) |
+|---|---|---|
+| Min | ~5.43–5.46 ms | Gần bằng baseline (frame đơn giản, ít khác biệt PSRAM/DIRAM) |
+| Avg (điển hình) | ~5.9–6.3 ms | +9–17% |
+| Max (spike thỉnh thoảng) | ~10–15 ms | +85–178%, hiếm gặp — không xảy ra mọi frame |
+
+Độ trễ tăng nhẹ ở mức trung bình, đúng dự đoán "PSRAM chậm hơn DIRAM cho truy cập ghi/đọc liên tục". Các
+spike max (10-15ms) xảy ra không thường xuyên trong mẫu quan sát, chưa tương quan rõ với sự kiện cụ thể
+nào (WiFi/MQTT hoạt động cùng lúc trên core 1) — không phải vấn đề với `WAKEWORD_COOLDOWN_MS=1200`
+hiện tại (spike lớn nhất vẫn < cooldown), nhưng đáng theo dõi nếu tần suất tăng khi bật thêm tính năng
+power-management (Phase 3-4).

@@ -128,6 +128,18 @@ I2S frame regardless of state (avoids model/frontend cold-start cost).
   wasted bandwidth/battery, not spurious AC actions.
 - End-to-end verified: "Vừng ơi, bật điều hoà" → wakeword trigger → STREAMING → backend command parse →
   MQTT `home/room/ac_cmd` → `[ir] Daikin ON`.
+- **Tensor arena moved DIRAM→PSRAM (2026-08-12)**, brought on by the snore-detection model integration
+  needing 200KB (DIRAM only had ~57KB free) — see
+  `plans/reports/brainstorm-260812-1542-wakeword-arena-psram-migration-report.md`. Wakeword's 34KB arena
+  moved too (`wakeword_model.cpp`, `heap_caps_aligned_alloc(..., MALLOC_CAP_SPIRAM)`), freeing static RAM
+  usage from 58.6% to 16.7%. Re-measured `WakewordModel::infer()` latency on real hardware post-migration
+  with proper min/avg/max instrumentation (2026-08-13, see
+  `docs/voice-node-snore-wakeword-architecture.md` §11): **min ~5.4-5.5ms, avg ~5.9-6.3ms, occasional max
+  spikes ~10-15ms**, up from the 5.4ms DIRAM baseline (journal 08/08) — PSRAM access is slower than
+  internal SRAM for the arena's frequent read/write during `Invoke()`, as expected. Threshold/cooldown
+  above NOT re-tuned yet (increase is modest, single-digit ms either way; max spikes stay well under
+  `WAKEWORD_COOLDOWN_MS=1200`) — revisit if a fuller field test shows a shift in true-positive/false-trigger
+  rate.
 
 ### Radar-Node (Sensor Layer)
 
