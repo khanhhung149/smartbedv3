@@ -49,6 +49,11 @@ type VoiceConfig struct {
 	ASRMaxUtterMS int    // trần thời lượng 1 utterance (ms) — tránh giữ buffer vô hạn
 	ASRMinUtterMS int    // SÀN thời lượng (ms) — ngắn hơn thì bỏ, không gọi ASR
 	SampleRate    int    // sample rate PCM voice node gửi lên (Hz)
+
+	// Thu dữ liệu huấn luyện (công cụ, KHÔNG phải đường chạy thật). Rỗng = tắt hẳn, endpoint
+	// /api/voice/record không được đăng ký. Bật bằng cách trỏ VOICE_RECORD_DIR vào một volume.
+	RecordDir      string
+	RecordSegmentS int // cắt WAV thành từng đoạn bao nhiêu giây (mặc định 60)
 }
 
 // LoadVoice nạp cấu hình voice/ASR từ biến môi trường. Không có biến bắt buộc (khác Load() ở
@@ -66,6 +71,9 @@ func LoadVoice() VoiceConfig {
 		// vụn. Đặt thấp có chủ ý — nâng lên sau khi có số đo thật từ log `utter_ms`.
 		ASRMinUtterMS: getenvInt("ASR_MIN_UTTER_MS", 300),
 		SampleRate:    getenvInt("VOICE_SAMPLE_RATE", 16000),
+
+		RecordDir:      getenv("VOICE_RECORD_DIR", ""),
+		RecordSegmentS: getenvInt("VOICE_RECORD_SEGMENT_S", 60),
 	}
 }
 

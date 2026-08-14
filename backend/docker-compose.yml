@@ -17,6 +17,10 @@ services:
       # Lịch sử event (SQLite). Volume riêng để dữ liệu sống qua recreate container —
       # state machine giữ trạng thái trong RAM, đây là chỗ duy nhất còn dấu vết đã xảy ra.
       - home-data:/data
+      # Mẫu audio thu từ mic voice-node để train lại model snore. Named volume vì bộ mẫu phải
+      # sống qua recreate container — chính lúc đổi cấu hình để thu lại là lúc container bị tạo
+      # lại. Chỉ ghi khi VOICE_RECORD_DIR được set (mặc định tắt).
+      - voice-records:/records
     depends_on:
       - asr
 
@@ -43,3 +47,4 @@ volumes:
   asr-model-cache:
   asr-samples:
   home-data:
+  voice-records:

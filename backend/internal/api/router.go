@@ -61,6 +61,11 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.H
 		r.Post("/ac", a.postAC)
 		r.Post("/ac/learn", a.postACLearn)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)
+		// Chỉ đăng ký khi VOICE_RECORD_DIR được set — công cụ thu dữ liệu huấn luyện, không nên
+		// tồn tại trong bản chạy thường (xem voice/record.go).
+		if rec := voice.NewRecordHandler(vc.RecordDir, vc.RecordSegmentS, vc.SampleRate); rec != nil {
+			r.Get("/voice/record", rec.ServeHTTP)
+		}
 		// WS state phải nằm TRONG /api cho khớp docs + app + mọi endpoint khác.
 		// Trước đây nó đăng ký ở gốc ("/ws") nên app gọi /api/ws bị 404 và mất realtime
 		// im lặng — REST vẫn chạy nên bug ẩn rất kỹ.
