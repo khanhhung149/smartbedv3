@@ -37,6 +37,8 @@
 #ifdef ENABLE_WAKEWORD
 #include "wakeword_features.h"
 #include "wakeword_model.h"
+#include "snore_features.h"
+#include "snore_model.h"
 #endif
 
 // ---- Phần cứng ----
@@ -200,11 +202,24 @@ uint8_t  onsetFrames = 0;      // (chỉ đường lui VAD) số frame liên ti�
 float    hpfPrevX = 0.0f;      // x[n-1] — mẫu VÀO trước đó (chưa lọc)
 float    hpfPrevY = 0.0f;      // y[n-1] — mẫu RA trước đó (đã lọc)
 
-// Giữ lại frame trong lúc chờ xác nhận onset rồi gửi bù ngay khi mở stream. Không có đệm này
-// thì debounce ăn mất (VAD_ONSET_FRAMES-1)*16ms đầu câu — đúng chỗ có phụ âm bật /b/, /t/ nên
-// whisper sẽ nghe "ật điều hòa". Chỉ cần đệm đủ số frame bị giữ, ~1KB.
-static int16_t preRoll[(VAD_ONSET_FRAMES - 1) * I2S_READ_SAMPLES];
-static uint8_t preRollFrames = 0;
+// Ring buffer giữ ~512ms audio gần nhất, flush ngay khi mở stream để không mất đầu câu lệnh.
+//
+// Kích thước cũ ((VAD_ONSET_FRAMES-1) * 256 = 32ms) tính theo debounce của VAD năng lượng, KHÔNG
+// đủ cho wakeword: model streaming chỉ chốt điểm sau khi đã nghe trọn "Vừng ơi" cộng độ trễ tích
+// luỹ khung, nên lúc TRIGGER thì người dùng thường đã nói sang động từ. Đo 2026-08-14 trên 15 mẫu
+// thật: 2 mẫu mất hẳn động từ — CẢ BA model ASR độc lập (Whisper-small, PhoWhisper, Zipformer)
+// đều chỉ nghe được "máy lạnh", tức động từ không có trong file chứ không phải model nghe nhầm.
+// Đó là trần cứng mà không model nào vượt qua được; phải sửa ở đây.
+//
+// 512ms dư sức bao trọn độ trễ đó. Gửi lố cả wakeword vào đầu utterance là vô hại: parser chỉ tìm
+// động từ + danh từ AC, và đã xác nhận câu "ƠI BẬT MÁY LẠNH" vẫn khớp đúng.
+//
+// Ring buffer (ghi vòng) thay vì memmove trượt như bản cũ: 16KB memmove mỗi 16ms là lãng phí CPU
+// vô ích khi chỉ cần dịch một chỉ số.
+static const size_t PREROLL_FRAMES = 32;  // 32 x 256 mẫu = 8192 mẫu = 512ms @16kHz = 16KB DIRAM
+static int16_t preRoll[PREROLL_FRAMES * I2S_READ_SAMPLES];
+static size_t  preRollWrite = 0;  // chỉ số FRAME sẽ ghi tiếp theo (quay vòng)
+static size_t  preRollCount = 0;  // số frame hợp lệ đang giữ (bão hoà tại PREROLL_FRAMES)
 
 // ---- Trạng thái presence (nhận từ MQTT home/room/presence) ----
 // Ghi trong onMqtt (chạy đồng bộ trong mqtt.loop() ở loop()), đọc trong loop().
@@ -267,17 +282,29 @@ static int16_t *snoreAccumBuf    = nullptr;  // tích luỹ dần trong loop(), 
 static int16_t *snoreSnapshotBuf = nullptr;  // snapshot cho snoreTask đọc — xem rào chắn notify dưới
 static size_t   snoreAccumCount  = 0;
 
+// Model thật (plans/260812-1401-...-snore-model-integration/) — thay placeholder computeRms() cũ,
+// xem snoreTask(). SnoreFeatures/SnoreModel độc lập hoàn toàn với wakewordFeatures/wakewordModel
+// (2 instance FrontendState/interpreter riêng, tham số khác nhau).
+SnoreFeatures snoreFeatures;
+SnoreModel    snoreModel;
+bool          snoreModelReady = false;  // false nếu begin() lỗi — snoreTask() bỏ qua infer(), giữ
+                                         // nguyên hành vi an toàn (không publish event nào cả) thay
+                                         // vì publish confidence rác.
+
 // Producer (loop(), core 1) chỉ ghi đè snoreSnapshotBuf SAU khi đã notify lần trước — xTaskNotifyGive/
 // ulTaskNotifyTake làm hàng rào tuần tự, KHÔNG cần mutex vì đúng 1 producer + 1 consumer, không có ghi
 // đồng thời từ 2 phía (xem Risk Assessment phase 1: nếu model thật sau này chạy chậm hơn 1s có thể mất
 // dữ liệu — chấp nhận được với placeholder RMS tính rất nhanh).
 TaskHandle_t snoreTaskHandle = nullptr;
 
-// ---- Event Manager (Phase 2, vẫn placeholder) — debounce/hysteresis trước khi publish MQTT ----
-// Số khởi điểm để test kiến trúc (Validation Session 1 plan phase 2), KHÔNG phải ngưỡng phát hiện ngáy
-// thật — tinh chỉnh khi test tay, đổi hẳn khi có model MFCC thật thay placeholder RMS.
-static const float    SNORE_PLACEHOLDER_THRESHOLD = 500.0f;  // thấp hơn VAD_THRESHOLD_MIN (600.0f) —
-                                                               // dễ trigger khi test tay (vỗ tay/nói to)
+// ---- Event Manager — debounce/hysteresis trước khi publish MQTT ----
+// SNORE_SCORE_THRESHOLD thay SNORE_PLACEHOLDER_THRESHOLD (500.0f, đơn vị RMS — vô nghĩa với score
+// model thật). SnoreModel::infer() dequantize output bằng scale/zero_point THẬT đọc từ tensor
+// (snore_model.cpp), nên 0.5 là điểm giữa hợp lý cho phân loại nhị phân sigmoid/Logistic — khớp
+// gần đúng ngưỡng 128/255≈0.502 mà recognize_commands.cc repo gốc dùng (họ so trực tiếp uint8 thô,
+// ngầm định zero_point=0/scale=1/255). Số khởi điểm để test kiến trúc — tinh chỉnh khi test tay
+// với âm thanh ngáy thật (xem plans/260812-1401-...-snore-model-integration/phase-02-*.md).
+static const float    SNORE_SCORE_THRESHOLD       = 0.5f;
 static const uint8_t  SNORE_CONSECUTIVE_WINDOWS   = 3;        // ~3s liên tục mới confirm — tránh 1
                                                                // tiếng động ngắn kích hoạt (temporal
                                                                // filtering, xem docs mục 6.3/13)
@@ -301,6 +328,21 @@ uint32_t snoreCooldownUntilMs  = 0;
 std::atomic<bool>  snoreEventPending{false};
 std::atomic<float> snoreEventConfidence{0.0f};
 static const char *TOPIC_SNORE_EVENT = "home/room/snore_event";
+
+// Chỉ MỘT interpreter TFLite được chạy tại một thời điểm, dù có 2 core.
+//
+// Kernel esp_nn giữ scratch buffer trong biến TOÀN CỤC của thư viện (esp_nn_set_conv_scratch_buf,
+// gọi ngay trong Eval của conv/softmax). Wakeword ở core 1 và snore ở core 0 đều có CONV_2D, nên
+// khi hai Invoke() chồng nhau, core này ghi đè con trỏ scratch của core kia rồi ghi kết quả
+// convolution vào arena của nó — user_data / registration->invoke bị zero hoá, lần Invoke() kế
+// tiếp chết bằng abort() trong TFLITE_DCHECK. Đo trên board 13/08: 5/5 lần crash rơi đúng cửa sổ
+// hai inference chồng nhau (~1 lần/14 phút khi chạy liên tục).
+//
+// Vì sao khoá thay vì bỏ esp_nn: đã thử reference kernel cho mọi op và ĐO được snore 105ms ->
+// 4000ms (chiếm đứt core 0, task_wdt kêu mỗi 5s). Khoá rẻ hơn nhiều: snore giữ mutex ~105ms mỗi
+// giây, và I2S DMA (16 buffer x 256 mẫu = 256ms) thừa sức đệm audio trong lúc loop() chờ nên
+// KHÔNG mất mẫu, chỉ trễ xử lý.
+SemaphoreHandle_t tfliteMutex = nullptr;
 #endif
 
 IRDaikin152 ac(PIN_IR_SEND);   // 152-bit: NGẮN NHẤT trong các biến thể còn setPower thật
@@ -335,6 +377,15 @@ void connectWiFi() {
     connecting = false;
   } else if (now - attemptStart >= 15000) {
     Serial.println("WiFi: FAIL (thử lại sau)");
+    // PHẢI disconnect trước khi cho phép begin() lại. Hết 15000ms chỉ là timeout của TA —
+    // driver esp_wifi vẫn đang ở trạng thái connecting và từ chối mọi lần set config kế tiếp:
+    //   E wifi:sta is connecting, cannot set config
+    //   STA clear config failed! 0x3006: ESP_ERR_WIFI_STATE
+    // (log board thật khi AP không nằm trong tầm). Thiếu dòng này thì mọi lần retry sau đều
+    // rơi vào lỗi trên và KHÔNG bắn được yêu cầu kết nối mới — board chỉ hồi phục khi reset.
+    // Giữ nguyên cấu hình AP đã lưu (eraseap=false) và không tắt radio (wifioff=false) để lần
+    // begin() kế tiếp không phải khởi tạo lại toàn bộ stack.
+    WiFi.disconnect(false, false);
     connecting = false;  // hết timeout -> lần gọi loop() kế tiếp bắn lại WiFi.begin()
   }
   // else: vẫn trong cửa sổ chờ connect, không in gì, không delay — trả quyền điều khiển ngay cho loop()
@@ -435,7 +486,11 @@ void setupI2S() {
       .channel_format = CFG_I2S_CHAN,                // xem chú thích ở khối CFG_I2S_CHAN
       .communication_format = I2S_COMM_FORMAT_STAND_I2S,
       .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-      .dma_buf_count = 8,
+      // 16 x 256 mẫu = 4096 mẫu = 256ms đệm @16kHz. Tăng từ 8 (128ms) vì loop() nay có thể phải
+      // chờ tfliteMutex trong lúc snore inference giữ khoá (~105ms) — 128ms là quá sát, chỉ cần
+      // một nhịp jitter là DMA tràn và mất mẫu audio giữa câu. 256ms cho biên gấp đôi.
+      // Giá: 16 x 256 x 4 byte = 16KB DIRAM (slot 32-bit), lấy từ ~150KB heap còn trống.
+      .dma_buf_count = 16,
       .dma_buf_len = 256,
       .use_apll = false,
       .tx_desc_auto_clear = false,
@@ -482,36 +537,68 @@ float computeRms(const int16_t *buf, size_t n) {
 }
 
 #ifdef ENABLE_WAKEWORD
-// ---- Task snore (core 0) — CHƯA phải phát hiện ngáy thật, chỉ scaffold kiến trúc B+ ----
-// Chờ notify từ loop() (core 1) mỗi khi snoreSnapshotBuf có 1 cửa sổ ~1s mới, tính RMS trung bình
-// (placeholder — model MFCC thật thay chỗ này sau, không đổi phần còn lại), log ra Serial để verify
-// task chạy đúng core + không ảnh hưởng nhịp wakeword.
+// ---- Task snore (core 0) — model thật (plans/260812-1401-...-snore-model-integration/) ----
+// Chờ notify từ loop() (core 1) mỗi khi snoreSnapshotBuf có 1 cửa sổ ~1s (16000 mẫu) mới, chạy
+// SnoreFeatures::pushSamples() + SnoreModel::infer() thật (thay computeRms() placeholder cũ), log
+// ra Serial để verify task chạy đúng core + đo latency thật + không ảnh hưởng nhịp wakeword.
 void snoreTask(void *) {
+  uint8_t features[SnoreFeatures::kFeatureSliceCount][SnoreFeatures::kNumChannels];
   for (;;) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    float rms = computeRms(snoreSnapshotBuf, SNORE_WINDOW_SAMPLES);
-    Serial.printf("[snore] rms=%.1f core=%d\n", rms, xPortGetCoreID());
 
-    // Event Manager placeholder (Phase 2): N cửa sổ liên tiếp vượt ngưỡng mới confirm (temporal
+    if (!snoreModelReady) continue;  // begin() lỗi -> không infer, không publish (an toàn hơn là
+                                      // publish confidence rác — cùng triết lý wakewordReady)
+
+    if (!snoreFeatures.pushSamples(snoreSnapshotBuf, SNORE_WINDOW_SAMPLES, features)) {
+      // Không đủ đúng 61 slice trong lần gọi này (lệch pha hop hiếm gặp, xem comment
+      // SnoreFeatures::pushSamples) -> bỏ qua cửa sổ này, FrontendState giữ lịch sử hop nội bộ nên
+      // cửa sổ kế tiếp sẽ bù đủ, không mất dữ liệu vĩnh viễn.
+      continue;
+    }
+
+    // Thống kê đặc trưng ĐƯA VÀO model — phân biệt "model không nhận ra tiếng ngáy" với "đặc trưng
+    // vào model đã sai từ đầu". Đo 2026-08-14: mic thu rõ tiếng ngáy phát từ loa (RMS nền 40 vọt lên
+    // 894 theo đúng nhịp thở) mà score vẫn 0.000 — nếu min/max/mean ở đây dồn hết về ~0 thì lỗi nằm ở
+    // frontend/rescale chứ không phải model, và đó là hai hướng sửa hoàn toàn khác nhau.
+    uint32_t fSum = 0;
+    uint8_t  fMin = 255, fMax = 0;
+    for (int s = 0; s < SnoreFeatures::kFeatureSliceCount; s++) {
+      for (int c = 0; c < SnoreFeatures::kNumChannels; c++) {
+        uint8_t v = features[s][c];
+        fSum += v;
+        if (v < fMin) fMin = v;
+        if (v > fMax) fMax = v;
+      }
+    }
+    uint32_t fMean = fSum / (SnoreFeatures::kFeatureSliceCount * SnoreFeatures::kNumChannels);
+
+    uint32_t inferStartMs = millis();
+    xSemaphoreTake(tfliteMutex, portMAX_DELAY);  // xem tfliteMutex: esp_nn scratch dùng chung
+    float score = snoreModel.infer(features);
+    xSemaphoreGive(tfliteMutex);
+    uint32_t inferMs = millis() - inferStartMs;
+    Serial.printf("[snore][feat] min=%u max=%u mean=%u\n", (unsigned)fMin, (unsigned)fMax,
+                  (unsigned)fMean);
+    Serial.printf("[snore] score=%.3f infer=%lums core=%d\n", score, (unsigned long)inferMs,
+                  xPortGetCoreID());
+
+    // Event Manager (giữ nguyên 100% kiến trúc scaffold trước) — chỉ đổi biến đầu vào từ rms
+    // placeholder sang score model thật: N cửa sổ liên tiếp vượt ngưỡng mới confirm (temporal
     // filtering), rồi cooldown trước khi confirm event kế tiếp — cùng nguyên tắc WAKEWORD_COOLDOWN_MS.
     uint32_t now = millis();
-    if (rms > SNORE_PLACEHOLDER_THRESHOLD) {
+    if (score > SNORE_SCORE_THRESHOLD) {
       if (snoreConsecutiveCount < 255) snoreConsecutiveCount++;
     } else {
       snoreConsecutiveCount = 0;
     }
 
     if (snoreConsecutiveCount >= SNORE_CONSECUTIVE_WINDOWS && now >= snoreCooldownUntilMs) {
-      // Chuẩn hoá placeholder 0-1: đạt đúng ngưỡng = 0.5, gấp đôi ngưỡng = 1.0 (kẹp trên). KHÔNG phải
-      // confidence model thật — chỉ để payload có giá trị hợp lệ test contract (xem Risk Assessment).
-      float confidence = rms / (SNORE_PLACEHOLDER_THRESHOLD * 2.0f);
-      if (confidence > 1.0f) confidence = 1.0f;
       // release: ghi confidence PHẢI thấy được trên core 1 TRƯỚC KHI core 1 thấy pending=true bên dưới.
-      snoreEventConfidence.store(confidence, std::memory_order_relaxed);
+      snoreEventConfidence.store(score, std::memory_order_relaxed);
       snoreEventPending.store(true, std::memory_order_release);
       snoreCooldownUntilMs = now + SNORE_COOLDOWN_MS;
       snoreConsecutiveCount = 0;
-      Serial.printf("[snore] EVENT confidence=%.3f -> chờ loop() publish\n", confidence);
+      Serial.printf("[snore] EVENT confidence=%.3f -> chờ loop() publish\n", score);
     }
   }
 }
@@ -594,11 +681,28 @@ void setup() {
   // Sau I2S (cần SAMPLE_RATE đã cấu hình) — lỗi ở đây chỉ tắt wakeword, KHÔNG chặn boot: board vẫn
   // lên WiFi/MQTT/OTA/fusion bình thường, chỉ không bao giờ tự mở stream (an toàn, không phải im
   // lặng-báo-lỗi: log rõ để thấy ngay lúc cắm Serial).
+  // Tạo TRƯỚC mọi infer() — cả loop() lẫn snoreTask đều lấy khoá này trước khi Invoke().
+  // Không có nó thì xSemaphoreTake(nullptr) là hành vi không xác định, nên dựng ngay đầu setup().
+  tfliteMutex = xSemaphoreCreateMutex();
+  if (!tfliteMutex) {
+    // Hết heap ở đây gần như không xảy ra (mutex vài chục byte, cấp lúc heap còn ~150KB), nhưng
+    // chạy tiếp mà thiếu khoá là quay lại đúng bug tranh scratch — thà tắt hẳn hai model.
+    Serial.println("[tflite] LỖI tạo mutex -> wakeword+snore TẮT (không chạy khi thiếu khoá)");
+  }
+
   bool featOk  = wakewordFeatures.begin(SAMPLE_RATE);
   bool modelOk = featOk && wakewordModel.begin();
-  wakewordReady = featOk && modelOk;
+  wakewordReady = tfliteMutex && featOk && modelOk;
   Serial.printf("[wakeword] init: features=%s model=%s -> %s\n", featOk ? "OK" : "LỖI",
                modelOk ? "OK" : "LỖI", wakewordReady ? "sẵn sàng" : "TẮT");
+
+  // Model snore thật — cùng triết lý an toàn với wakewordReady ở trên: lỗi begin() chỉ tắt riêng
+  // đường snore (snoreModelReady=false), KHÔNG chặn boot/wakeword/fusion.
+  bool snoreFeatOk  = snoreFeatures.begin(SAMPLE_RATE);
+  bool snoreModelOk = snoreFeatOk && snoreModel.begin();
+  snoreModelReady = tfliteMutex && snoreFeatOk && snoreModelOk;
+  Serial.printf("[snore] model init: features=%s model=%s -> %s\n", snoreFeatOk ? "OK" : "LỖI",
+               snoreModelOk ? "OK" : "LỖI", snoreModelReady ? "sẵn sàng" : "TẮT");
 
   // Snore scaffold (xem khai báo buffer/task phía trên) — log heap TRƯỚC/SAU cấp phát PSRAM để có
   // số liệu thật (không suy đoán), lỗi cấp phát chỉ tắt snore task, KHÔNG chặn boot (cùng triết lý
@@ -615,7 +719,14 @@ void setup() {
     // KHÁC core (0, xem Risk Assessment plan phase 1: WiFi/LWIP task cũng ở core 0, chấp nhận rủi ro
     // tranh chấp nhẹ, đã xác nhận qua Validation Session 1). Không hạ priority thêm vì không tranh
     // CPU với loopTask (khác core) — chỉ tranh với WiFi task nếu có, vốn chủ yếu interrupt-driven.
-    xTaskCreatePinnedToCore(snoreTask, "snore", 4096, nullptr, 1, &snoreTaskHandle, 0);
+    //
+    // Stack 8192 byte (tăng từ 4096 của placeholder RMS cũ, code-review 2026-08-12): từ khi thêm
+    // model thật, task này còn giữ local `features[61][30]` (~1830 byte) + gọi Invoke() thật
+    // (Conv2D/MaxPool2D/ResizeBilinear, arena 100KB) — nặng hơn hẳn RMS cũ. WakewordModel::infer()
+    // (Invoke() nặng tương đương) chạy trong loopTask Arduino, mặc định 8192 byte — dùng cùng số đó
+    // làm điểm khởi đầu có căn cứ thay vì đoán. CHƯA đo `uxTaskGetStackHighWaterMark()` thật trên
+    // board (cần hardware, xem docs/voice-node-snore-wakeword-architecture.md mục 6a).
+    xTaskCreatePinnedToCore(snoreTask, "snore", 8192, nullptr, 1, &snoreTaskHandle, 0);
     Serial.printf("[snore] task tạo xong, core loop()=%d\n", xPortGetCoreID());
   } else {
     Serial.println("[snore] LỖI cấp phát PSRAM -> snore task TẮT (wakeword không ảnh hưởng)");
@@ -702,6 +813,26 @@ void loop() {
                   (lastMs != 0 && now - lastMs < RADAR_LINK_TIMEOUT_MS) ? "up" : "DOWN",
                   present, occupied, (unsigned long)lastRadarSeq,
                   WiFi.status() == WL_CONNECTED, mqtt.connected());
+
+#ifdef ENABLE_WAKEWORD
+    // Đo thật thay suy đoán: latency Invoke() của wakeword arena (DIRAM, xem wakeword_model.cpp —
+    // từng thử PSRAM 12/08, revert 13/08 do esp-nn DepthwiseConv2D ghi ngoài vùng cấp phát gây
+    // crash-loop khi arena ở PSRAM), và stack high-water-mark thật của loopTask/snoreTask (trước đây
+    // chỉ đặt theo suy luận, xem lịch sử comment ở khai báo snoreTask()). uxTaskGetStackHighWaterMark trả số ĐÃ
+    // là byte trên port này — portSTACK_TYPE (Xtensa, freertos/portmacro.h) là uint8_t, KHÁC
+    // FreeRTOS chuẩn (StackType_t=uint32_t, trả word) — không nhân 4 ở đây (bug từng mắc: nhân 4
+    // làm số bị thổi phồng gấp 4 lần, phát hiện khi đối chiếu số đo thật với kích thước stack
+    // khai báo 8192 byte thấy vô lý — free đo được lớn hơn cả tổng stack).
+    WakewordLatencyStats wwStats = wakewordModel.getAndResetLatencyStats();
+    uint32_t loopStackFreeBytes = uxTaskGetStackHighWaterMark(nullptr);
+    uint32_t snoreStackFreeBytes =
+        snoreTaskHandle ? uxTaskGetStackHighWaterMark(snoreTaskHandle) : 0;
+    Serial.printf("[hb][perf] wakewordInvokeUs min=%u avg=%u max=%u n=%u heapFree=%u psramFree=%u "
+                 "loopStackFree=%u snoreStackFree=%u\n",
+                 (unsigned)wwStats.minUs, (unsigned)wwStats.avgUs, (unsigned)wwStats.maxUs,
+                 (unsigned)wwStats.count, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram(),
+                 (unsigned)loopStackFreeBytes, (unsigned)snoreStackFreeBytes);
+#endif
   }
 
   // Đọc I2S có timeout — không dùng portMAX_DELAY để tránh treo loop nếu
@@ -750,10 +881,16 @@ void loop() {
   if (wakewordReady) {
     uint16_t wwFeatures[WakewordFeatures::kFramesPerInference][WakewordFeatures::kNumChannels];
     if (wakewordFeatures.pushSamples(pcmBuf, samples, wwFeatures)) {
+      uint32_t inferStartMs = millis();
+      xSemaphoreTake(tfliteMutex, portMAX_DELAY);  // xem tfliteMutex: esp_nn scratch dùng chung
       float score = wakewordModel.infer(wwFeatures);
+      xSemaphoreGive(tfliteMutex);
+      uint32_t inferMs = millis() - inferStartMs;
       if (now - lastScoreLogMs >= 500) {
         lastScoreLogMs = now;
-        Serial.printf("[wakeword] score=%.3f state=%s\n", score,
+        // infer=Xms: latency Invoke() thô đo bằng millis() (độ phân giải 1ms, đủ cho log runtime
+        // định kỳ — số chính xác hơn dùng esp_timer_get_time() xem getAndResetLatencyStats()).
+        Serial.printf("[wakeword] score=%.3f infer=%lums state=%s\n", score, (unsigned long)inferMs,
                       voiceState == VoiceState::LISTENING ? "LISTENING" : "STREAMING");
       }
       if (voiceState == VoiceState::LISTENING && score > WAKEWORD_THRESHOLD &&
@@ -762,30 +899,31 @@ void loop() {
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
         Serial.printf("[wakeword] TRIGGER score=%.3f -> STREAMING\n", score);
         // Gửi bù phần đã giữ TRƯỚC frame hiện tại để chuỗi PCM liền mạch, không mất âm đầu.
-        if (webSocket.isConnected() && preRollFrames > 0) {
-          webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
-                            preRollFrames * I2S_READ_SAMPLES * sizeof(int16_t));
+        // Ring buffer nên frame cũ nhất KHÔNG nằm ở đầu mảng: đi ngược preRollCount frame từ chỗ
+        // ghi tiếp theo. Nếu đoạn đó vắt qua cuối mảng thì gửi làm hai lần — backend nối byte thô
+        // theo thứ tự nhận nên hai message liền nhau vẫn ra đúng một chuỗi PCM liên tục.
+        if (webSocket.isConnected() && preRollCount > 0) {
+          size_t oldest = (preRollWrite + PREROLL_FRAMES - preRollCount) % PREROLL_FRAMES;
+          size_t untilEnd = PREROLL_FRAMES - oldest;
+          size_t firstFrames = preRollCount < untilEnd ? preRollCount : untilEnd;
+          webSocket.sendBIN(reinterpret_cast<uint8_t *>(&preRoll[oldest * I2S_READ_SAMPLES]),
+                            firstFrames * I2S_READ_SAMPLES * sizeof(int16_t));
+          if (preRollCount > firstFrames) {
+            webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
+                              (preRollCount - firstFrames) * I2S_READ_SAMPLES * sizeof(int16_t));
+          }
         }
-        preRollFrames = 0;
+        preRollCount = 0;  // đã flush; bắt đầu tích luỹ lại từ đầu cho lần kế tiếp
       }
     }
   }
 
-  // preRoll: ring buffer trượt, giữ liên tục (VAD_ONSET_FRAMES-1) khung gần nhất trong lúc
-  // LISTENING — khác VAD cũ (chỉ giữ trong cửa sổ debounce ngắn), vì wakeword không có khái niệm
-  // "onset debounce" đếm frame liên tiếp. Flush lúc TRIGGER ở trên để bù độ trễ cố hữu của kiến
-  // trúc streaming (model cần tích luỹ đủ 3 khung mới — 30ms — mới suy luận được một lần).
+  // preRoll: ghi vòng liên tục trong lúc LISTENING, luôn giữ PREROLL_FRAMES khung gần nhất.
+  // Flush lúc TRIGGER ở trên để bù độ trễ phát hiện của model streaming (xem khai báo preRoll).
   if (voiceState == VoiceState::LISTENING && samples == I2S_READ_SAMPLES) {
-    constexpr int kPreRollFrameCount = VAD_ONSET_FRAMES - 1;
-    if (preRollFrames < kPreRollFrameCount) {
-      memcpy(&preRoll[preRollFrames * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
-      preRollFrames++;
-    } else {
-      memmove(preRoll, preRoll + I2S_READ_SAMPLES,
-              (kPreRollFrameCount - 1) * I2S_READ_SAMPLES * sizeof(int16_t));
-      memcpy(&preRoll[(kPreRollFrameCount - 1) * I2S_READ_SAMPLES], pcmBuf,
-             samples * sizeof(int16_t));
-    }
+    memcpy(&preRoll[preRollWrite * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
+    preRollWrite = (preRollWrite + 1) % PREROLL_FRAMES;
+    if (preRollCount < PREROLL_FRAMES) preRollCount++;
   }
 
   // Snore scaffold: tích luỹ liên tục (không quantize theo khung như preRoll ở trên — chỉ cộng dồn
@@ -814,25 +952,27 @@ void loop() {
         voiceState  = VoiceState::STREAMING;
         onsetFrames = 0;
         Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
-        if (webSocket.isConnected() && preRollFrames > 0) {
+        // Đường VAD chỉ cần bù đúng số frame bị debounce giữ lại, nên dùng preRollCount như bộ đếm
+        // TUYẾN TÍNH từ đầu mảng (không quay vòng như đường wakeword) — mảng thừa sức chứa.
+        if (webSocket.isConnected() && preRollCount > 0) {
           webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
-                            preRollFrames * I2S_READ_SAMPLES * sizeof(int16_t));
+                            preRollCount * I2S_READ_SAMPLES * sizeof(int16_t));
         }
-        preRollFrames = 0;
+        preRollCount = 0;
       }
     } else {
       // Chuỗi đứt -> gai nhiễu đơn lẻ, quên hẳn. Không tích lũy qua các lần rời rạc.
-      onsetFrames   = 0;
-      preRollFrames = 0;
+      onsetFrames  = 0;
+      preRollCount = 0;
     }
   }
 
   // Đang chờ xác nhận onset: giữ frame lại. Chỉ giữ frame đủ độ dài để bước nhảy trong preRoll
   // luôn đúng I2S_READ_SAMPLES (i2s_read có thể trả về ít hơn khi timeout dở).
   if (voiceState == VoiceState::LISTENING && onsetFrames > 0 &&
-      preRollFrames < VAD_ONSET_FRAMES - 1 && samples == I2S_READ_SAMPLES) {
-    memcpy(&preRoll[preRollFrames * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
-    preRollFrames++;
+      preRollCount < (size_t)(VAD_ONSET_FRAMES - 1) && samples == I2S_READ_SAMPLES) {
+    memcpy(&preRoll[preRollCount * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
+    preRollCount++;
   }
 #endif  // ENABLE_WAKEWORD
 

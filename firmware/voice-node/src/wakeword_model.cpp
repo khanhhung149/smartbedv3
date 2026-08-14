@@ -8,6 +8,9 @@
 
 #include <cmath>
 
+#include <esp_heap_caps.h>  // heap_caps_aligned_alloc(..., MALLOC_CAP_SPIRAM) — arena đặt PSRAM, xem dưới
+#include <esp_timer.h>      // esp_timer_get_time() — đo latency Invoke() bằng µs, không lệch bởi millis() 1ms
+
 #include "tensorflow/lite/core/c/common.h"
 #include "tensorflow/lite/micro/micro_allocator.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -24,13 +27,30 @@ namespace {
 // 32KB -> 34KB (10/08, board thật): thêm MicroAllocator/MicroResourceVariables (xem begin()) ăn
 // thêm vào arena, board báo thiếu đúng 524 byte ("Failed to resize buffer. Requested: 18224,
 // available 17700"). +2KB dư thay vì vá đúng khít 524 byte.
+//
+// DIRAM (internal SRAM), KHÔNG PSRAM (13/08) — đã thử PSRAM (12/08, arena này dời sang PSRAM cùng lúc
+// với snore arena 200KB để giải phóng DIRAM) nhưng soak test 4h thật trên board phát hiện crash-loop
+// nghiêm trọng (~50 reboot/4h, Guru Meditation StoreProhibited): esp-nn assembly SIMD
+// (`esp_nn_s8_to_s16_esp32s3`, dùng trong DepthwiseConv2D) ghi ra ngoài vùng cấp phát khi thao tác trực
+// tiếp trên buffer PSRAM — xác nhận qua addr2line backtrace thật (esp_nn_depthwise_conv_s8_esp32s3 →
+// esp_nn_s8_to_s16_esp32s3 → StoreProhibited), lặp lại giống hệt ở 33/50 lần crash. DIRAM đủ chỗ cho
+// riêng arena này (34KB) mà không cần đụng tới snore arena (200KB vẫn ở PSRAM — snore Conv2D không lộ
+// crash này trong log gốc, dù không loại trừ hoàn toàn cùng rủi ro nếu đổi sang esp-nn kernel khác).
 constexpr int kTensorArenaSize = 34 * 1024;
-alignas(16) uint8_t g_tensorArena[kTensorArenaSize];
+uint8_t *g_tensorArena = nullptr;
 
 const tflite::Model *g_model = nullptr;
 tflite::MicroInterpreter *g_interpreter = nullptr;
 TfLiteTensor *g_input = nullptr;
 TfLiteTensor *g_output = nullptr;
+
+// Tích luỹ latency Invoke() giữa 2 lần gọi getAndResetLatencyStats() (xem .h) — không dùng
+// mảng/lịch sử, chỉ 4 số chạy (min/max/sum/count) để tính min/avg/max rẻ, đủ cho mục đích log
+// định kỳ (không cần phân bố chi tiết).
+uint32_t g_latencyMinUs = UINT32_MAX;
+uint32_t g_latencyMaxUs = 0;
+uint64_t g_latencySumUs = 0;
+uint32_t g_latencyCount = 0;
 
 // Op resolver: liệt kê theo cấu trúc layer đọc từ model_summary.txt (train) — ExpandDims,
 // DepthwiseConv2D/Conv2D (BatchNorm bị TFLite converter fold vào Conv2D lúc quantize nên KHÔNG
@@ -79,6 +99,16 @@ bool WakewordModel::begin() {
     MicroPrintf("[wakeword] model schema version %d != supported %d", g_model->version(),
                TFLITE_SCHEMA_VERSION);
     return false;
+  }
+
+  if (!g_tensorArena) {
+    g_tensorArena = static_cast<uint8_t *>(
+        heap_caps_aligned_alloc(16, kTensorArenaSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (!g_tensorArena) {
+      MicroPrintf("[wakeword] cấp phát DIRAM cho tensor arena (%u byte) lỗi",
+                 (unsigned)kTensorArenaSize);
+      return false;
+    }
   }
 
   static tflite::MicroMutableOpResolver<kNumOps> resolver = BuildOpResolver();
@@ -145,7 +175,15 @@ float WakewordModel::infer(const uint16_t features[WakewordFeatures::kFramesPerI
     return 0.0f;
   }
 
-  if (g_interpreter->Invoke() != kTfLiteOk) {
+  int64_t t0 = esp_timer_get_time();
+  TfLiteStatus invokeStatus = g_interpreter->Invoke();
+  uint32_t elapsedUs = static_cast<uint32_t>(esp_timer_get_time() - t0);
+  if (elapsedUs < g_latencyMinUs) g_latencyMinUs = elapsedUs;
+  if (elapsedUs > g_latencyMaxUs) g_latencyMaxUs = elapsedUs;
+  g_latencySumUs += elapsedUs;
+  g_latencyCount++;
+
+  if (invokeStatus != kTfLiteOk) {
     MicroPrintf("[wakeword] Invoke() lỗi");
     return 0.0f;
   }
@@ -158,6 +196,20 @@ float WakewordModel::infer(const uint16_t features[WakewordFeatures::kFramesPerI
     return (static_cast<float>(raw) - g_output->params.zero_point) * g_output->params.scale;
   }
   return g_output->data.f[0];  // float32
+}
+
+WakewordLatencyStats WakewordModel::getAndResetLatencyStats() {
+  WakewordLatencyStats stats;
+  stats.count = g_latencyCount;
+  stats.minUs = g_latencyCount ? g_latencyMinUs : 0;
+  stats.maxUs = g_latencyMaxUs;
+  stats.avgUs = g_latencyCount ? static_cast<uint32_t>(g_latencySumUs / g_latencyCount) : 0;
+
+  g_latencyMinUs = UINT32_MAX;
+  g_latencyMaxUs = 0;
+  g_latencySumUs = 0;
+  g_latencyCount = 0;
+  return stats;
 }
 
 #endif  // ENABLE_WAKEWORD
