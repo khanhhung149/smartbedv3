@@ -58,8 +58,15 @@ GoogleService-Info.plist
 
 repomix-output.xml
 .serena/cache
-plans/**/*
+# Không neo ở gốc: các thư mục con (firmware/voice-node/plans/…) cũng là nơi sinh plan/report cục
+# bộ. Pattern cũ "plans/**/*" chỉ phủ thư mục gốc nên đã để lọt backend/plans/reports/ vào git.
+**/plans/**
 !plans/templates/*
+# Receipt rỗng do plugin sinh ("no signer configured"), không có giá trị lưu.
+receipts/
+review-receipts/
+# Config override chỉ dùng cục bộ (vd pensyve-plugin.local.md tắt context dump để giảm token).
+*.local.md
 screenshots/*
 docs/screenshots/*
 logs.txt
@@ -72,6 +79,11 @@ ck.md
 
 # Generated runtime layout for release/install smoke tests
 /.claude/
+# .claude/ trong thư mục CON (vd firmware/voice-node/.claude/agent-memory/) là bộ nhớ agent cục
+# bộ, không phải nguồn. Pattern phải có "*/" ở giữa để KHÔNG khớp .claude/ ở gốc: git không cho
+# phép re-include file khi thư mục cha đã bị loại, nên "**/.claude/" sẽ nuốt luôn ngoại lệ
+# !/.claude/rules/ bên dưới và làm mất rules mà Claude Code đang đọc.
+**/*/.claude/
 # But track repo-level rules that Claude Code reads
 !/.claude/rules/
 
