@@ -1,0 +1,14 @@
+// Mẫu cấu hình WiFi. Copy sang config.h rồi điền giá trị thật:
+//
+//     cp include/config.h.example include/config.h
+//
+// config.h bị .gitignore chặn (firmware/**/config.h) — KHÔNG bao giờ commit mật khẩu.
+// File .example này thì được commit, vì nó không chứa giá trị thật.
+#pragma once
+
+#define WIFI_SSID "ten-mang-cua-ban"
+#define WIFI_PASS "mat-khau-cua-ban"
+
+// Node phải ở cùng LAN với laptop chạy scripts/pose-poc/. Trang xem ở cổng 80, stream
+// ở cổng 81. Cả hai KHÔNG có xác thực — bất kỳ thiết bị nào trong mạng mở được URL đó
+// đều xem được (hazard H-25). Dùng mạng bench cách ly, tắt nguồn board khi không dùng.

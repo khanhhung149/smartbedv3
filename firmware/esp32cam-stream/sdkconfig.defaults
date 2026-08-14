@@ -1,0 +1,18 @@
+# AI-Thinker ESP32-CAM có 4MB PSRAM onboard, nhưng ESP-IDF không tự bật — thiếu ba
+# dòng dưới đây thì esp32-camera driver malloc frame buffer trong PSRAM thất bại
+# ("cam_dma_config: frame buffer malloc failed") dù chip có PSRAM vật lý thật. Bắt được
+# lỗi này khi flash lên phần cứng thật lần đầu (13/08).
+#
+# PSRAM là BẮT BUỘC ở đây, không phải tối ưu: VGA JPEG với fb_count=2 không vừa SRAM
+# nội. Nếu esp_camera_init() trả ESP_ERR_NO_MEM, kiểm tra ba dòng này TRƯỚC TIÊN.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MODE_QUAD=y
+
+# Mỗi frame gửi đi là một chuỗi chunk; handler stream chạy vô hạn trong task của httpd.
+# Stack mặc định (4096) đủ chật khi cộng thêm buffer header và lời gọi driver camera.
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# KHÔNG thêm CONFIG_FATFS_* hay bất kỳ tuỳ chọn lưu trữ nào vào file này. Node này
+# không có tầng lưu trữ và đó là điều kiện của hazard H-25 — xem platformio.ini.
