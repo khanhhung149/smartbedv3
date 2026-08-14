@@ -1,0 +1,21 @@
+# PoC MediaPipe Pose Landmarker — laptop x86_64. KHÔNG dùng cho Jetson aarch64:
+# mediapipe không có wheel aarch64 chính thức trên PyPI (xem mục rủi ro vision
+# pipeline trong docs/system-architecture.md).
+#
+# mediapipe >=1.0 là BẮT BUỘC, không phải sở thích. Từ 1.0.0 toàn bộ `mp.solutions`
+# (drawing_utils, POSE_CONNECTIONS, landmark_pb2) đã bị gỡ khỏi package — top-level
+# chỉ còn Image, ImageFormat, tasks. pose_poc.py viết cho API mới: dùng
+# vision.PoseLandmarksConnections và tự vẽ bằng OpenCV. Cài bản 0.10.x vào đây thì
+# script gãy ở chỗ khác, không phải ở dòng import.
+mediapipe>=1.0.0
+
+# ⚠️ KHÔNG thêm `opencv-python` hay `opencv-python-headless` vào file này.
+#
+# mediapipe đã phụ thuộc sẵn `opencv-contrib-python`, và cả ba gói opencv-* đều giải
+# nén vào CÙNG một thư mục site-packages/cv2/ rồi ghi đè lẫn nhau — gói nào cài sau
+# thì thắng. Thêm gói thứ hai vào là tự chuốc lấy chuyện `import cv2` chạy nhưng
+# `cv2.imshow` ném lỗi vì vô tình dính bản headless, hoặc lệch version giữa hai bản.
+# Bản contrib mà mediapipe kéo về đã có đủ GUI cho `imshow`.
+#
+# Đã verify chạy thật 14/08: mediapipe 1.0.0, opencv-contrib-python 5.0.0.93,
+# numpy 2.5.2 — `imshow` mở được cửa sổ.

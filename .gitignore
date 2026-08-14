@@ -42,6 +42,8 @@ venv/
 *.onnx
 *.engine
 *.tflite
+# MediaPipe Tasks bundle — scripts/pose-poc/download_model.sh tải lại khi cần.
+*.task
 
 # ── Recorded sleep data — NEVER commit (large + personal biometric data) ────
 # Real overnight recordings from Phase 01 onward. Disk is cheap, git is not,
