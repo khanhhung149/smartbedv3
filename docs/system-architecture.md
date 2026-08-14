@@ -196,14 +196,36 @@ Persistence: SQLite to start (TimescaleDB if volume demands). Rotate per night, 
 | SHT10/31 | I2C | In pod, out of the breath stream | Temperature, humidity |
 | **Omnidirectional mic** | I2S | Head of bed | Breathing, snoring, ambient noise |
 | CO₂ | I2C | In pod | Ventilation interlock (§5.3) |
-| **ESP32-CAM (OV2640) + VL53L0X** | Camera: internal SCCB (GPIO26/27, not header-accessible). VL53L0X: separate I2C bus (GPIO4/13) — corrected 2026-08-13 during real bring-up, see `plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md` Bench Bring-up Log | Aimed at sleep area | Behavior video (JPEG frames, bench-test only, local SD — not synced to this pipeline), distance-to-person |
+| **ESP32-CAM (OV2640)** | Camera: internal SCCB (GPIO26/27, not header-accessible). **No VL53L0X** — the distance sensor was dropped 2026-08-14, see `plans/260814-1237-esp32cam-stream-mediapipe-poc/` | Aimed at sleep area | Behavior video as an **MJPEG stream over HTTP on the LAN** — nothing is stored, on the node or anywhere else. Not on the MQTT bus, not in the capability manifest (§5) |
 
 Two upgrades from the 2023 spec worth stating plainly, because they are easy to "correct" back by mistake:
 
 - **LD2510B, not LD2410B.** The 2410B reports only an approximate distance. The 2510B tracks **several people at once with true positions** — required for a double bed, and for telling a person lying down apart from a person walking past.
 - **Piezo pad, not a 150 kg loadcell.** The piezo yields BCG, which a loadcell cannot, and does not drift with temperature. Cheaper and simpler to mount.
 
-A third change, decided 2026-08-13 and out of scope for this file's original 13/07 sign-off: the **Thermal / MLX90614** row above is replaced by the camera node. The original cluster's real purpose was observing sleep behavior, not measuring temperature — an MLX90614 cannot substitute for that, and an RGB camera cannot measure temperature. See `plans/260813-0934-esp32cam-vl53l0x-camera-node/` for the full decision record. **This channel does not go through the MQTT bus or the capability manifest (§5)** — video stays on the node's own local SD card, and only during the engineer bench-test period (never once a real user is on the bed, matching the five privacy rules in Phase 05).
+A third change, decided 2026-08-13 and out of scope for this file's original 13/07 sign-off: the **Thermal / MLX90614** row above is replaced by the camera node. The original cluster's real purpose was observing sleep behavior, not measuring temperature — an MLX90614 cannot substitute for that, and an RGB camera cannot measure temperature. That reasoning still stands; what the camera node *is* changed on 2026-08-14. It is now a plain **MJPEG streamer**: the board serves frames over HTTP on the LAN and writes nothing to disk, so a laptop can run pose estimation against a live feed instead of waiting on an SD card. The distance sensor was dropped with it. Full decision record: `plans/260814-1237-esp32cam-stream-mediapipe-poc/`.
+
+**This channel does not go through the MQTT bus or the capability manifest (§5).** Frames exist only in flight — there is no storage tier to secure, because there is no storage. The node exists only for the engineer bench-test period, never with a real user on the bed, matching the five privacy rules in Phase 05.
+
+### 6.1.1 Vision pipeline — two unresolved risks that block Phase 05
+
+Both were researched on 2026-08-14 and **neither is fixed**. They are recorded here, not in a plan directory, because Phase 05 must read this file before committing to a vision architecture.
+
+**Risk 1 — MediaPipe on Jetson aarch64 may not be viable at all.**
+
+There is no official `mediapipe` aarch64 wheel on PyPI; it has to be built from source. The community wheels ([PINTO0309/mediapipe-bin](https://github.com/PINTO0309/mediapipe-bin), [anion0278/mediapipe-jetson](https://github.com/anion0278/mediapipe-jetson)) target Jetson Nano and older JetPack — **not Orin, not JetPack 6**. It builds on JetPack 5.1.3 but CPU-delegate only; on JetPack 6.0.2 the wheel compiles and then fails to install ([issue #5106](https://github.com/google-ai-edge/mediapipe/issues/5106)).
+
+Worse, the GPU may not even be the win it sounds like. After the 0.10.31 memory-leak fix, maintainers report the CPU-versus-GPU gap is "no longer significant" ([issue #6216](https://github.com/google-ai-edge/mediapipe/issues/6216)), and enabling GPU in 0.10.32 causes memory swapping ([issue #6223](https://github.com/google-ai-edge/mediapipe/issues/6223)). Field reports put an Orin at ~20 fps configured correctly and ~5 fps when TFLite silently falls back to CPU ([NVIDIA forum](https://forums.developer.nvidia.com/t/mediapipe-tensorflow-lite-gpu-delegate-on-jetson-orin-nano/296851)) — and the failure is silent, which is the dangerous part.
+
+A further wrinkle found while building the PoC: **MediaPipe 1.0.0 removed `mp.solutions` entirely.** Any Jetson recipe found online that imports `drawing_utils`, `POSE_CONNECTIONS`, or `landmark_pb2` was written for 0.10.x and will not run unchanged.
+
+*Consequence for Phase 05:* verify the MediaPipe toolchain on the actual Orin **before** locking the vision architecture, and treat a runtime swap (TensorRT, YOLOv7-pose) as a live option rather than a fallback.
+
+**Risk 2 — an RGB camera cannot see a dark bedroom.**
+
+The OV2640 has no IR illumination. In a dark room the frames are near-black and pose landmarks are garbage. MediaPipe is measurably worse than YOLOv7-pose in low light ([LearnOpenCV](https://learnopencv.com/yolov7-pose-vs-mediapipe-in-human-pose-estimation/)), and 3D accuracy degrades sharply outside ideal conditions ([De Gruyter](https://www.degruyterbrill.com/document/doi/10.1515/cdbme-2023-1141/html)).
+
+This is a **physical limit of the sensor, not a tuning problem** — no confidence threshold recovers information the sensor never captured. Since this bed is meant to watch people *while they sleep*, in the dark, an RGB-only camera cannot be the final answer. Either the camera gains IR illumination or the vision channel is honestly scoped to daylight only.
 
 ---
 

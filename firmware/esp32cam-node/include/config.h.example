@@ -1,9 +1,0 @@
-// Copy file này thành config.h rồi điền giá trị thật.
-// config.h ĐÃ bị .gitignore (firmware/**/config.h) — không bao giờ commit credentials.
-#pragma once
-
-// CHỈ dùng để NTP sync một lần lúc boot — main.cpp tắt WiFi hẳn ngay sau đó, trước
-// khi vào vòng ghi chính thức. KHÔNG dùng để stream ảnh/video (ranh giới đã chốt,
-// xem plans/260813-0934-esp32cam-vl53l0x-camera-node/plan.md Quyết định #9).
-#define WIFI_SSID "ten-wifi"
-#define WIFI_PASS "mat-khau-wifi"

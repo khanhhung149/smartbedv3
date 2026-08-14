@@ -1,3 +1,7 @@
+---
+blockedBy: [260814-1237-esp32cam-stream-mediapipe-poc]
+---
+
 # SmartBed v3 — Implementation Plan (MVP → nâng cấp dần)
 
 - **Ngày lập:** 2026-07-13

@@ -1,4 +1,0 @@
-dependencies:
-  idf: ">=5.0"
-  # Managed component chính thức của Espressif cho OV2640/OV5640 trên esp32-camera driver.
-  espressif/esp32-camera: "^2.0.0"
