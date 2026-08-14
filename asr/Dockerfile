@@ -13,7 +13,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY transcribe_opts.py app.py score_samples.py ./
+COPY transcribe_opts.py asr_engine.py app.py score_samples.py ./
 
 EXPOSE 9000
 

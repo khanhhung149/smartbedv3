@@ -8,9 +8,8 @@ import wave
 from datetime import datetime
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from faster_whisper import WhisperModel
 
-from transcribe_opts import TRANSCRIBE_OPTS
+from asr_engine import build_engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("asr")
@@ -23,11 +22,11 @@ logger = logging.getLogger("asr")
 # so sánh được model/tham số — chỉ so được cảm giác.
 DUMP_DIR = os.getenv("ASR_DUMP_DIR", "").strip()
 
-# Model tải 1 lần lúc khởi động tiến trình. "small" mặc định (cân bằng tốc độ CPU/độ chính xác
-# tiếng Việt); đổi ASR_MODEL=tiny nếu máy yếu, base/medium nếu cần chính xác hơn (chậm hơn).
-# device="cpu" + compute_type="int8" để chạy được trên máy không có GPU (MVP, xem risk ở plan).
-MODEL_NAME = os.getenv("ASR_MODEL", "small")
-model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
+# Engine tải 1 lần lúc khởi động tiến trình. Mặc định sherpa-onnx Zipformer (ASR_ENGINE=sherpa);
+# đặt ASR_ENGINE=whisper để về faster-whisper, và ASR_MODEL chọn cỡ model cho riêng đường đó.
+# Lý do chọn mặc định và số đo so sánh: xem docstring asr_engine.py.
+engine = build_engine()
+MODEL_NAME = engine.name
 
 app = FastAPI(title="asr-service")
 
@@ -75,10 +74,9 @@ async def transcribe(file: UploadFile = File(...)):
     sample = dump_sample(wav_bytes)
 
     try:
-        # Tham số nằm ở transcribe_opts.py — dùng chung với score_samples.py để bộ chấm điểm
-        # chạy đúng cấu hình service đang chạy. Lý do từng lựa chọn ghi ở đó.
-        segments, _info = model.transcribe(io.BytesIO(wav_bytes), **TRANSCRIBE_OPTS)
-        text = "".join(seg.text for seg in segments).strip()
+        # Engine tự lo tham số riêng của nó (Whisper đọc transcribe_opts.py, sherpa dùng
+        # greedy_search) — xem asr_engine.py.
+        text = engine.transcribe(wav_bytes)
     except Exception as exc:  # noqa: BLE001 - trả lỗi rõ ràng cho caller thay vì 500 mù mờ
         logger.warning("transcribe lỗi: %s", exc)
         raise HTTPException(status_code=500, detail=f"transcribe lỗi: {exc}") from exc
