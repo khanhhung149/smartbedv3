@@ -191,6 +191,9 @@ VoiceState voiceState = VoiceState::LISTENING;
 uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng — vẫn dùng để cắt SILENCE_MS dù mở
                                 // stream bằng wakeword hay VAD (xem comment SILENCE_MS ở loop()).
 uint32_t lastLogMs   = 0;      // throttle log Serial, tránh spam mỗi ~16ms
+#ifdef VOICE_RECORD_MODE
+uint32_t lastRecordLogMs = 0;  // throttle log chế độ thu (5s/lần, đủ để biết còn sống)
+#endif
 float    noiseFloor  = 0.0f;   // EMA nền nhiễu; 0 = chưa học, seed bằng frame đầu tiên đọc được
 
 #ifndef ENABLE_WAKEWORD
@@ -668,7 +671,14 @@ void setup() {
   ac.begin();     // IR Daikin (chân theo CFG_IR_PIN: WROOM=4, S3=8)
   setupI2S();
 
+#ifdef VOICE_RECORD_MODE
+  // Đường thu dữ liệu ghi WAV thẳng xuống đĩa, KHÁC đường ASR — nhãn trong query đi vào tên file
+  // để lúc gán nhãn khỏi phải đoán đoạn nào là gì. Đổi nhãn bằng -DVOICE_RECORD_LABEL=...
+  webSocket.begin(BACKEND_WS_HOST, BACKEND_WS_PORT, "/api/voice/record?label=" VOICE_RECORD_LABEL);
+  Serial.println("[record] CHẾ ĐỘ THU DỮ LIỆU — stream liên tục, wakeword không dùng tới");
+#else
   webSocket.begin(BACKEND_WS_HOST, BACKEND_WS_PORT, BACKEND_WS_PATH);
+#endif
   webSocket.onEvent(onWsEvent);
   webSocket.setReconnectInterval(3000);  // tự thử lại mỗi 3s nếu rớt kết nối
 
@@ -984,6 +994,20 @@ void loop() {
     noiseFloor += NOISE_EMA_ALPHA * (rms - noiseFloor);
   }
 
+#ifdef VOICE_RECORD_MODE
+  // Chế độ THU DỮ LIỆU: gửi mọi frame, không qua wakeword, không cắt theo im lặng. Backend ghi
+  // thẳng xuống WAV (/api/voice/record) để có bộ mẫu thu qua ĐÚNG mic và ĐÚNG vị trí thật —
+  // model snore train trên dataset thu gần bị lệch miền, xem plans/reports/...snore...
+  // Chỉ env esp32s3_record định nghĩa cờ này; đường chạy thật không bao giờ vào nhánh dưới.
+  if (webSocket.isConnected()) {
+    webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
+  }
+  if (now - lastRecordLogMs >= 5000) {
+    lastRecordLogMs = now;
+    Serial.printf("[record] đang thu, RMS=%.0f nen=%.0f ws=%s\n", rms, noiseFloor,
+                  webSocket.isConnected() ? "up" : "down");
+  }
+#else
   if (voiceState == VoiceState::STREAMING) {
     if (webSocket.isConnected()) {
       webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
@@ -998,6 +1022,7 @@ void loop() {
       Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
     }
   }
+#endif  // VOICE_RECORD_MODE
 
   // Log định kỳ (không phải mỗi vòng ~16ms) để debug RMS/streaming qua Serial.
   if (now - lastLogMs >= 500) {

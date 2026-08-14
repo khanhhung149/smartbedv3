@@ -344,3 +344,65 @@ spike max (10-15ms) xảy ra không thường xuyên trong mẫu quan sát, chư
 nào (WiFi/MQTT hoạt động cùng lúc trên core 1) — không phải vấn đề với `WAKEWORD_COOLDOWN_MS=1200`
 hiện tại (spike lớn nhất vẫn < cooldown), nhưng đáng theo dõi nếu tần suất tăng khi bật thêm tính năng
 power-management (Phase 3-4).
+
+## 12. Thu dữ liệu huấn luyện từ mic thật (2026-08-14)
+
+Model snore hiện train trên dataset Khan 2019 — ngáy thu gần, phòng thu sạch. Mic INMP441 đặt
+cách giường 30-40cm nghe khác hẳn: nhiễu nền phòng ngủ, đáp tuyến mic, khoảng cách. Đo trên board
+14/08 thấy đúng biểu hiện lệch miền: model **có** phản ứng (score 0,05-0,29, 5 lần vượt 0,5) nhưng
+không đủ tự tin để bắn EVENT.
+
+Cách thu hẹp: thu mẫu qua ĐÚNG mic, ĐÚNG vị trí, ĐÚNG nhiễu nền, rồi trộn với dataset gốc và
+train lại.
+
+### Đường thu
+
+Board (env `esp32s3_record`) bỏ qua wakeword, stream PCM16 liên tục vào `/api/voice/record`;
+backend (`internal/voice/record.go`) ghi thẳng thành WAV, cắt từng đoạn 60s.
+
+Tách hẳn khỏi đường `/api/voice/stream` đang chạy: đường wakeword→ASR→lệnh AC đã ổn định, không
+đáng để một công cụ thu dữ liệu tạm thời chen vào.
+
+### Quy trình
+
+1. Bật ghi ở backend — `VOICE_RECORD_DIR=/records` (rỗng = endpoint không được đăng ký):
+   ```
+   cd backend && VOICE_RECORD_DIR=/records docker compose up -d --no-deps backend
+   ```
+2. Đổi nhãn buổi thu trong `platformio.ini` env `esp32s3_record`
+   (`VOICE_RECORD_LABEL`: `snore` | `quiet` | `fan` | `talk`), rồi nạp:
+   ```
+   pio run -e esp32s3_record -t upload
+   ```
+3. Đặt mic **cách đầu người nằm 30-40cm**. Tính từ số đo thật: nền phòng ngủ ~30 dBA ↔ RMS 40-60;
+   ngáy nhẹ 40 dBA@1m thành ~49 dBA ở 35cm ↔ RMS ~400, tức gấp 8-10 lần nền. Xa hơn 1m thì ngáy
+   nhẹ chìm vào nền và không model nào cứu được.
+4. Thu. Kiểm tra bằng log Serial `[record] đang thu, RMS=... ws=up` (5s/lần) và
+   `docker exec home-backend ls /records`.
+5. Xong thì trả board về bản chạy thật: `pio run -e esp32s3_kws -t upload`.
+
+### Cần thu những gì
+
+| Nhãn | Nội dung | Lượng |
+|---|---|---|
+| `snore` | Ngáy thật qua đêm, hoặc phát lại ở vị trí đầu giường | ~20-30 phút |
+| `quiet` | Phòng ngủ im, chỉ nhiễu nền | ~20 phút |
+| `fan` | Quạt/điều hoà chạy — nguồn dương giả nguy hiểm nhất | ~10 phút |
+| `talk` | Nói chuyện, TV — model cũ từng bắn 0,996 với tiếng động ngẫu nhiên | ~10 phút |
+
+### Trích đặc trưng phải dùng đúng pipeline của board
+
+Biên dịch `src/microfrontend/lib/` thành `.so` rồi gọi từ Python — KHÔNG viết lại bằng librosa
+hay thư viện khác. Model chỉ đúng khi đặc trưng lúc train trùng khít lúc inference; viết lại thì
+noise_reduction, PCAN gain control và log_scale gần như chắc chắn lệch. Cấu hình phải khớp
+`SnoreFeatures::begin()`: 30 kênh, window 32ms, step 16ms, band 40-6000Hz, rescale `(raw*128)/335`.
+
+### Bẫy đã mắc — lượng tử hoá đầu vào
+
+Model cũ có `input scale=0.0756, zero_point=183` trong khi board `memcpy` thẳng uint8 thô (0-255).
+Cùng dữ liệu đó bị dequantize thành `(raw-183)*0.0756`, dải -13,8..+5,4 — không phải thang nó được
+huấn luyện. Model chạy không báo lỗi nhưng nhận vào rác nên trả 0,000 mãi mãi.
+
+Khi export TFLite phải ép `inference_input_type=uint8` với representative dataset ở thang `x/255`,
+cho ra `scale=1/255, zero_point=0`. Kiểm lại bằng cách in `input_details[0]['quantization']` —
+không khớp thì model vô dụng dù accuracy lúc train có đẹp đến đâu.
