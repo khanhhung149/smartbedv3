@@ -9,6 +9,11 @@ services:
     container_name: home-backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Bật thu dữ liệu huấn luyện từ dòng lệnh mà không phải sửa .env:
+      #   VOICE_RECORD_DIR=/records docker compose up -d --no-deps backend
+      # Rỗng (mặc định) = endpoint /api/voice/record không được đăng ký.
+      VOICE_RECORD_DIR: ${VOICE_RECORD_DIR:-}
     ports:
       - "8080:8080"
     extra_hosts:
