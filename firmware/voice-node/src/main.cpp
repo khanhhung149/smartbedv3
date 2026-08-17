@@ -983,7 +983,16 @@ void loop() {
     lastVoiceMs = now;
   }
 
-#ifdef ENABLE_WAKEWORD
+#if defined(ENABLE_WAKEWORD) && !defined(VOICE_RECORD_MODE)
+  // KHÔNG chạy trong VOICE_RECORD_MODE: chế độ thu gửi mọi frame thẳng lên backend, không dùng
+  // wakeword để làm gì cả. Mà inference đo được 6,3-12,9ms mỗi frame trong khi frame I2S về mỗi
+  // 16ms — chiếm 40-80% ngân sách vòng lặp, cộng snore trên core 0 và WS gửi 32KB/s. Vượt ngân
+  // sách thì I2S DMA tràn và mẫu rơi ÂM THẦM.
+  //
+  // Hậu quả đo được 17/08: mỗi file chứa đúng 60s audio nhưng hai lần lưu cách nhau 64-90s, tức
+  // mất trung bình 15s (~20%) giữa mỗi đoạn, và tỉ lệ tăng dần theo thời gian chạy. Bộ mẫu snore
+  // thu hôm đó có lỗ hổng rải rác mà không có dấu hiệu gì trong log.
+  //
   // Trích đặc trưng + inference MỖI frame I2S (quyết định Validation Session 1 câu 3 trong plan —
   // chưa tối ưu sớm khi chưa có số đo CPU thật). Chạy VÔ ĐIỀU KIỆN kể cả khi đã STREAMING để state
   // nội bộ của frontend (noise/PCAN) và model không bị cold-start mỗi lần quay về LISTENING; điểm
@@ -1003,8 +1012,24 @@ void loop() {
         Serial.printf("[wakeword] score=%.3f infer=%lums state=%s\n", score, (unsigned long)inferMs,
                       voiceState == VoiceState::LISTENING ? "LISTENING" : "STREAMING");
       }
-      if (voiceState == VoiceState::LISTENING && score > WAKEWORD_THRESHOLD &&
-          now >= wakewordCooldownUntilMs) {
+      // Cho phép kích lại NGAY CẢ KHI đang STREAMING: người dùng nói "Vừng ơi" lần nữa giữa câu
+      // (thường vì lệnh trước không ăn) thì phải bỏ câu cũ và bắt đầu câu mới. Không có nhánh này
+      // thì board điếc suốt MIN_STREAM_MS + SILENCE_MS — đúng lúc người dùng đang bực và nói lại.
+      //
+      // Điều kiện chống dư âm khác nhau theo trạng thái:
+      //  - LISTENING: cooldown như cũ (dư âm cuối câu trước).
+      //  - STREAMING: đòi cách lúc bắt đầu stream ít nhất WAKEWORD_COOLDOWN_MS, để chính tiếng
+      //    "Vừng ơi" vừa mở stream này không tự kích lại lần nữa.
+      bool duDieuKienKich =
+          (voiceState == VoiceState::LISTENING && now >= wakewordCooldownUntilMs) ||
+          (voiceState == VoiceState::STREAMING && now - streamStartMs >= WAKEWORD_COOLDOWN_MS);
+      if (duDieuKienKich && score > WAKEWORD_THRESHOLD) {
+        // Đang stream mà kích lại -> báo backend CẮT câu cũ trước khi gửi tiếp. Thiếu bước này
+        // hai câu dính làm một và ParseVietCommand loại vì mơ hồ.
+        if (voiceState == VoiceState::STREAMING && webSocket.isConnected()) {
+          webSocket.sendTXT("eou");
+          Serial.println("[wakeword] kích lại giữa câu -> báo backend cắt câu cũ");
+        }
         voiceState  = VoiceState::STREAMING;
         streamStartMs = now;
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp

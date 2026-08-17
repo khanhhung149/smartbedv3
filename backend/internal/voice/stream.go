@@ -98,6 +98,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Đọc frame trong goroutine với context nền (kết nối) — conn.Read chỉ lỗi khi WS đóng thật,
 	// không bao giờ vì read-deadline (nên WS không bị đóng lúc im lặng).
 	frames := make(chan []byte, 16)
+	// Tín hiệu CẮT CÂU do node gửi chủ động (khung text "eou" — end of utterance).
+	//
+	// Vì sao cần: cắt theo im lặng đòi node NGỪNG gửi đủ SilenceMS. Khi người dùng nói "Vừng ơi"
+	// lần nữa giữa lúc node đang stream câu trước, node muốn bỏ câu cũ và bắt đầu câu mới NGAY —
+	// im 800ms để backend tự cắt sẽ nuốt mất phần đầu câu mới, đúng phần mang nội dung lệnh.
+	cutSignals := make(chan struct{}, 4)
 	readDone := make(chan struct{})
 	go func() {
 		defer close(readDone)
@@ -106,8 +112,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
+			if msgType == websocket.MessageText {
+				// Mọi khung text đều là tín hiệu cắt câu. Không parse nội dung: contract chỉ có
+				// đúng một loại tín hiệu, thêm cú pháp là thêm chỗ để lệch giữa hai đầu.
+				select {
+				case cutSignals <- struct{}{}:
+				default: // hàng đợi đầy nghĩa là đã có tín hiệu chờ xử lý, bỏ qua cái thừa
+				}
+				continue
+			}
 			if msgType != websocket.MessageBinary || len(data) == 0 {
-				continue // node chỉ được kỳ vọng gửi binary PCM
+				continue // ngoài text báo cắt, node chỉ được kỳ vọng gửi binary PCM
 			}
 			select {
 			case frames <- data:
@@ -147,6 +162,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case data := <-frames:
 			if utterance, cut := buf.feed(data, time.Now()); cut {
 				enqueueUtterance(utterances, utterance)
+			}
+		case <-cutSignals:
+			// Node báo hết câu (nó vừa nghe wakeword mới). Flush ngay, không chờ im lặng.
+			if pcm := buf.reset(); len(pcm) > 0 {
+				enqueueUtterance(utterances, pcm)
 			}
 		case <-ticker.C:
 			// Hết câu = im lặng (không frame mới) đủ SilenceMS trong khi đang gom.
