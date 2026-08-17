@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	topicMotion  = "home/door/motion"
+	topicMotion   = "home/door/motion"
 	topicPresence = "home/room/presence"
-	topicACCmd   = "home/room/ac_cmd"
-	topicACLearn = "home/room/ac_learn"
+	topicACCmd    = "home/room/ac_cmd"
+	topicACLearn  = "home/room/ac_learn"
 )
 
 type Handlers struct {
@@ -102,6 +102,21 @@ func (cl *Client) PublishACCmd(cmd string) error {
 	t := cl.c.Publish(topicACCmd, 1, false, payload)
 	if !t.WaitTimeout(publishTimeout) {
 		return fmt.Errorf("publish ac_cmd timeout sau %s", publishTimeout)
+	}
+	return t.Error()
+}
+
+// PublishACTemp gửi lệnh đổi nhiệt độ. Tách khỏi PublishACCmd vì lệnh này mang thêm số bước, mà
+// PublishACCmd đang phục vụ POST /api/ac với payload {"cmd":"on"|"off"} — đổi chữ ký của nó sẽ kéo
+// theo cả đường đó.
+//
+// dir là "temp_up" hoặc "temp_down"; steps là số bậc nhiệt độ. Cùng topic ac_cmd, retain=false —
+// đây là LỆNH, retain lại sẽ khiến voice-node đổi nhiệt độ mỗi lần nó subscribe lại.
+func (cl *Client) PublishACTemp(dir string, steps int) error {
+	payload := fmt.Sprintf(`{"cmd":%q,"steps":%d}`, dir, steps)
+	t := cl.c.Publish(topicACCmd, 1, false, payload)
+	if !t.WaitTimeout(publishTimeout) {
+		return fmt.Errorf("publish ac_cmd (temp) timeout sau %s", publishTimeout)
 	}
 	return t.Error()
 }

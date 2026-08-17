@@ -15,7 +15,8 @@ import (
 
 type noopPublisher struct{}
 
-func (noopPublisher) PublishACCmd(string) error { return nil }
+func (noopPublisher) PublishACCmd(string) error       { return nil }
+func (noopPublisher) PublishACTemp(string, int) error { return nil }
 
 // slowASR giả lập faster-whisper: chậm hơn thời gian thực (đo thật 31/07: 7.1s cho câu 2.3s).
 // Ghi lại kích thước từng body nhận được để biết utterance có bị gộp không.

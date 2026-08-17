@@ -2,7 +2,11 @@
 // parse lệnh tiếng Việt rồi publish qua mqttclient (interface ACPublisher).
 package voice
 
-import "strings"
+import (
+	"regexp"
+	"strconv"
+	"strings"
+)
 
 // vietDiacriticMap bỏ dấu tiếng Việt bằng bảng ánh xạ rune. Chỉ cần đủ cho các từ khóa lệnh
 // AC cố định (không cần thư viện normalize nặng — YAGNI).
@@ -35,35 +39,134 @@ func stripDiacritics(s string) string {
 	return b.String()
 }
 
-// ParseVietCommand nhận text tiếng Việt (có hoặc không dấu) từ ASR, trả về lệnh AC.
-// Khớp: có nhắc tới "điều hòa"/"điều hoà"/"máy lạnh" (đã bỏ dấu: "dieu hoa"/"may lanh")
-// kèm "bật" ("bat") -> ("on", true); kèm "tắt" ("tat") -> ("off", true).
-// Không khớp -> ("", false), caller log rồi bỏ qua (không publish gì).
+// Command — lệnh AC suy ra từ câu nói. Steps chỉ có nghĩa với KindTempUp/KindTempDown.
 //
-// Câu chứa CẢ "bật" lẫn "tắt" bị LOẠI, không được chọn một trong hai. Trước đây switch kiểm
-// "bat" trước nên câu như vậy luôn thành "on" — kết quả do thứ tự case quyết định, không do ngữ
-// nghĩa. Điều đó gây lỗi thật: người dùng nói "tắt điều hòa" (đã publish off), 3 giây sau whisper
-// gặp nhiễu và nhại lại nguyên văn danh sách lệnh trong initial_prompt của service ASR
-// ("... bật máy lạnh, tắt máy lạnh"), câu đó khớp nhánh "bat" -> publish on -> điều hoà bật lại
-// ngay, ngược ý người dùng. Loại câu mơ hồ chặn cả lớp lỗi này bất kể ASR trả về gì.
-func ParseVietCommand(text string) (string, bool) {
+// Dùng struct thay vì trả string trần như bản đầu: lệnh nhiệt độ mang theo số bước, nhét nó vào
+// chuỗi ("temp_up:2") thì phải parse lại ở đầu kia và mất luôn kiểm tra của trình biên dịch.
+type Command struct {
+	Kind  string
+	Steps int
+}
+
+const (
+	KindOn       = "on"
+	KindOff      = "off"
+	KindTempUp   = "temp_up"
+	KindTempDown = "temp_down"
+)
+
+// Giới hạn số bước một lệnh được đổi. Người ta không nói "tăng 40 độ"; con số lớn gần như chắc
+// chắn là ASR nghe nhầm, và kẹp lại rẻ hơn là để nó bắn một lệnh vô lý.
+const stepsToiDa = 10
+
+// soTiengViet — số đọc thành CHỮ. Bắt buộc phải có: đo 17/08 thấy sherpa trả về "TĂNG MỘT NHIỆT
+// ĐỘ" cho câu "tăng 1 nhiệt độ", tức là chữ "MỘT" chứ không phải ký tự "1". Chỉ bắt chữ số thì mọi
+// lệnh nhiều bước âm thầm rơi về 1 mà không ai phát hiện.
+var soTiengViet = map[string]int{
+	"mot": 1, "hai": 2, "ba": 3, "bon": 4, "nam": 5,
+	"sau": 6, "bay": 7, "tam": 8, "chin": 9, "muoi": 10,
+}
+
+// reSoTruocDo — số (chữ số hoặc chữ) đứng ngay trước "do". Dùng để nhận "tăng 2 độ" mà KHÔNG nhận
+// "tăng tốc độ": trong "toc do" thì đứng trước "do" là "toc", không phải số.
+var reSoTruocDo = regexp.MustCompile(`(\d+|[a-z]+)\s+do\b`)
+
+// ParseVietCommand nhận text tiếng Việt (có hoặc không dấu) từ ASR, trả về lệnh AC.
+//
+// Bật/tắt: bắt buộc nhắc "điều hòa"/"điều hoà"/"máy lạnh" (bỏ dấu: "dieu hoa"/"may lanh") kèm
+// "bật"/"tắt".
+//
+// Nhiệt độ: "tăng"/"giảm" kèm cụm "nhiệt độ", HOẶC kèm một SỐ đứng ngay trước "độ" ("tăng 2 độ").
+// KHÔNG bắt buộc nhắc điều hoà — đo 17/08 cho thấy không câu nào người dùng nói có từ đó, giữ ràng
+// buộc cũ thì mọi lệnh nhiệt độ đều trượt.
+//
+// Điều kiện "độ" phải chặt như trên vì bỏ ràng buộc nhắc điều hoà làm rộng bề mặt kích nhầm:
+// "tăng tốc độ" và "nâng cao trình độ" đều chứa động từ tăng/nâng lẫn chuỗi "do" sau khi bỏ dấu.
+// Cả hai không có "nhiet do", và trước "do" là chữ thường chứ không phải số, nên bị loại.
+//
+// Không khớp -> ok=false, caller log rồi bỏ qua (không publish gì).
+//
+// Câu mơ hồ bị LOẠI, không được chọn một trong hai — áp dụng cho cả cặp bật/tắt, cặp tăng/giảm,
+// lẫn trường hợp trộn hai nhóm. Trước đây switch kiểm "bat" trước nên câu chứa cả hai luôn thành
+// "on": kết quả do thứ tự case quyết định, không do ngữ nghĩa. Điều đó gây lỗi thật — người dùng
+// nói "tắt điều hòa" (đã publish off), 3 giây sau whisper gặp nhiễu và nhại lại nguyên văn danh
+// sách lệnh trong initial_prompt của service ASR ("... bật máy lạnh, tắt máy lạnh"), câu đó khớp
+// nhánh "bat" -> publish on -> điều hoà bật lại ngay, ngược ý người dùng. Loại câu mơ hồ chặn cả
+// lớp lỗi này bất kể ASR trả về gì.
+func ParseVietCommand(text string) (Command, bool) {
 	normalized := stripDiacritics(strings.ToLower(strings.TrimSpace(text)))
 
 	hasAC := strings.Contains(normalized, "dieu hoa") || strings.Contains(normalized, "may lanh")
-	if !hasAC {
-		return "", false
+	wantOn := hasAC && strings.Contains(normalized, "bat")
+	wantOff := hasAC && strings.Contains(normalized, "tat")
+
+	hasTemp := strings.Contains(normalized, "nhiet do") || coSoTruocDo(normalized)
+	wantUp := hasTemp && strings.Contains(normalized, "tang")
+	wantDown := hasTemp && strings.Contains(normalized, "giam")
+
+	nhomNguon := 0
+	if wantOn || wantOff {
+		nhomNguon++
+	}
+	if wantUp || wantDown {
+		nhomNguon++
+	}
+	// Trộn hai nhóm ("bật điều hòa tăng nhiệt độ") cũng là mơ hồ: không biết bắn lệnh nào trước,
+	// và câu nhại prompt hay rơi vào dạng này.
+	if nhomNguon > 1 || (wantOn && wantOff) || (wantUp && wantDown) {
+		return Command{}, false
 	}
 
-	wantOn := strings.Contains(normalized, "bat")
-	wantOff := strings.Contains(normalized, "tat")
 	switch {
-	case wantOn && wantOff:
-		return "", false // mơ hồ: không suy ra được ý định, thà không làm gì
 	case wantOn:
-		return "on", true
+		return Command{Kind: KindOn}, true
 	case wantOff:
-		return "off", true
+		return Command{Kind: KindOff}, true
+	case wantUp:
+		return Command{Kind: KindTempUp, Steps: docSoBuoc(normalized)}, true
+	case wantDown:
+		return Command{Kind: KindTempDown, Steps: docSoBuoc(normalized)}, true
 	default:
-		return "", false
+		return Command{}, false
 	}
+}
+
+// coSoTruocDo — có một số (chữ số hoặc chữ tiếng Việt) đứng ngay trước "do" hay không.
+func coSoTruocDo(normalized string) bool {
+	m := reSoTruocDo.FindStringSubmatch(normalized)
+	if m == nil {
+		return false
+	}
+	return laSo(m[1])
+}
+
+func laSo(s string) bool {
+	if _, ok := soTiengViet[s]; ok {
+		return true
+	}
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
+// docSoBuoc trả số bước, mặc định 1 khi câu không nói số. Kẹp về stepsToiDa thay vì loại câu:
+// người dùng nói "tăng 100 độ" rõ ràng muốn tăng, chỉ là con số vô lý.
+func docSoBuoc(normalized string) int {
+	m := reSoTruocDo.FindStringSubmatch(normalized)
+	if m == nil {
+		return 1
+	}
+	n, ok := soTiengViet[m[1]]
+	if !ok {
+		var err error
+		if n, err = strconv.Atoi(m[1]); err != nil {
+			return 1
+		}
+	}
+	if n < 1 {
+		return 1
+	}
+	if n > stepsToiDa {
+		return stepsToiDa
+	}
+	return n
 }

@@ -37,8 +37,12 @@ const (
 
 // ACPublisher — interface tối giản publish lệnh AC (mqttclient.Client thỏa mãn qua PublishACCmd;
 // api.Publisher cũng thỏa mãn vì method set là superset).
+//
+// Lệnh nhiệt độ có method riêng thay vì nhét số bước vào chuỗi cmd: PublishACCmd đang phục vụ
+// POST /api/ac với payload {"cmd":"on"|"off"}, đổi chữ ký của nó sẽ kéo theo cả đường đó.
 type ACPublisher interface {
 	PublishACCmd(cmd string) error
+	PublishACTemp(dir string, steps int) error
 }
 
 // Config — tham số đường voice (nạp từ config.LoadVoice() ở router.go).
@@ -222,11 +226,17 @@ func (h *Handler) handleUtterance(ctx context.Context, pcm []byte) {
 		slog.Info("voice: không khớp lệnh AC, bỏ qua", "text", text)
 		return
 	}
-	if err := h.pub.PublishACCmd(cmd); err != nil {
-		slog.Warn("voice: publish ac_cmd lỗi", "err", err, "cmd", cmd)
+	switch cmd.Kind {
+	case KindTempUp, KindTempDown:
+		err = h.pub.PublishACTemp(cmd.Kind, cmd.Steps)
+	default:
+		err = h.pub.PublishACCmd(cmd.Kind)
+	}
+	if err != nil {
+		slog.Warn("voice: publish ac_cmd lỗi", "err", err, "cmd", cmd.Kind, "steps", cmd.Steps)
 		return
 	}
-	slog.Info("voice: published ac_cmd", "cmd", cmd)
+	slog.Info("voice: published ac_cmd", "cmd", cmd.Kind, "steps", cmd.Steps)
 }
 
 // utteranceBuffer gom chunk PCM theo utterance dựa trên VAD năng lượng: bắt đầu khi có tiếng,

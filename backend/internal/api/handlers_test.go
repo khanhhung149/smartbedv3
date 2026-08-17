@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,13 +17,18 @@ func (f fakeSP) Snapshot() statemachine.Snapshot { return f.snap }
 
 type fakePub struct {
 	acCmds    []string
+	acTemps   []string
 	learns    []string
 	connected bool
 }
 
-func (f *fakePub) PublishACCmd(cmd string) error    { f.acCmds = append(f.acCmds, cmd); return nil }
-func (f *fakePub) PublishACLearn(b string) error     { f.learns = append(f.learns, b); return nil }
-func (f *fakePub) Connected() bool                   { return f.connected }
+func (f *fakePub) PublishACTemp(dir string, steps int) error {
+	f.acTemps = append(f.acTemps, fmt.Sprintf("%s:%d", dir, steps))
+	return nil
+}
+func (f *fakePub) PublishACCmd(cmd string) error { f.acCmds = append(f.acCmds, cmd); return nil }
+func (f *fakePub) PublishACLearn(b string) error { f.learns = append(f.learns, b); return nil }
+func (f *fakePub) Connected() bool               { return f.connected }
 
 func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()

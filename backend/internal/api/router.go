@@ -21,6 +21,7 @@ type StateProvider interface {
 // Publisher — MQTT client publish lệnh (mqttclient.Client thỏa mãn).
 type Publisher interface {
 	PublishACCmd(cmd string) error
+	PublishACTemp(dir string, steps int) error
 	PublishACLearn(button string) error
 	Connected() bool
 }
