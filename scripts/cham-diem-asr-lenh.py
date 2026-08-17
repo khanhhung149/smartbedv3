@@ -34,7 +34,7 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from asr_client import ASR_URL, goi_asr, wav_bytes  # noqa: E402
+from asr_client import ASR_URL_KHONG_DUMP, goi_asr, wav_bytes  # noqa: E402
 from wav_io import doc_wav, liet_ke_wav  # noqa: E402
 
 PARSE_CMD = "/repo/backend/bin/parse-cmd"
@@ -65,7 +65,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("muc_tieu", nargs="+", help="thư mục chứa WAV đã đặt tiền tố nhãn")
-    ap.add_argument("--url", default=ASR_URL)
+    ap.add_argument("--url", default=ASR_URL_KHONG_DUMP)
     ap.add_argument("--parse-cmd", default=PARSE_CMD)
     args = ap.parse_args()
 

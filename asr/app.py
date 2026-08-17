@@ -62,7 +62,7 @@ def dump_sample(wav_bytes: bytes) -> str:
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(file: UploadFile = File(...), dump: bool = True):
     """Nhận WAV (multipart form field "file", 16-bit PCM mono — backend Go build sẵn header),
     trả {"text": "..."} tiếng Việt. Lỗi decode/audio rỗng -> HTTPException rõ ràng, không để
     exception lạ làm crash worker (backend coi lỗi HTTP là "bỏ qua utterance", không crash theo).
@@ -71,7 +71,10 @@ async def transcribe(file: UploadFile = File(...)):
     if not wav_bytes:
         raise HTTPException(status_code=400, detail="file rỗng, cần WAV bytes")
 
-    sample = dump_sample(wav_bytes)
+    # dump=false cho các công cụ ĐO (scripts/cham-diem-asr-lenh.py): chúng POST lại chính những
+    # file đã có trong thư mục mẫu, mà service thì lưu mọi request -> mỗi lần chấm điểm là bộ mẫu
+    # nhân đôi. Đã dính 17/08: 11 file rác phải dọn tay sau đúng hai lượt đo.
+    sample = dump_sample(wav_bytes) if dump else ""
 
     try:
         # Engine tự lo tham số riêng của nó (Whisper đọc transcribe_opts.py, sherpa dùng

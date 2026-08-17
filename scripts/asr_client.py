@@ -17,6 +17,10 @@ import numpy as np
 # (docker run --network backend_default ...).
 ASR_URL = "http://asr:9000/transcribe"
 
+# URL cho công cụ ĐO: tắt dump để việc chấm điểm không tự sinh thêm mẫu. Service lưu mọi request
+# khi ASR_DUMP_DIR bật, nên POST lại chính bộ mẫu sẽ làm nó nhân đôi sau mỗi lượt chấm.
+ASR_URL_KHONG_DUMP = ASR_URL + "?dump=false"
+
 SAMPLE_RATE = 16000
 
 
