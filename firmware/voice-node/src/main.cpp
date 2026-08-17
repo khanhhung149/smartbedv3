@@ -76,7 +76,15 @@ static const float   AC_DEFAULT_TEMP = 25.0f;
 static const uint8_t AC_DEFAULT_MODE = kDaikinCool;
 static const uint8_t AC_DEFAULT_FAN  = kDaikinFanAuto;
 
+// Dải nhiệt độ Daikin chấp nhận. Kẹp ở firmware chứ không phó mặc cho thư viện: thư viện kẹp im
+// lặng, còn ở đây kẹp xong còn log được để biết lệnh đã chạm trần.
+static const float AC_TEMP_MIN = 16.0f;
+static const float AC_TEMP_MAX = 30.0f;
+
 static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
+// PUBLISH — báo ngược trạng thái sau mỗi lần bắn IR. Backend không tự suy ra được nhiệt độ đang
+// đặt vì lệnh chỉ nói "tăng/giảm", không nói đích.
+static const char *TOPIC_AC_STATE = "home/room/ac_state";
 // SUBSCRIBE (không publish) — nguồn presence duy nhất là radar-node.
 static const char *TOPIC_PRESENCE = "home/room/presence";
 // TOPIC_SNORE_EVENT khai báo cùng khối #ifdef ENABLE_WAKEWORD với phần state snore khác (bên dưới) —
@@ -241,7 +249,15 @@ uint32_t presenceSinceMs = 0;    // lúc present chuyển true (đếm ENTER_STA
 // đánh đổi. Đồng thời đưa ac.send() (chặn ~150ms) ra khỏi callback MQTT: callback chạy đồng bộ
 // trong mqtt.loop(), nên vài tin xếp hàng sau reconnect sẽ bắn liền nhau không khe hở.
 bool     irPendingOn    = false;  // trạng thái mong muốn đang chờ gửi
+float    irPendingTemp  = AC_DEFAULT_TEMP;  // nhiệt độ đi kèm ô chờ
 bool     irHasPending   = false;  // có gì đang chờ hay không
+
+// Nhiệt độ hệ đang đặt. Daikin gửi TRỌN 35 byte mỗi lần nên phải giữ giá trị này ở đây; không có
+// cách nào hỏi ngược điều hoà xem nó đang ở bao nhiêu.
+float    acTemp         = AC_DEFAULT_TEMP;
+// Nguồn đang bật hay tắt theo ý hệ — cần để dựng lại khung đầy đủ khi chỉ đổi nhiệt độ.
+bool     acPowerOn      = false;
+bool     acStateDirty   = true;   // cần publish ac_state (true lúc boot để báo trạng thái đầu)
 uint32_t lastIrSendMs   = 0;      // lần bắn IR cuối, để ép IR_MIN_GAP_MS
 uint32_t lastManualMs   = 0;      // lần lệnh tay cuối (0 = chưa có), để fusion tôn trọng ý user
 
@@ -435,23 +451,68 @@ void onPresence(const String &payload) {
 // Bắn lệnh điều hoà Daikin.
 // Daikin gửi TRỌN 35 byte trạng thái mỗi lần (kDaikinStateLength=35) — không có "lệnh bật"
 // riêng. Nên bật thì phải set đủ nhiệt/chế độ/quạt, không chỉ power.
-void sendAC(bool on) {
+void sendAC(bool on, float temp) {
   ac.setPower(on);
-  if (on) {
-    ac.setMode(AC_DEFAULT_MODE);
-    ac.setTemp(AC_DEFAULT_TEMP);
-    ac.setFan(AC_DEFAULT_FAN);
-  }
+  // Set nhiệt/chế độ/quạt KỂ CẢ khi tắt: lệnh nhiệt độ lúc máy đang tắt phải mang được giá trị mới
+  // sang khung gửi đi, nếu chỉ set khi bật thì "tăng nhiệt độ" lúc tắt máy sẽ mất trắng.
+  ac.setMode(AC_DEFAULT_MODE);
+  ac.setTemp(temp);
+  ac.setFan(AC_DEFAULT_FAN);
   ac.send();
-  Serial.printf("[ir] Daikin %s (%.0fC)\n", on ? "ON" : "OFF", AC_DEFAULT_TEMP);
+  acPowerOn = on;
+  acTemp    = temp;
+  acStateDirty = true;
+  Serial.printf("[ir] Daikin %s (%.0fC)\n", on ? "ON" : "OFF", temp);
 }
 
 // requestAC — điểm vào DUY NHẤT để đổi trạng thái điều hoà. Không bắn IR ngay: chỉ ghi vào ô chờ,
 // loop() gửi có nhịp. manual=true cho lệnh người dùng (giọng nói / app), false cho fusion tự động.
 void requestAC(bool on, bool manual) {
   if (manual) lastManualMs = millis();
-  irPendingOn  = on;
-  irHasPending = true;
+  irPendingOn   = on;
+  irPendingTemp = acTemp;   // giữ nguyên nhiệt độ đang đặt, chỉ đổi nguồn
+  irHasPending  = true;
+}
+
+// docSteps — lấy "steps" trong payload {"cmd":"temp_up","steps":2}. Thiếu field thì trả 1: backend
+// luôn gửi kèm, nhưng lệnh gõ tay bằng mosquitto_pub thường bỏ qua, và 1 bậc là mặc định vô hại.
+// Kẹp trần để một payload hỏng không kéo nhiệt độ chạy hết dải trong một lệnh.
+int docSteps(const String &payload) {
+  int i = payload.indexOf("\"steps\"");
+  if (i < 0) return 1;
+  int colon = payload.indexOf(':', i);
+  if (colon < 0) return 1;
+  int n = payload.substring(colon + 1).toInt();
+  if (n < 1) return 1;
+  if (n > 14) return 14;   // đúng bằng độ rộng dải 16-30, hơn nữa là vô nghĩa
+  return n;
+}
+
+// requestACTemp — đổi nhiệt độ đi bao nhiêu BẬC, giữ nguyên trạng thái nguồn.
+//
+// Phải đi qua ô chờ như lệnh bật/tắt chứ không bắn thẳng: flushIR đang ép khe hở IR_MIN_GAP_MS
+// giữa hai lần bắn, bỏ qua nó thì hai lệnh nói liền nhau bắn dính và Daikin bỏ khung.
+//
+// Ô chờ mang theo CẢ nhiệt độ (irPendingTemp) chứ không chỉ irPendingOn. Thiếu điều đó thì một
+// lệnh bật/tắt tới ngay sau sẽ ghi đè ô chờ và lệnh nhiệt độ biến mất — không lỗi, không log, chỉ
+// là thỉnh thoảng không ăn.
+void requestACTemp(int steps, bool manual) {
+  if (manual) lastManualMs = millis();
+
+  // Cộng dồn lên ô chờ nếu có lệnh nhiệt độ chưa kịp bắn, để "tăng 1 độ" nói hai lần liên tiếp ra
+  // đúng 2 bậc thay vì 1.
+  float base = irHasPending ? irPendingTemp : acTemp;
+  float want = base + (float)steps;
+  if (want < AC_TEMP_MIN) want = AC_TEMP_MIN;
+  if (want > AC_TEMP_MAX) want = AC_TEMP_MAX;
+
+  if (want == base) {
+    Serial.printf("[ir] nhiệt độ đã chạm biên %.0fC, bỏ qua\n", base);
+    return;
+  }
+  irPendingOn   = irHasPending ? irPendingOn : acPowerOn;  // không đụng nguồn
+  irPendingTemp = want;
+  irHasPending  = true;
 }
 
 // flushIR — bắn ô chờ khi đã đủ khe hở. Gọi từ loop().
@@ -460,13 +521,20 @@ void flushIR(uint32_t now) {
   if (lastIrSendMs != 0 && now - lastIrSendMs < IR_MIN_GAP_MS) return;  // chưa đủ khe, chờ vòng sau
   irHasPending = false;
   lastIrSendMs = now;
-  sendAC(irPendingOn);
+  sendAC(irPendingOn, irPendingTemp);
 }
 
 // Lệnh tay từ app (/api/ac) và voice (whisper -> ParseVietCommand) đều tới qua topic này.
 void onMqtt(String &topic, String &payload) {
   if (topic == TOPIC_AC_CMD) {
-    if (payload.indexOf("\"on\"") >= 0) {
+    // Dò chuỗi thay vì parse JSON, giống presence — payload cố định và nhỏ, khỏi kéo thêm lib.
+    // Kiểm temp_up/temp_down TRƯỚC "on": chuỗi "temp_up" không chứa "\"on\"" nên thực ra không
+    // đụng nhau, nhưng thứ tự này khiến ý định rõ ràng khi đọc lại.
+    if (payload.indexOf("temp_up") >= 0) {
+      requestACTemp(+docSteps(payload), true);
+    } else if (payload.indexOf("temp_down") >= 0) {
+      requestACTemp(-docSteps(payload), true);
+    } else if (payload.indexOf("\"on\"") >= 0) {
       requestAC(true, true);    // lệnh tay: vào ô chờ, và khoá fusion khỏi ghi đè
     } else if (payload.indexOf("\"off\"") >= 0) {
       requestAC(false, true);
@@ -792,6 +860,19 @@ void loop() {
 
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop();  // keepalive MQTT (i2s_read timeout 200ms đảm bảo gọi đủ thường)
+
+  // Báo ngược trạng thái điều hoà. Publish ở loop() chứ không trong sendAC(): sendAC có thể được
+  // gọi từ nhánh fusion lẫn nhánh MQTT callback, còn ở đây thì chắc chắn cùng task với mqtt.loop().
+  // retain=true để backend khởi động lại là biết ngay nhiệt độ đang đặt, khỏi chờ lệnh kế tiếp.
+  if (acStateDirty && mqtt.connected()) {
+    char payload[64];
+    snprintf(payload, sizeof(payload), "{\"power\":%s,\"temp\":%d}",
+             acPowerOn ? "true" : "false", (int)acTemp);
+    if (mqtt.publish(TOPIC_AC_STATE, payload, true, 1)) {
+      acStateDirty = false;
+      Serial.printf("[ir] ac_state -> %s\n", payload);
+    }
+  }
 
 #ifdef ENABLE_WAKEWORD
   // snoreTask (core 0) chỉ đặt cờ — publish LUÔN chạy ở đây (core 1, cùng task với mqtt.loop() ở trên)

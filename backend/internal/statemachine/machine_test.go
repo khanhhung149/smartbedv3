@@ -62,7 +62,7 @@ func TestFlickerNoOff(t *testing.T) {
 	base := time.Unix(1000, 0)
 	m := New(cfg())
 	m.OnMotion(1, base)
-	m.OnPresence(true, 2, base.Add(1*time.Second)) // on
+	m.OnPresence(true, 2, base.Add(1*time.Second))  // on
 	m.OnPresence(false, 3, base.Add(5*time.Second)) // blip false
 	m.OnPresence(true, 4, base.Add(10*time.Second)) // true lại trước timeout
 	if cmd := m.Tick(base.Add(120 * time.Second)); cmd != nil {
@@ -74,7 +74,7 @@ func TestReentryTurnsOnAgain(t *testing.T) {
 	base := time.Unix(1000, 0)
 	m := New(cfg())
 	m.OnMotion(1, base)
-	m.OnPresence(true, 2, base.Add(1*time.Second))  // on
+	m.OnPresence(true, 2, base.Add(1*time.Second))   // on
 	m.OnPresence(false, 3, base.Add(10*time.Second)) // rời
 	if cmd := m.Tick(base.Add(75 * time.Second)); cmd == nil || *cmd != "off" {
 		t.Fatalf("expected off, got %v", cmd)
@@ -125,5 +125,49 @@ func TestOccupancyChangeOverridesManual(t *testing.T) {
 	}
 	if m.Snapshot().ACDesired {
 		t.Fatal("ac_desired phải là false sau khi ra khỏi phòng")
+	}
+}
+
+// TestSetACStateGiuNguyenACDesired khoá lại ranh giới giữa hai khái niệm dễ lẫn:
+// ACDesired là thứ HỆ muốn (do lệnh bật/tắt quyết định), còn ACReported* là thứ voice-node BÁO VỀ.
+// Trộn hai cái là công tắc trong app nhảy lung tung mỗi khi board báo trạng thái.
+func TestSetACStateGiuNguyenACDesired(t *testing.T) {
+	m := New(Config{})
+	m.SetManual(true)
+
+	m.SetACState(false, 26)
+
+	s := m.Snapshot()
+	if !s.ACDesired {
+		t.Fatal("SetACState không được đụng vào ACDesired")
+	}
+	if !s.ACStateKnown || s.ACReportedOn {
+		t.Fatalf("known=%v on=%v, muốn known=true on=false", s.ACStateKnown, s.ACReportedOn)
+	}
+	if s.ACReportedTemp != 26 {
+		t.Fatalf("ACReportedTemp = %d, muốn 26", s.ACReportedTemp)
+	}
+}
+
+// Chưa nhận ac_state nào thì phải báo là chưa biết — 0 độ và "chưa biết" không được lẫn.
+func TestACStateChuaBietThiCoCo(t *testing.T) {
+	s := New(Config{}).Snapshot()
+	if s.ACStateKnown {
+		t.Fatal("chưa có ac_state mà ACStateKnown đã true")
+	}
+}
+
+// Snapshot phải so sánh được bằng ==: main.go dùng `snap != lastSnap` để quyết định có đẩy lên
+// WebSocket hay không. Thêm field kiểu con trỏ vào đây là so địa chỉ, luôn ra "đã đổi", và ticker
+// mỗi giây sẽ bơm WS liên tục.
+func TestSnapshotSoSanhDuocBangGiaTri(t *testing.T) {
+	m := New(Config{})
+	m.SetACState(true, 25)
+	if m.Snapshot() != m.Snapshot() {
+		t.Fatal("hai Snapshot cùng trạng thái phải bằng nhau — có field không so sánh theo giá trị")
+	}
+	m.SetACState(true, 26)
+	if m.Snapshot() == (Snapshot{ACStateKnown: true, ACReportedOn: true, ACReportedTemp: 25}) {
+		t.Fatal("đổi nhiệt độ mà Snapshot không đổi")
 	}
 }

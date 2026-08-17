@@ -23,6 +23,25 @@ type Snapshot struct {
 	LastMotionTS   int64  `json:"last_motion_ts"`
 	LastPresenceTS int64  `json:"last_presence_ts"`
 	LastACCmd      string `json:"last_ac_cmd"`
+
+	// ACReported* — trạng thái voice-node TỰ BÁO qua home/room/ac_state sau mỗi lần bắn IR.
+	//
+	// Khác ACDesired: ACDesired là thứ hệ MUỐN (suy từ lệnh bật/tắt), còn đây là thứ board nói nó
+	// vừa gửi đi. Hai cái lệch nhau được, và trộn chúng làm công tắc trong app nhảy lung tung.
+	//
+	// ACStateKnown=false nghĩa là CHƯA nhận ac_state nào; khi đó hai trường dưới vô nghĩa, đừng
+	// hiển thị. Cần cờ này vì "0" ở ACReportedTemp đọc ra là 0 độ C — không phân biệt được với
+	// "chưa biết".
+	//
+	// Dùng cờ + giá trị chứ KHÔNG dùng con trỏ, dù con trỏ hợp cách viết Go hơn: main.go phát hiện
+	// thay đổi bằng `snap != lastSnap`, mà so sánh con trỏ là so ĐỊA CHỈ. Snapshot() cấp phát mới
+	// mỗi lần gọi nên mọi so sánh đều ra "đã đổi", và ticker mỗi giây sẽ bơm WebSocket liên tục.
+	//
+	// Lưu ý khi đọc: đây là Ý ĐỊNH của voice-node, không phải nhiệt độ đo được của phòng hay của
+	// máy. Ai đó cầm remote chỉnh tay thì con số này lệch cho tới lệnh kế tiếp.
+	ACStateKnown   bool `json:"ac_state_known"`
+	ACReportedOn   bool `json:"ac_reported_on"`
+	ACReportedTemp int  `json:"ac_reported_temp"`
 }
 
 type Machine struct {
@@ -44,6 +63,11 @@ type Machine struct {
 	lastMotionTS   int64
 	lastPresenceTS int64
 	lastACCmd      string
+
+	// acStateKnown=false cho tới khi voice-node báo ac_state lần đầu.
+	acStateKnown   bool
+	acReportedOn   bool
+	acReportedTemp int
 }
 
 func New(cfg Config) *Machine {
@@ -130,6 +154,17 @@ func (m *Machine) SetManual(on bool) {
 	}
 }
 
+// SetACState ghi nhận trạng thái voice-node báo về. CỐ Ý không đụng tới acDesired: đây là báo cáo
+// từ board, không phải lệnh của người dùng. Để nó ghi đè acDesired thì mỗi lần board báo lại là
+// công tắc trong app nhảy một cái.
+func (m *Machine) SetACState(power bool, temp int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.acStateKnown = true
+	m.acReportedOn = power
+	m.acReportedTemp = temp
+}
+
 func (m *Machine) Snapshot() Snapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -140,5 +175,8 @@ func (m *Machine) Snapshot() Snapshot {
 		LastMotionTS:   m.lastMotionTS,
 		LastPresenceTS: m.lastPresenceTS,
 		LastACCmd:      m.lastACCmd,
+		ACStateKnown:   m.acStateKnown,
+		ACReportedOn:   m.acReportedOn,
+		ACReportedTemp: m.acReportedTemp,
 	}
 }

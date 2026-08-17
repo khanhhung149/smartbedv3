@@ -107,7 +107,20 @@ func main() {
 				// theo suy luận occupied. Thiếu bước này thì công tắc trong app luôn
 				// nảy về chỗ cũ sau khi bấm (ac_desired không bao giờ đổi), người dùng
 				// tưởng bấm hụt nên bấm lại nhiều lần.
-				machine.SetManual(cmd == "on")
+				// CHỈ lệnh bật/tắt mới đổi trạng thái mong muốn. Lệnh nhiệt độ (temp_up/temp_down)
+				// đi qua ĐÚNG topic này, nên viết `cmd == "on"` trần sẽ cho ra false và tắt
+				// acDesired mỗi lần người dùng chỉnh nhiệt độ — công tắc trong app tự nảy về OFF
+				// dù không ai bảo tắt.
+				if cmd == "on" || cmd == "off" {
+					machine.SetManual(cmd == "on")
+				}
+				broadcastIfChanged()
+			},
+			// Trạng thái thật do voice-node báo. Không ghi vào lịch sử event: đây là báo cáo lặp
+			// lại sau mỗi lệnh, không phải sự kiện mới.
+			OnACState: func(power bool, temp int) {
+				slog.Info("ac_state", "power", power, "temp", temp)
+				machine.SetACState(power, temp)
 				broadcastIfChanged()
 			},
 		})
@@ -146,7 +159,7 @@ func main() {
 			cancel()
 			return
 		case <-ticker.C:
-			machine.Tick(time.Now())  // chỉ cập nhật Snapshot cho app; không ra lệnh AC
+			machine.Tick(time.Now()) // chỉ cập nhật Snapshot cho app; không ra lệnh AC
 			broadcastIfChanged()
 		}
 	}

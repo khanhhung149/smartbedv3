@@ -35,6 +35,7 @@ mosquitto_sub -h <host> -t 'home/#' -u <user> -P <pass> -v
 mosquitto_pub -h <host> -t home/door/motion    -u <user> -P <pass> -m '{"ts":1700000000000,"motion":true}'
 mosquitto_pub -h <host> -t home/room/presence  -u <user> -P <pass> -m '{"ts":1700000000000,"present":true}' -r
 mosquitto_pub -h <host> -t home/room/ac_cmd    -u <user> -P <pass> -m '{"cmd":"on"}'
+mosquitto_pub -h <host> -t home/room/ac_cmd    -u <user> -P <pass> -m '{"cmd":"temp_up","steps":2}'
 mosquitto_pub -h <host> -t home/room/ac_learn  -u <user> -P <pass> -m '{"button":"on"}'
 
 # Xác nhận auth bắt buộc: KHÔNG có -u/-P -> phải bị từ chối
@@ -49,11 +50,19 @@ Tất cả topic dùng **QoS 1** (đảm bảo delivery khi WiFi chập chờn).
 |-------|-----------|------------|---------|--------|
 | `home/door/motion` | Door node | Backend | `{"ts": <unix_ms>, "motion": true}` | false |
 | `home/room/presence` | Room node | Backend | `{"ts": <unix_ms>, "present": true\|false}` | **true** |
-| `home/room/ac_cmd` | Backend (test: `mosquitto_pub` tay) | Room node | `{"cmd": "on"\|"off"}` | false |
+| `home/room/ac_cmd` | Backend (test: `mosquitto_pub` tay) | Voice node | `{"cmd": "on"\|"off"}` hoặc `{"cmd": "temp_up"\|"temp_down", "steps": <int>}` | false |
+| `home/room/ac_state` | Voice node | Backend | `{"power": true\|false, "temp": <int 16-30>}` | **true** |
 | `home/room/ac_learn` | Backend (test: `mosquitto_pub` tay) | Room node | `{"button": "on"\|"off"}` | false |
 | `home/room/snore_event` | Voice node | Backend | `{"ts": <unix_ms>, "confidence": <0-1>, "duration_ms": <int>}` | false |
 
 ### Ghi chú schema
+- `home/room/ac_cmd` lệnh nhiệt độ: `steps` là số BẬC đổi, không phải nhiệt độ đích. Voice node giữ
+  nhiệt độ hiện tại và kẹp trong 16-30°C. Retain phải là **false** — retain một LỆNH sẽ khiến điều
+  hoà tự đổi nhiệt độ mỗi lần voice node subscribe lại sau khi mất kết nối.
+- `home/room/ac_state`: **ý định của voice node**, KHÔNG phải nhiệt độ đo được của phòng hay trạng
+  thái đọc ngược từ điều hoà. Ai chỉnh bằng remote tay thì giá trị này lệch cho tới lệnh kế tiếp —
+  vì Daikin gửi trọn 35 byte trạng thái mỗi lần nên lệnh sau đồng bộ lại tất cả. Retain **true** để
+  backend khởi động lại là biết ngay, khỏi chờ lệnh mới.
 - `ts`: Unix epoch **mili-giây**. Firmware đồng bộ giờ qua NTP (`pool.ntp.org`) lúc boot; nếu chưa sync xong thì `ts` = 0 (backend bỏ qua giá trị 0 được).
 - `home/room/snore_event`: **PLACEHOLDER** (scaffold kiến trúc, xem
   `docs/voice-node-snore-wakeword-architecture.md`) — `confidence` hiện là RMS chuẩn hoá, KHÔNG phải

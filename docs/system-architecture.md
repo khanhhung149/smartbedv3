@@ -105,10 +105,15 @@ Hysteresis:
 
 **Subscriptions** (MQTT):
 - `home/room/presence`: Occupancy signal (retained, heartbeat ≥30s)
-- `home/room/ac_cmd`: Manual AC command (backend/app relay)
+- `home/room/ac_cmd`: Manual AC command (backend/app relay). Power: `{"cmd":"on"|"off"}`.
+  Temperature: `{"cmd":"temp_up"|"temp_down","steps":<int>}` — `steps` is a number of STEPS, not a
+  target temperature; the node holds current temp and clamps to 16-30°C.
 
-**Publications** (local):
-- IR blaster GPIO8 (Daikin152 protocol, no MQTT for this)
+**Publications**:
+- `home/room/ac_state` (retained): `{"power":bool,"temp":int}` after every IR send. This is the
+  node's INTENT, not a reading from the AC — nothing can query a Daikin unit for its current state.
+  Manual remote use desynchronizes it until the next command re-sends the full 35-byte frame.
+- IR blaster GPIO8 (Daikin152 protocol)
 
 **Wakeword gate ("Vừng ơi")** (`ENABLE_WAKEWORD`, env `esp32s3_kws`): TFLite Micro model gates
 LISTENING→STREAMING before audio is uploaded to backend for command parsing. Runs unconditionally every

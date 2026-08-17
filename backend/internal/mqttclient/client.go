@@ -17,6 +17,7 @@ const (
 	topicPresence = "home/room/presence"
 	topicACCmd    = "home/room/ac_cmd"
 	topicACLearn  = "home/room/ac_learn"
+	topicACState  = "home/room/ac_state"
 )
 
 type Handlers struct {
@@ -26,6 +27,9 @@ type Handlers struct {
 	// Backend không còn tự quyết định AC (ESP32 lo), nhưng lịch sử vẫn phải ghi được lệnh
 	// đã xảy ra thật. Nghe topic thì bắt hết; ghi ở chỗ publish thì sót lệnh của người khác.
 	OnACCmd func(cmd string)
+	// OnACState — voice-node báo trạng thái điều hoà sau mỗi lần bắn IR. Nguồn duy nhất cho biết
+	// nhiệt độ đang đặt là bao nhiêu; backend không tự suy ra được vì lệnh chỉ nói "tăng/giảm".
+	OnACState func(power bool, temp int)
 }
 
 type Client struct {
@@ -71,6 +75,21 @@ func New(host string, port int, user, pass, clientID string, h Handlers) *Client
 					return
 				}
 				h.OnACCmd(a.Cmd)
+			})
+		}
+		if h.OnACState != nil {
+			c.Subscribe(topicACState, 1, func(_ mqtt.Client, msg mqtt.Message) {
+				// Con trỏ để phân biệt "field vắng mặt" với "false/0". Payload thiếu field là
+				// payload sai contract, không phải "điều hoà đang tắt ở 0 độ".
+				var a struct {
+					Power *bool `json:"power"`
+					Temp  *int  `json:"temp"`
+				}
+				if err := json.Unmarshal(msg.Payload(), &a); err != nil || a.Power == nil || a.Temp == nil {
+					slog.Warn("payload ac_state sai", "raw", string(msg.Payload()))
+					return
+				}
+				h.OnACState(*a.Power, *a.Temp)
 			})
 		}
 	})
