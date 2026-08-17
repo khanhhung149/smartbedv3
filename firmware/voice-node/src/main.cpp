@@ -1020,16 +1020,24 @@ void loop() {
       //  - LISTENING: cooldown như cũ (dư âm cuối câu trước).
       //  - STREAMING: đòi cách lúc bắt đầu stream ít nhất WAKEWORD_COOLDOWN_MS, để chính tiếng
       //    "Vừng ơi" vừa mở stream này không tự kích lại lần nữa.
+      // GỠ nhánh kích-lại-khi-đang-STREAMING (thử 17/08, đo xong thì bỏ).
+      //
+      // Ý tưởng: nói "Vừng ơi" lần nữa giữa câu thì bỏ câu cũ, bắt đầu câu mới. Cài đặt xong đo
+      // thật thì nó BĂM VỤN chính câu người dùng đang nói: điều kiện chống dư âm 1,2s kể từ lúc
+      // bắt đầu stream quá ngắn so với câu lệnh dài 2-3s, nên từ giây 1,2 trở đi mọi điểm wakeword
+      // cao giả đều cắt câu. Đo được ba utterance (1024ms, 512ms, 1232ms) trong đúng 3 giây, và
+      // lệnh bật/tắt tụt từ 4/7 xuống 1/14.
+      //
+      // Nới điều kiện lên ~2,8s thì gần chạm MIN_STREAM_MS (3s), tính năng còn lại gần như vô
+      // nghĩa. Mà giá trị thực tế của nó vốn mỏng: chỉ giúp khi muốn huỷ câu giữa chừng, tình
+      // huống hiếm. Đánh đổi tồi, nên bỏ.
+      //
+      // Khung text "eou" phía backend (voice/stream.go) GIỮ NGUYÊN — không ai gửi nữa nên vô hại,
+      // và là chỗ móc sẵn nếu sau này có cách chống dư âm đáng tin hơn (vd đòi điểm số cao hơn hẳn
+      // ngưỡng thường, hoặc dùng chính model wakeword phân biệt tiếng vọng).
       bool duDieuKienKich =
-          (voiceState == VoiceState::LISTENING && now >= wakewordCooldownUntilMs) ||
-          (voiceState == VoiceState::STREAMING && now - streamStartMs >= WAKEWORD_COOLDOWN_MS);
+          (voiceState == VoiceState::LISTENING && now >= wakewordCooldownUntilMs);
       if (duDieuKienKich && score > WAKEWORD_THRESHOLD) {
-        // Đang stream mà kích lại -> báo backend CẮT câu cũ trước khi gửi tiếp. Thiếu bước này
-        // hai câu dính làm một và ParseVietCommand loại vì mơ hồ.
-        if (voiceState == VoiceState::STREAMING && webSocket.isConnected()) {
-          webSocket.sendTXT("eou");
-          Serial.println("[wakeword] kích lại giữa câu -> báo backend cắt câu cũ");
-        }
         voiceState  = VoiceState::STREAMING;
         streamStartMs = now;
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
