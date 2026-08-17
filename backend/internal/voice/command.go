@@ -75,6 +75,42 @@ var soTiengViet = map[string]int{
 //
 // Vẫn KHÔNG nhận "tăng tốc độ" / "nâng cao trình độ": ở đó thứ đứng trước "do" là "toc"/"trinh",
 // không phải số.
+// Từ đồng nghĩa cho mỗi ý định. Đo 17/08 trên giọng thật qua mic INMP441: "tắt" 4/5 và "giảm" 6/7
+// nghe đúng, trong khi "bật" 2/5 và "tăng" 3/5 — ba buổi đo độc lập cùng một hướng. Hai từ yếu đều
+// là thanh ngang, âm ngắn, phụ âm đầu nhẹ ("bật" -> "mặc", "tăng" -> "ăn"); hai từ mạnh có thanh
+// nặng/hỏi và phụ âm bật rõ.
+//
+// Cho người dùng nói từ khác cùng nghĩa là cách rẻ nhất để né chỗ yếu đó — chỉ sửa parser, không
+// đụng cấu hình giải mã ASR, không nạp lại firmware.
+//
+// Các từ này đều VÔ HẠI vì luôn phải đi kèm điều kiện khác: bật/tắt bắt buộc nhắc "điều hoà" hoặc
+// "máy lạnh", còn tăng/giảm bắt buộc có "nhiet do" hoặc số đứng trước "do".
+var (
+	tuBat  = []string{"bat", "mo"}
+	tuTat  = []string{"tat"}
+	tuTang = []string{"tang", "nang", "len"}
+	tuGiam = []string{"giam", "ha", "xuong"}
+)
+
+// coTuNao — câu có chứa bất kỳ từ nào trong danh sách, tính theo TỪ TRỌN VẸN.
+//
+// Không dùng strings.Contains: nó khớp chuỗi con, mà "mo" nằm trong "mot" (một). Câu "tắt máy lạnh
+// một lúc" sẽ khớp cả nhánh bật lẫn nhánh tắt rồi bị loại oan vì mơ hồ. Tương tự "ha" nằm trong
+// "nhanh", "len" nằm trong nhiều từ khác.
+//
+// Ranh giới từ ở đây là khoảng trắng hoặc đầu/cuối câu — đủ cho tiếng Việt đã bỏ dấu và tách âm
+// tiết bằng khoảng trắng.
+func coTuNao(normalized string, tu []string) bool {
+	for _, t := range tu {
+		for _, am := range strings.Fields(normalized) {
+			if am == t {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 var reSoTruocDo = regexp.MustCompile(`(\d+|[a-z]+)\s+(?:nhiet\s+)?do\b`)
 
 // ParseVietCommand nhận text tiếng Việt (có hoặc không dấu) từ ASR, trả về lệnh AC.
@@ -103,12 +139,12 @@ func ParseVietCommand(text string) (Command, bool) {
 	normalized := stripDiacritics(strings.ToLower(strings.TrimSpace(text)))
 
 	hasAC := strings.Contains(normalized, "dieu hoa") || strings.Contains(normalized, "may lanh")
-	wantOn := hasAC && strings.Contains(normalized, "bat")
-	wantOff := hasAC && strings.Contains(normalized, "tat")
+	wantOn := hasAC && coTuNao(normalized, tuBat)
+	wantOff := hasAC && coTuNao(normalized, tuTat)
 
 	hasTemp := strings.Contains(normalized, "nhiet do") || coSoTruocDo(normalized)
-	wantUp := hasTemp && strings.Contains(normalized, "tang")
-	wantDown := hasTemp && strings.Contains(normalized, "giam")
+	wantUp := hasTemp && coTuNao(normalized, tuTang)
+	wantDown := hasTemp && coTuNao(normalized, tuGiam)
 
 	nhomNguon := 0
 	if wantOn || wantOff {

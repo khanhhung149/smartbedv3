@@ -105,3 +105,56 @@ func TestNoiLuatKhongLamLotCauDoiThuong(t *testing.T) {
 		}
 	}
 }
+
+// TestTuDongNghia — cho phép nói từ khác cho cùng một ý định.
+//
+// Vì sao: đo 17/08 trên giọng thật qua mic INMP441 cho thấy chênh lệch ổn định giữa các động từ.
+// "tắt" 4/5 và "giảm" 6/7, trong khi "bật" 2/5 và "tăng" 3/5. Ba buổi đo độc lập cùng một hướng.
+// Hai từ yếu đều là thanh ngang, âm ngắn, phụ âm đầu nhẹ — "bật" bị nghe thành "mặc", "tăng"
+// thành "ăn". Thêm từ đồng nghĩa có phụ âm rõ hơn cho người dùng một đường thoát, rẻ hơn nhiều so
+// với chỉnh cấu hình giải mã ASR.
+func TestTuDongNghia(t *testing.T) {
+	cases := []struct {
+		text    string
+		wantCmd string
+	}{
+		{"mở điều hòa", KindOn},
+		{"MỞ MÁY LẠNH", KindOn},
+		{"nâng nhiệt độ", KindTempUp},
+		{"lên 2 độ", KindTempUp},
+		{"hạ nhiệt độ", KindTempDown},
+		{"xuống 2 độ", KindTempDown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.text, func(t *testing.T) {
+			got, ok := ParseVietCommand(tc.text)
+			if !ok || got.Kind != tc.wantCmd {
+				t.Fatalf("ParseVietCommand(%q) = (%+v, %v), muốn Kind=%s", tc.text, got, ok, tc.wantCmd)
+			}
+		})
+	}
+}
+
+// Từ đồng nghĩa KHÔNG được làm lọt câu đời thường, và luật loại câu mơ hồ vẫn phải giữ.
+func TestTuDongNghiaKhongLamLotCauKhac(t *testing.T) {
+	for _, text := range []string{
+		"mở cửa sổ",             // "mở" nhưng không nhắc điều hoà
+		"lên tốc độ",            // "lên" + "độ" nhưng không phải nhiệt độ
+		"nâng cao trình độ",     // đã có từ trước, giữ nguyên
+		"nâng rồi hạ nhiệt độ",  // mơ hồ: cả tăng lẫn giảm
+		"mở rồi tắt điều hòa",   // mơ hồ: cả bật lẫn tắt
+	} {
+		if got, ok := ParseVietCommand(text); ok {
+			t.Fatalf("ParseVietCommand(%q) = %+v — không được khớp", text, got)
+		}
+	}
+}
+
+// So khớp phải tính theo TỪ TRỌN VẸN, không phải chuỗi con: "mo" nằm trong "mot" (một), "ha" nằm
+// trong "nhanh". Dùng Contains thì "tắt máy lạnh một lúc" khớp cả bật lẫn tắt rồi bị loại oan.
+func TestSoKhopTheoTuTronVen(t *testing.T) {
+	got, ok := ParseVietCommand("tắt máy lạnh một lúc")
+	if !ok || got.Kind != KindOff {
+		t.Fatalf("ParseVietCommand(\"tắt máy lạnh một lúc\") = (%+v, %v), muốn off", got, ok)
+	}
+}
