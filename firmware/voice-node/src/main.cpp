@@ -1122,7 +1122,20 @@ void loop() {
       // câu tiếp theo gửi ngay, không tốn thời gian bắt tay lại.
       voiceState = VoiceState::LISTENING;
 #ifdef ENABLE_WAKEWORD
-      wakewordCooldownUntilMs = now + WAKEWORD_COOLDOWN_MS;
+      // Cooldown tính từ lúc BẮT ĐẦU stream, không phải lúc kết thúc.
+      //
+      // Cooldown sinh ra để chặn dư âm cuối câu "Vừng ơi" trigger lại ngay khi vừa quay về
+      // LISTENING (đo 11/08: 51 TRIGGER cho ~31 lần nói). Dư âm đó xảy ra vài trăm ms SAU trigger,
+      // nên mốc đúng để đếm là lúc trigger, không phải lúc utterance kết thúc.
+      //
+      // Tính từ lúc kết thúc làm board điếc thêm 1,2s vô ích sau MỖI lệnh. Cộng với MIN_STREAM_MS
+      // (3000) + SILENCE_MS (800) thì cửa sổ điếc lên ~4,6s — đo 17/08 thấy nói 6 câu cách nhau
+      // 4,2s thì mất 3 câu, vì câu sau rơi đúng lúc board đang stream câu trước. Đổi mốc kéo cửa
+      // sổ đó xuống ~3,8s.
+      //
+      // An toàn vì stream tối thiểu đã 3s, dài hơn cooldown 1,2s rất nhiều: lúc utterance kết thúc
+      // thì cooldown chắc chắn đã hết hạn, và dư âm của "Vừng ơi" từ 3s trước cũng đã tắt từ lâu.
+      wakewordCooldownUntilMs = streamStartMs + WAKEWORD_COOLDOWN_MS;
 #endif
       Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
     }
