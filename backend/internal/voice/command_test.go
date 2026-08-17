@@ -64,3 +64,44 @@ func TestParseVietCommand(t *testing.T) {
 		})
 	}
 }
+
+// TestSoBuocTruocCumNhietDo khoá lại lỗi đo được 17/08: "giảm 2 nhiệt độ" ra steps=1.
+//
+// Luật cũ chỉ tìm số đứng NGAY TRƯỚC "do", nên trong "giam 2 nhiet do" thứ đứng trước "do" là
+// "nhiet" -> không thấy số -> rơi về mặc định 1. Hỏng âm thầm: không log, không báo, chỉ chỉnh sai
+// số bậc. Chưa lộ ra suốt buổi thử vì người dùng toàn nói "tăng 1 nhiệt độ", mà 1 đúng bằng mặc định.
+func TestSoBuocTruocCumNhietDo(t *testing.T) {
+	cases := []struct {
+		text      string
+		wantCmd   string
+		wantSteps int
+	}{
+		{"giảm 2 nhiệt độ", "temp_down", 2},
+		{"giảm hai nhiệt độ", "temp_down", 2},
+		{"tăng 3 nhiệt độ", "temp_up", 3},
+		{"TĂNG BA NHIỆT ĐỘ", "temp_up", 3},
+		{"giam 2 nhiet do", "temp_down", 2},
+		// Dạng cũ vẫn phải giữ nguyên.
+		{"giảm 2 độ", "temp_down", 2},
+		{"tăng nhiệt độ", "temp_up", 1},
+		{"TĂNG MỘT NHIỆT ĐỘ", "temp_up", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.text, func(t *testing.T) {
+			got, ok := ParseVietCommand(tc.text)
+			if !ok || got.Kind != tc.wantCmd || got.Steps != tc.wantSteps {
+				t.Fatalf("ParseVietCommand(%q) = (%+v, %v), muốn ({%s %d}, true)",
+					tc.text, got, ok, tc.wantCmd, tc.wantSteps)
+			}
+		})
+	}
+}
+
+// Câu đời thường chứa động từ + "độ" vẫn phải trượt sau khi nới luật bắt số.
+func TestNoiLuatKhongLamLotCauDoiThuong(t *testing.T) {
+	for _, text := range []string{"tăng tốc độ lên", "nâng cao trình độ", "tăng tốc độ 2 lần"} {
+		if _, ok := ParseVietCommand(text); ok {
+			t.Fatalf("ParseVietCommand(%q) khớp lệnh — không được", text)
+		}
+	}
+}

@@ -16,19 +16,14 @@ Chạy trong mạng compose vì service ASR không expose ra host:
 """
 
 import argparse
-import json
 import sys
-import urllib.request
-import wave
-from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+from asr_client import ASR_URL, goi_asr, wav_bytes  # noqa: E402
 from wav_io import SAMPLE_RATE, doc_wav, liet_ke_wav  # noqa: E402
-
-ASR_URL = "http://asr:9000/transcribe"
 
 # Khung đo năng lượng để dò tiếng nói.
 KHUNG_S = 0.032
@@ -84,32 +79,6 @@ def tim_doan_noi(pcm, nguong_tren_nen_db=NGUONG_TREN_NEN_DB):
         if DOAN_MIN_S <= dai_s <= DOAN_MAX_S:
             ra.append((max(0, d * n - dem), min(len(x), c * n + dem)))
     return ra
-
-
-def wav_bytes(pcm):
-    buf = BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(SAMPLE_RATE)
-        w.writeframes(np.asarray(pcm, dtype=np.int16).tobytes())
-    return buf.getvalue()
-
-
-def goi_asr(data, url):
-    """POST multipart/form-data bằng stdlib — khỏi cài requests vào container."""
-    bien = "----docasr"
-    than = (
-        f"--{bien}\r\n"
-        'Content-Disposition: form-data; name="file"; filename="a.wav"\r\n'
-        "Content-Type: audio/wav\r\n\r\n"
-    ).encode() + data + f"\r\n--{bien}--\r\n".encode()
-
-    req = urllib.request.Request(
-        url, data=than, headers={"Content-Type": f"multipart/form-data; boundary={bien}"}
-    )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.loads(r.read().decode())
 
 
 def main():

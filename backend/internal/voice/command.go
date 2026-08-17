@@ -67,9 +67,15 @@ var soTiengViet = map[string]int{
 	"sau": 6, "bay": 7, "tam": 8, "chin": 9, "muoi": 10,
 }
 
-// reSoTruocDo — số (chữ số hoặc chữ) đứng ngay trước "do". Dùng để nhận "tăng 2 độ" mà KHÔNG nhận
-// "tăng tốc độ": trong "toc do" thì đứng trước "do" là "toc", không phải số.
-var reSoTruocDo = regexp.MustCompile(`(\d+|[a-z]+)\s+do\b`)
+// reSoTruocDo — số (chữ số hoặc chữ) đứng trước "do", cho phép chen cụm "nhiet" ở giữa.
+//
+// Phần `(?:nhiet\s+)?` là bắt buộc: người dùng nói "giảm 2 NHIỆT ĐỘ" chứ không phải "giảm 2 độ".
+// Luật cũ chỉ bắt số ngay sát "do" nên trong "giam 2 nhiet do" nó thấy "nhiet" và rơi về mặc định 1
+// — hỏng âm thầm, đo được 17/08.
+//
+// Vẫn KHÔNG nhận "tăng tốc độ" / "nâng cao trình độ": ở đó thứ đứng trước "do" là "toc"/"trinh",
+// không phải số.
+var reSoTruocDo = regexp.MustCompile(`(\d+|[a-z]+)\s+(?:nhiet\s+)?do\b`)
 
 // ParseVietCommand nhận text tiếng Việt (có hoặc không dấu) từ ASR, trả về lệnh AC.
 //
@@ -131,38 +137,32 @@ func ParseVietCommand(text string) (Command, bool) {
 	}
 }
 
-// coSoTruocDo — có một số (chữ số hoặc chữ tiếng Việt) đứng ngay trước "do" hay không.
+// coSoTruocDo — có một số (chữ số hoặc chữ tiếng Việt) đứng trước "do" hay không.
 func coSoTruocDo(normalized string) bool {
-	m := reSoTruocDo.FindStringSubmatch(normalized)
-	if m == nil {
-		return false
-	}
-	return laSo(m[1])
+	_, co := timSoTruocDo(normalized)
+	return co
 }
 
-func laSo(s string) bool {
-	if _, ok := soTiengViet[s]; ok {
-		return true
+// timSoTruocDo quét MỌI vị trí khớp chứ không chỉ vị trí đầu: câu có thể chứa một cụm "…độ" không
+// mang số trước một cụm mang số ("tăng tốc độ rồi giảm 2 nhiệt độ"). Lấy match đầu tiên sẽ kết luận
+// nhầm là không có số.
+func timSoTruocDo(normalized string) (int, bool) {
+	for _, m := range reSoTruocDo.FindAllStringSubmatch(normalized, -1) {
+		if n, ok := soTiengViet[m[1]]; ok {
+			return n, true
+		}
+		if n, err := strconv.Atoi(m[1]); err == nil {
+			return n, true
+		}
 	}
-	_, err := strconv.Atoi(s)
-	return err == nil
+	return 0, false
 }
 
 // docSoBuoc trả số bước, mặc định 1 khi câu không nói số. Kẹp về stepsToiDa thay vì loại câu:
 // người dùng nói "tăng 100 độ" rõ ràng muốn tăng, chỉ là con số vô lý.
 func docSoBuoc(normalized string) int {
-	m := reSoTruocDo.FindStringSubmatch(normalized)
-	if m == nil {
-		return 1
-	}
-	n, ok := soTiengViet[m[1]]
-	if !ok {
-		var err error
-		if n, err = strconv.Atoi(m[1]); err != nil {
-			return 1
-		}
-	}
-	if n < 1 {
+	n, co := timSoTruocDo(normalized)
+	if !co || n < 1 {
 		return 1
 	}
 	if n > stepsToiDa {
