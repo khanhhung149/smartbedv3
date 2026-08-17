@@ -160,6 +160,24 @@ static const float    VAD_THRESHOLD_MIN  = 600.0f;
 static const float    NOISE_EMA_ALPHA    = 0.02f;   // ~50 frame (~0.8s) để nền theo kịp mà không giật
 static const uint32_t SILENCE_MS         = 800;     // im đủ lâu mới coi hết câu, tránh cắt giữa câu
 
+// Cửa sổ TỐI THIỂU phải stream sau khi wakeword kích, trước khi cho phép cắt theo im lặng.
+//
+// Vì sao cần: luật cắt dựa vào lastVoiceMs, mà lastVoiceMs chỉ cập nhật khi RMS vượt vadThreshold.
+// Đo 17/08 trong phòng thật: nền RMS 148, giọng người dùng p99 chỉ 265 — gấp 1,8 lần nền, khoảng
+// 5dB. Ngưỡng (sàn 600, hoặc nền×2 = 296) không bao giờ bị vượt, nên lastVoiceMs đứng yên ở mốc
+// lúc trigger và utterance luôn bị cắt đúng SILENCE_MS sau đó. Đo thực tế: câu "vừng ơi tăng 1
+// nhiệt độ" dài ~2s nhưng utterance gửi lên chỉ 0,96-1,23s, ASR nhận thiếu chữ và trả về
+// "ƠI TĂNG MỘT CẦU".
+//
+// Không sửa bằng cách hạ vadThreshold: cùng hằng số đó còn là đường TRIGGER của env
+// esp32dev/esp32s3 (không có wakeword) và là điều kiện học nền nhiễu. Hạ xuống 250 sẽ khiến hai
+// env kia tự kích liên tục vì nhiễu nền đã 148.
+//
+// 3000ms: câu lệnh dài nhất trong bộ ("vừng ơi, giảm hai nhiệt độ") đo được ~2s kể cả wakeword,
+// nên đây là biên an toàn 50%. Dài hơn nữa thì tăng độ trễ phản hồi và kéo theo đuôi im lặng dài
+// gửi cho ASR — mà đuôi im lặng chính là thứ làm model bịa chữ.
+static const uint32_t MIN_STREAM_MS      = 3000;
+
 // Cần VAD_ONSET_FRAMES frame LIÊN TIẾP vượt ngưỡng mới mở utterance. Nhiễu nền chạm sát ngưỡng nên
 // một gai đơn lẻ đủ mở stream -> khoảng 3/4 utterance gửi lên whisper chỉ là nhiễu, mà whisper gặp
 // nhiễu thì ảo giác (đã thấy nó phun ra câu chào cuối video YouTube). Tiếng nói thật kéo dài nhiều
@@ -196,6 +214,7 @@ static int16_t pcmBuf[I2S_READ_SAMPLES];     // PCM16 sau khi hạ bit, gửi th
 enum class VoiceState : uint8_t { LISTENING, STREAMING };
 VoiceState voiceState = VoiceState::LISTENING;
 
+uint32_t streamStartMs = 0;    // lúc vào STREAMING — mốc đo MIN_STREAM_MS
 uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng — vẫn dùng để cắt SILENCE_MS dù mở
                                 // stream bằng wakeword hay VAD (xem comment SILENCE_MS ở loop()).
 uint32_t lastLogMs   = 0;      // throttle log Serial, tránh spam mỗi ~16ms
@@ -987,6 +1006,7 @@ void loop() {
       if (voiceState == VoiceState::LISTENING && score > WAKEWORD_THRESHOLD &&
           now >= wakewordCooldownUntilMs) {
         voiceState  = VoiceState::STREAMING;
+        streamStartMs = now;
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
         Serial.printf("[wakeword] TRIGGER score=%.3f -> STREAMING\n", score);
         // Gửi bù phần đã giữ TRƯỚC frame hiện tại để chuỗi PCM liền mạch, không mất âm đầu.
@@ -1041,6 +1061,7 @@ void loop() {
     if (rms > vadThreshold) {
       if (++onsetFrames >= VAD_ONSET_FRAMES) {
         voiceState  = VoiceState::STREAMING;
+        streamStartMs = now;
         onsetFrames = 0;
         Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
         // Đường VAD chỉ cần bù đúng số frame bị debounce giữ lại, nên dùng preRollCount như bộ đếm
@@ -1093,7 +1114,10 @@ void loop() {
     if (webSocket.isConnected()) {
       webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
     }
-    if (now - lastVoiceMs > SILENCE_MS) {
+    // Cửa sổ tối thiểu tính từ lúc VÀO STREAMING, không từ lastVoiceMs: lastVoiceMs có thể được
+    // nhiễu nền đẩy lên bất chợt và làm cửa sổ trượt đi.
+    bool duCuaSoToiThieu = (now - streamStartMs) >= MIN_STREAM_MS;
+    if (duCuaSoToiThieu && now - lastVoiceMs > SILENCE_MS) {
       // Kết thúc utterance: NGỪNG gửi frame, KHÔNG đóng WS — giữ kết nối để
       // câu tiếp theo gửi ngay, không tốn thời gian bắt tay lại.
       voiceState = VoiceState::LISTENING;
