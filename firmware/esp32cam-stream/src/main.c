@@ -158,6 +158,21 @@ void app_main(void) {
         ESP_LOGE(TAG, "Dừng ở đây — không có camera thì stream vô nghĩa.");
         return;
     }
+    // OV2640 bật sẵn hmirror trong bộ thanh ghi mặc định của driver, nên ảnh ra bị lật
+    // gương ngang. Với người xem thì chỉ khó chịu, nhưng với pose estimation thì nó
+    // HOÁN ĐỔI ngữ nghĩa trái/phải của landmark: người nằm nghiêng phải hiện ra như
+    // nghiêng trái. Một hệ theo dõi giấc ngủ ghi sai bên nằm là ghi sai dữ liệu.
+    //
+    // Tắt ở đây chứ không ở phía client: stream phải đúng cho MỌI thứ đọc nó, kể cả
+    // trang xem cổng 80. Sửa ở một client thì client sau lại vấp đúng lỗi này.
+    sensor_t *sensor = esp_camera_sensor_get();
+    if (sensor != NULL) {
+        sensor->set_hmirror(sensor, 0);
+        sensor->set_vflip(sensor, 0);
+    } else {
+        ESP_LOGW(TAG, "Không lấy được sensor handle — ảnh có thể còn lật gương.");
+    }
+
     ESP_LOGI(TAG, "Camera OK — VGA 640x480, JPEG quality 12, 2 frame buffer trong PSRAM");
 
     if (wifi_init_sta() != ESP_OK) {
