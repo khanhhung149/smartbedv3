@@ -1068,11 +1068,16 @@ void loop() {
     uint32_t loopStackFreeBytes = uxTaskGetStackHighWaterMark(nullptr);
     uint32_t snoreStackFreeBytes =
         snoreTaskHandle ? uxTaskGetStackHighWaterMark(snoreTaskHandle) : 0;
+    // wsSendTask khai báo 6144 byte theo suy luận (WebSockets loop + sendBIN + Serial.printf trong
+    // onWsEvent) — đo cùng chỗ với hai task kia để biết con số thật thay vì tin phỏng đoán.
+    uint32_t wsStackFreeBytes =
+        wsSendTaskHandle ? uxTaskGetStackHighWaterMark(wsSendTaskHandle) : 0;
     Serial.printf("[hb][perf] wakewordInvokeUs min=%u avg=%u max=%u n=%u heapFree=%u psramFree=%u "
-                 "loopStackFree=%u snoreStackFree=%u\n",
+                 "loopStackFree=%u snoreStackFree=%u wsStackFree=%u\n",
                  (unsigned)wwStats.minUs, (unsigned)wwStats.avgUs, (unsigned)wwStats.maxUs,
                  (unsigned)wwStats.count, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram(),
-                 (unsigned)loopStackFreeBytes, (unsigned)snoreStackFreeBytes);
+                 (unsigned)loopStackFreeBytes, (unsigned)snoreStackFreeBytes,
+                 (unsigned)wsStackFreeBytes);
 #endif
   }
 

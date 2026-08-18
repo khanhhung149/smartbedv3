@@ -353,9 +353,11 @@ Kết luận: PSRAM dư rất nhiều (~96.4% còn trống), không phải đi�
 |---|---|---|---|---|
 | `loopTask` (core 1, Arduino main loop) | 8192 byte | 5232 byte | 2960 byte | 36.1% |
 | `snoreTask` (core 0) | 8192 byte | 3804 byte | 4388 byte | 53.6% |
-| `wsSendTask` (core 0, thêm 18/08) | 6144 byte | chưa đo | — | — |
+| `wsSendTask` (core 0, thêm 18/08) | 6144 byte | 4272 byte | 1872 byte | 30.5% |
 
-Cả 2 task còn dư margin an toàn (>36%), không cần tăng kích thước stack.
+Cả 3 task còn dư margin an toàn (>30% dùng, tức >69% free ở `wsSendTask`), không cần tăng kích
+thước stack. `wsSendTask` đo 18/08 sau khi đã chạy qua nhiều utterance thật (gồm cả lần TCP
+block hàng giây) — 6144 byte rộng hơn mức cần, hạ về 4096 vẫn an toàn nếu sau này cần chỗ.
 
 ### Latency `WakewordModel::infer()` sau khi dời arena sang PSRAM (đo thật)
 

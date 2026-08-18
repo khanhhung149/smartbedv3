@@ -15,7 +15,19 @@ thì sớm muộn lệch nhau, và con số đo được là con số của mộ
 # Rủi ro đi kèm: whisper gặp nhiễu thì nhại lại chính prompt này, và câu nhại chứa cả "bật" lẫn
 # "tắt". An toàn vì ParseVietCommand (backend/internal/voice/command.go) LOẠI câu chứa cả hai
 # động từ — hai lớp độc lập, prompt không phải gánh việc đó.
-INITIAL_PROMPT = "Lệnh điều khiển điều hòa: bật điều hòa, tắt điều hòa, bật máy lạnh, tắt máy lạnh."
+# CHỈ áp cho WhisperEngine (đường lui). Engine mặc định là sherpa Zipformer, nó KHÔNG nhận prompt
+# — nên đừng sửa chỗ này để chữa lỗi nghe nhầm trên đường chạy thật.
+#
+# Có thêm cụm nhiệt độ từ 18/08: prompt cũ chỉ liệt kê bật/tắt nên whisper không có mồi nào cho
+# lệnh nhiệt độ. Chấm trên 9 mẫu thật thu cùng ngày: prompt cũ ra lệnh 0/9, prompt này 4/9.
+#
+# Liệt kê CẢ tăng lẫn giảm là cố ý, cùng lý do với cặp bật/tắt: whisper gặp nhiễu thì nhại lại
+# prompt, câu nhại chứa cả hai chiều nên ParseVietCommand loại vì mơ hồ (đã thấy đúng vậy trong 2
+# mẫu im lặng của lần đo trên). Bỏ bớt một chiều là biến câu nhại thành lệnh thật.
+INITIAL_PROMPT = (
+    "Lệnh điều khiển điều hòa: bật điều hòa, tắt điều hòa, bật máy lạnh, tắt máy lạnh, "
+    "tăng nhiệt độ, giảm nhiệt độ, nâng nhiệt độ, hạ nhiệt độ."
+)
 
 # vad_filter: Silero VAD bỏ đoạn không có tiếng -> chống whisper "ảo giác" câu rác khi audio
 #   gần im (vd tự bịa lời outro YouTube).

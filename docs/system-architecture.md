@@ -239,7 +239,8 @@ WS /api/voice/stream
 ### ASR Service (Python FastAPI)
 
 **Runs**: Separate container (http://asr:9000)  
-**Model**: Whisper "small" (CPU int8 quantization)  
+**Model**: sherpa-onnx Zipformer RNN-T (Vietnamese) by default; faster-whisper "small" int8 as
+fallback via `ASR_ENGINE=whisper` (see `asr/asr_engine.py`)  
 
 ```
 POST /transcribe
@@ -248,14 +249,15 @@ POST /transcribe
   Response: 200 {"text": "bật điều hòa"}
   Processing:
     1. Load model (cached, ~150ms)
-    2. Whisper inference (variable, 1-3s per audio)
+    2. Inference (~0.2s sherpa, 1-3s whisper)
     3. Return text (no further parsing)
   Purpose: Transcribe Vietnamese speech
 ```
 
-**Tuning**:
+**Tuning** (Whisper path only — sherpa takes no prompt):
 - `vad_filter=True`: Skip silence (faster inference)
-- `initial_prompt="bật, tắt, mát, nóng, chế độ"`: Bias towards AC keywords
+- `initial_prompt`: AC command phrases in `asr/transcribe_opts.py`, listing both directions of each
+  pair so a hallucinated echo is ambiguous and `ParseVietCommand` rejects it
 - Language: Vietnamese (not auto-detect)
 
 ### Flutter App (Observer)

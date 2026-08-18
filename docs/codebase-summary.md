@@ -166,15 +166,24 @@ Response:
 
 ### Model Config
 
+Two engines behind one interface (`asr/asr_engine.py`), picked by `ASR_ENGINE`:
+
 ```python
-# Load model once at startup
-model = WhisperModel("small", device="cpu", compute_type="int8")
+ASR_ENGINE=sherpa   # default: sherpa-onnx Zipformer RNN-T (vi), ONNX Runtime, ~0.2s/utterance
+ASR_ENGINE=whisper  # fallback: faster-whisper "small" int8, ~1s/utterance
 ```
 
-**Tuning**:
+Sherpa is the default since 2026-08-14 (equal command accuracy on 15 real samples, ~5x faster,
+no PyTorch). A failure to load sherpa falls back to Whisper rather than killing the service.
+
+**Tuning** (Whisper path only — sherpa takes no prompt):
 - `vad_filter=True`: Skip silence frames (faster)
-- `initial_prompt="bật, tắt, mát, nóng, chế độ"`: Bias towards AC keywords
+- `initial_prompt`: AC command phrases, both directions of every pair (on/off, up/down) so a
+  hallucinated echo of the prompt is ambiguous and gets rejected by `ParseVietCommand`
 - Language explicitly Vietnamese (not auto-detect)
+
+Output differs by engine — sherpa returns uppercase without punctuation, Whisper lowercase with
+punctuation. The Go parser lowercases and strips diacritics, so both match; do not normalize here.
 
 ### Testing
 
