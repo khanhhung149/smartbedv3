@@ -87,7 +87,11 @@ Tests cover:
 - I2S pins: GPIO5 (SCK), GPIO6 (WS), GPIO7 (SD)
 - IR output: GPIO8
 - Runs state machine loop (presence logic + auto AC)
-- Streams PCM16 WebSocket audio to backend `/api/voice/stream`
+- Streams PCM16 WebSocket audio to backend `/api/voice/stream`, plus one `"eou"` text
+  frame per utterance so the backend cuts sentences on the node's signal, not on silence
+- WebSocket send runs in its own core-0 task (`wsSendTask`) fed by a 128-frame PSRAM
+  queue — `sendBIN()` blocks for seconds when TCP stalls, and in `loop()` that stalled
+  `i2s_read()` too (see `docs/voice-node-snore-wakeword-architecture.md`)
 
 **Fallback target**: `esp32dev` (WROOM-32)
 - Kept as escape hatch if S3 experiment breaks WiFi

@@ -223,8 +223,15 @@ WS /api/ws
   Purpose: Realtime state for app (low-latency Home tab updates)
 
 WS /api/voice/stream
-  Client (voice-node) uploads: chunked PCM16 16kHz mono 16-bit LE
-  Server: buffers with VAD (silence/max/min duration guards)
+  Client (voice-node) uploads: chunked PCM16 16kHz mono 16-bit LE (binary frames)
+  Client also sends: one TEXT frame ("eou") right after the last PCM frame of an
+    utterance — the node knows when the sentence ended, so the server does not
+    have to infer it from silence. Any text frame counts; content is for humans.
+  Server: single ordered channel for both frame kinds (PCM and cut signal must not
+    overtake each other), buffers with max/min duration guards.
+  Silence cut (ASR_SILENCE_MS, default 2500) is only a safety net for a lost "eou":
+    a TCP stall to the node longer than that window would otherwise split one
+    sentence in two (measured 1.23s stalls, 2026-08-18).
   On utterance: POST to ASR service, parse response, relay ac_cmd if match
   Purpose: Voice command ingestion pipeline
 ```

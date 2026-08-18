@@ -70,10 +70,12 @@ condition mới trên code đang chạy ổn định — không đáng đánh đ
 ### 4.2. Kiến trúc chọn: "B+" — vòng lặp đơn cho wakeword, tách riêng CHỈ bước snore inference sang core kia
 
 ```
-Core 1 (APP CPU, loop() Arduino — KHÔNG ĐỔI GÌ so với hiện tại)
+Core 1 (APP CPU, loop() Arduino)
   i2s_read() 256 mẫu/lần
        │
        ├──► Wakeword feature+inference (đã có, ~5.4ms, chạy MỌI frame)
+       │
+       ├──► Đẩy frame vào queue gửi WS (chỉ memcpy 512B, KHÔNG chờ mạng — xem 4.3)
        │
        └──► Append vào buffer tích luỹ ~1s cho snore
                   (kiểu preRoll đã có sẵn trong main.cpp — memmove trượt, KHÔNG cần
@@ -103,7 +105,30 @@ snapshot 1 chiều mỗi ~1s là đủ, không có ai ghi ngược lại buffer 
 chính gây trượt/báo giả). Không cần xử lý gì thêm ở tầng kiến trúc cho trường hợp này; đây là thuộc
 tính cần đo bằng dữ liệu thật khi có model snore, không phải thứ thiết kế trước được.
 
-### 4.3. Khi nào mới cân nhắc kiến trúc Ring Buffer đầy đủ (Option A gốc)
+### 4.3. Task thứ ba: `wsSendTask` (core 0) — gửi WebSocket
+
+Thêm 2026-08-18, cùng triết lý "tách chỉ phần nặng/chậm ra khỏi vòng mic":
+
+`webSocket.sendBIN()` của `links2004/WebSockets` gửi ĐỒNG BỘ — `WebSockets::write()` lặp `tcp->write()`
+tới khi hết byte hoặc timeout 5s. Khi TCP nghẽn, gọi nó trong `loop()` là chặn luôn `i2s_read()`: đo
+trên board thấy 2 stream đứng 1372ms và 1979ms, backend không nhận byte nào trong ngần ấy thời gian nên
+cắt utterance làm đôi, sinh mảnh 48-160ms bị bỏ.
+
+- `wsSendTask` (core 0, priority 2, stack 6144) **sở hữu trọn vẹn** `webSocket`: gọi cả `webSocket.loop()`
+  lẫn `sendBIN`. Lib KHÔNG thread-safe (hai đường đều chạm `_client.tcp`), nên không thể chia đôi.
+- `loop()` chỉ `wsQueuePush()`: copy 512B vào frame lấy từ pool. Pool 128 frame (~2s audio, 64KB) đặt
+  PSRAM; hai queue giữ CON TRỎ (đầy/rỗng) nên chỉ tốn ~1KB DRAM.
+- Queue đầy (TCP tắc lâu hơn 2s) → thả frame CŨ NHẤT, giữ phần mới nhất của câu; đếm vào `wsQueueDropped`.
+- Marker `samples == 0` đi qua CHÍNH queue đó để gửi khung text `"eou"` báo hết câu — nhờ chung hàng đợi
+  nên nó luôn tới sau frame cuối, kể cả khi TCP đang tắc.
+- Cấp phát lỗi → task không tạo, `loop()` quay về gửi đồng bộ như trước (không ai tranh `webSocket`).
+- OTA `onStart` suspend task trước khi `webSocket.disconnect()`.
+
+Đo lại (18/08, 3 vòng): `gapMaxMs` (khoảng cách giữa 2 lần đẩy frame) 88-240ms so với 1372/1979ms trước
+đó, `dropped=0`, `i2sTimeout=0` — dù `wsSendMaxUs` vẫn lên tới 1,23s khi TCP giật. Backend hết mảnh ngắn:
+6 TRIGGER → đúng 6 utterance.
+
+### 4.4. Khi nào mới cân nhắc kiến trúc Ring Buffer đầy đủ (Option A gốc)
 
 Nếu đo thật thấy: (a) snore inference trên core 0 vẫn ảnh hưởng core 1 (VD do tranh bus/cache, hiếm
 nhưng có thể), hoặc (b) cần thêm consumer thứ 3 (VD cough detection) khiến việc quản lý nhiều buffer
@@ -328,6 +353,7 @@ Kết luận: PSRAM dư rất nhiều (~96.4% còn trống), không phải đi�
 |---|---|---|---|---|
 | `loopTask` (core 1, Arduino main loop) | 8192 byte | 5232 byte | 2960 byte | 36.1% |
 | `snoreTask` (core 0) | 8192 byte | 3804 byte | 4388 byte | 53.6% |
+| `wsSendTask` (core 0, thêm 18/08) | 6144 byte | chưa đo | — | — |
 
 Cả 2 task còn dư margin an toàn (>36%), không cần tăng kích thước stack.
 
