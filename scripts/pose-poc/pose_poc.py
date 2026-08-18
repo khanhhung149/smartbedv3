@@ -23,6 +23,8 @@ import time
 
 import cv2
 import mediapipe as mp
+import posture
+import protocol
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 
@@ -38,6 +40,16 @@ _MIN_VISIBILITY = 0.5
 _LANDMARK_COLOR = (0, 255, 0)  # BGR
 _CONNECTION_COLOR = (255, 255, 255)
 
+# Font Hershey của OpenCV chỉ có ASCII — vẽ thẳng nhãn tiếng Việt ra toàn dấu '?'.
+# Log vẫn dùng nhãn có dấu, chỉ phần vẽ lên hình mới cần bản không dấu này.
+_ASCII_POSTURE = {
+    posture.UNKNOWN: "khong ro",
+    posture.SUPINE: "nam ngua",
+    posture.PRONE: "nam sap",
+    posture.SIDE_LEFT: "nghieng trai",
+    posture.SIDE_RIGHT: "nghieng phai",
+}
+
 
 def draw_pose(frame, landmarks) -> None:
     """Vẽ 33 landmark + các đường nối lên frame (tại chỗ).
@@ -46,9 +58,7 @@ def draw_pose(frame, landmarks) -> None:
     0..1 so với khung hình, phải nhân với kích thước thật.
     """
     height, width = frame.shape[:2]
-    points = [
-        (int(lm.x * width), int(lm.y * height), lm.visibility) for lm in landmarks
-    ]
+    points = [(int(lm.x * width), int(lm.y * height), lm.visibility) for lm in landmarks]
 
     for connection in _POSE_CONNECTIONS:
         start_x, start_y, start_vis = points[connection.start]
@@ -61,6 +71,7 @@ def draw_pose(frame, landmarks) -> None:
         if visibility < _MIN_VISIBILITY:
             continue
         cv2.circle(frame, (x, y), 4, _LANDMARK_COLOR, -1)
+
 
 # Backoff khi mất stream: 1s, 2s, 4s, rồi giữ ở 5s. Node có thể đang khởi động lại
 # hoặc WiFi chập chờn — thử lại dồn dập không giúp gì mà chỉ làm log khó đọc.
@@ -136,7 +147,38 @@ def main() -> int:
         default="pose_landmarker_full.task",
         help="Đường dẫn file .task (mặc định: pose_landmarker_full.task)",
     )
+    parser.add_argument(
+        "--rotate",
+        type=int,
+        choices=[0, 90, 180, 270],
+        default=0,
+        help="Xoay frame ngần này độ (ngược chiều kim đồng hồ) TRƯỚC khi suy luận. "
+        "MediaPipe Pose huấn luyện trên người thẳng đứng trong khung hình; camera đặt "
+        "đứng mà người nằm ngang là lệch 90° so với thứ model mong đợi, phát hiện tụt "
+        "hẳn. Xoay bằng phần mềm chứ không bắt người nằm theo camera.",
+    )
+    parser.add_argument(
+        "--protocol",
+        action="store_true",
+        help="Chạy bài đo có nhãn: hiện tư thế cần nằm theo pha, cuối buổi in ma trận "
+        "nhầm lẫn. Không có cờ này thì chỉ quan sát, không chấm điểm.",
+    )
     args = parser.parse_args()
+
+    rotate_code = {
+        90: cv2.ROTATE_90_COUNTERCLOCKWISE,
+        180: cv2.ROTATE_180,
+        270: cv2.ROTATE_90_CLOCKWISE,
+    }.get(args.rotate)
+    if rotate_code is not None:
+        log(f"Xoay frame {args.rotate}° trước khi suy luận.")
+
+    run = protocol.Protocol() if args.protocol else None
+    if run:
+        log(
+            f"BÀI ĐO CÓ NHÃN — {run.total_s}s. Nằm theo tư thế hiện trên cửa sổ; "
+            f"{run.settle_s}s đầu mỗi pha không tính điểm."
+        )
 
     try:
         landmarker = build_landmarker(args.model)
@@ -154,6 +196,13 @@ def main() -> int:
     reconnects = 0
     backoff_s = _BACKOFF_START_S
 
+    # Đếm phát hiện tách khỏi đếm frame. Trước đây log chỉ có fps, nên "khung trống"
+    # và "có người mà model trượt" trông giống hệt nhau — phải suy từ fps ra, vừa gián
+    # tiếp vừa dễ sai. Hai biến này trả lời thẳng.
+    frames_detected = 0
+    visible_landmarks_total = 0
+    posture_counts: dict[str, int] = {}
+
     # detect_for_video đòi timestamp tăng đơn điệu. Dùng đồng hồ tường chứ KHÔNG dùng
     # số đếm frame: frame rơi làm số đếm lệch khỏi thời gian thật, và bộ theo vết sẽ
     # hiểu sai tốc độ chuyển động.
@@ -161,6 +210,16 @@ def main() -> int:
     last_timestamp_ms = -1
     last_fps_report_s = start_s
     frames_since_report = 0
+    # Báo cáo định kỳ phải cùng ngữ nghĩa cửa sổ với fps. Trộn fps-theo-cửa-sổ với
+    # tỉ-lệ-tích-luỹ làm con số trông như đang tụt dần trong khi thật ra chỉ bị lịch
+    # sử pha loãng. Tổng tích luỹ để dành cho dòng tổng kết cuối.
+    detected_since_report = 0
+    landmarks_since_report = 0
+    # Tư thế cũng in theo từng cửa sổ, không đợi tổng kết cuối. Phiên 17/08 bị kill
+    # cứng nên khối `finally` không chạy và mất sạch phần tư thế của 3 phút đo — số
+    # đã tốn công đo thì không được phụ thuộc vào việc thoát sạch.
+    posture_since_report: dict[str, int] = {}
+    last_phase_name: str | None = None
 
     try:
         while True:
@@ -192,6 +251,11 @@ def main() -> int:
                 read_failures = 0
                 continue
 
+            if rotate_code is not None:
+                # Xoay NGAY sau khi đọc: mọi thứ phía sau (suy luận, vẽ, phân loại)
+                # đều làm việc trên khung đã dựng thẳng, khỏi phải quy đổi toạ độ.
+                frame = cv2.rotate(frame, rotate_code)
+
             # Đọc được frame thật: coi như đã hồi phục.
             read_failures = 0
             reconnects = 0
@@ -209,8 +273,48 @@ def main() -> int:
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
+            phase = run.current(now_s - start_s) if run else None
+            if run and phase is None:
+                protocol.beep_done()
+                log("Hết bài đo.")
+                break
+
+            if run and phase and phase[0] != last_phase_name:
+                # Bíp NGAY khi sang pha mới, kể cả pha đầu — người nằm cần mốc thời
+                # gian bằng tai, không phải bằng mắt.
+                protocol.beep_switch()
+                log(f"→ Đổi tư thế: {phase[0]}")
+                last_phase_name = phase[0]
+
+            predicted = None
+            signals = {}
+
             if result.pose_landmarks:
-                draw_pose(frame, result.pose_landmarks[0])
+                landmarks = result.pose_landmarks[0]
+                draw_pose(frame, landmarks)
+
+                visible_count = sum(1 for lm in landmarks if lm.visibility >= _MIN_VISIBILITY)
+                frames_detected += 1
+                visible_landmarks_total += visible_count
+                detected_since_report += 1
+                landmarks_since_report += visible_count
+
+                height, width = frame.shape[:2]
+                label, metrics = posture.classify(landmarks, width, height)
+                predicted = label
+                if run:
+                    signals = posture.side_signals(landmarks, width, height)
+                posture_counts[label] = posture_counts.get(label, 0) + 1
+                posture_since_report[label] = posture_since_report.get(label, 0) + 1
+                cv2.putText(
+                    frame,
+                    f"{_ASCII_POSTURE[label]} {metrics}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 255),
+                    2,
+                )
             else:
                 # Không tìm thấy người là kết quả hợp lệ, không phải lỗi — nói thẳng
                 # trên hình thay vì để người xem đoán là script treo.
@@ -224,18 +328,59 @@ def main() -> int:
                     2,
                 )
 
+            if phase:
+                phase_name, ascii_name, remaining_s, settling = phase
+                # Chỉ chấm khi người đã vào đúng tư thế. Quãng đang trở mình thì đếm
+                # nó là "luật đoán sai" là đổ oan cho chuyển động.
+                if not settling:
+                    run.record(phase_name, predicted, signals)
+                banner = f"{ascii_name}  ({remaining_s:.0f}s)"
+                if settling:
+                    banner += "  -- dang vao tu the, chua cham diem"
+                cv2.putText(
+                    frame,
+                    banner,
+                    (10, frame.shape[0] - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 165, 255) if settling else (255, 255, 255),
+                    2,
+                )
+
             frames_ok += 1
             frames_since_report += 1
 
             elapsed_since_report = now_s - last_fps_report_s
             if elapsed_since_report >= _FPS_REPORT_INTERVAL_S:
                 fps = frames_since_report / elapsed_since_report
+                detect_pct = (
+                    100 * detected_since_report / frames_since_report if frames_since_report else 0
+                )
+                avg_landmarks = (
+                    landmarks_since_report / detected_since_report if detected_since_report else 0
+                )
+                postures = (
+                    "  |  "
+                    + ", ".join(
+                        f"{label} {count}"
+                        for label, count in sorted(
+                            posture_since_report.items(), key=lambda item: -item[1]
+                        )
+                    )
+                    if posture_since_report
+                    else ""
+                )
                 log(
                     f"{fps:.1f} fps  |  {frames_ok} frame đọc được, "
-                    f"{frames_dropped} lần đọc hỏng"
+                    f"{frames_dropped} lần đọc hỏng  |  "
+                    f"phát hiện {detect_pct:.0f}%, "
+                    f"{avg_landmarks:.0f}/33 landmark nhìn rõ" + postures
                 )
                 last_fps_report_s = now_s
                 frames_since_report = 0
+                detected_since_report = 0
+                landmarks_since_report = 0
+                posture_since_report = {}
 
             cv2.imshow("pose-poc", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -253,6 +398,30 @@ def main() -> int:
         f"({frames_ok / total_s if total_s > 0 else 0:.1f} fps trung bình), "
         f"{frames_dropped} lần đọc hỏng"
     )
+
+    if frames_ok:
+        detect_pct = 100 * frames_detected / frames_ok
+        avg_landmarks = visible_landmarks_total / frames_detected if frames_detected else 0
+        log(
+            f"Phát hiện người: {frames_detected}/{frames_ok} frame ({detect_pct:.0f}%), "
+            f"trung bình {avg_landmarks:.1f}/33 landmark nhìn rõ"
+        )
+
+    if posture_counts:
+        breakdown = ", ".join(
+            f"{label} {100 * count / frames_detected:.0f}%"
+            for label, count in sorted(posture_counts.items(), key=lambda item: -item[1])
+        )
+        log(f"Tư thế: {breakdown}")
+        log(
+            "⚠️ Luật phân loại tư thế CHƯA kiểm chứng bằng dữ liệu có nhãn — xem "
+            "docstring của posture.py. Đừng trích số này làm độ chính xác."
+        )
+
+    if run:
+        for line in run.report_lines() + run.signal_lines():
+            log(line)
+
     return 0
 
 
