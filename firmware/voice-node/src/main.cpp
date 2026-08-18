@@ -30,6 +30,7 @@
 #include <math.h>
 #include <esp_system.h>        // esp_reset_reason() — chẩn đoán lý do reset (9 = BROWNOUT)
 #include <esp_heap_caps.h>     // heap_caps_malloc(MALLOC_CAP_SPIRAM) — buffer snore đặt PSRAM, xem bên dưới
+#include <esp_timer.h>         // esp_timer_get_time() — đo gap giữa 2 frame gửi + thời lượng sendBIN (µs)
 #include <atomic>              // std::atomic cho cờ handoff snoreEventPending/Confidence giữa 2 core
 
 #include "config.h"
@@ -218,6 +219,24 @@ uint32_t streamStartMs = 0;    // lúc vào STREAMING — mốc đo MIN_STREAM_M
 uint32_t lastVoiceMs = 0;      // lần cuối RMS vượt ngưỡng — vẫn dùng để cắt SILENCE_MS dù mở
                                 // stream bằng wakeword hay VAD (xem comment SILENCE_MS ở loop()).
 uint32_t lastLogMs   = 0;      // throttle log Serial, tránh spam mỗi ~16ms
+
+// ---- Đo khi STREAMING (debug 17/08, SAU fix WS task) ----
+// sendBIN giờ chạy trong wsSendTask (không block loop mic nữa — xem wsSendTask). Các số này dùng
+// để xác minh fix:
+//   wsSendMaxUs      = thời gian sendBIN lâu nhất trong câu (đo ở wsSendTask) — vẫn lộ ra TCP giật,
+//                      nhưng giờ KHÔNG block mic nữa.
+//   wsQueueDropped   = số frame bị thả vì queue đầy — chỉ xảy ra khi TCP block lâu hơn dung lượng
+//                      queue; không được > 0 nhiều (khi đó câu vẫn bị rỗng một khúc, cần tăng queue).
+//   streamI2STimeout = số lần i2s_read timeout/0-byte trong stream — sau fix phải về 0 (mic không
+//                      bao giờ bị nghẽn).
+//   gapMaxMs         = khoảng cách lớn nhất giữa 2 lần ĐẨY frame vào queue — đây mới là thước đo
+//                      tính liên tục của mic (trước fix nó bằng thời gian sendBIN block: 1372/1979ms).
+uint32_t streamI2STimeout = 0;  // số lần i2s_read timeout/0-byte trong stream hiện tại
+uint32_t streamSendGapUsMax = 0; // khoảng cách lớn nhất giữa 2 lần đẩy frame (µs)
+uint32_t streamSendLastUs = 0;   // mốc lần đẩy frame trước (0 = chưa có)
+uint32_t streamSendCount = 0;    // số frame đã đẩy trong stream hiện tại
+std::atomic<uint32_t> wsSendMaxUs{0};    // max thời gian 1 lần sendBIN trong stream (µs)
+std::atomic<uint32_t> wsQueueDropped{0}; // frame bị thả vì queue đầy (tăng ở wsQueuePush)
 #ifdef VOICE_RECORD_MODE
 uint32_t lastRecordLogMs = 0;  // throttle log chế độ thu (5s/lần, đủ để biết còn sống)
 #endif
@@ -250,6 +269,84 @@ static const size_t PREROLL_FRAMES = 32;  // 32 x 256 mẫu = 8192 mẫu = 512ms
 static int16_t preRoll[PREROLL_FRAMES * I2S_READ_SAMPLES];
 static size_t  preRollWrite = 0;  // chỉ số FRAME sẽ ghi tiếp theo (quay vòng)
 static size_t  preRollCount = 0;  // số frame hợp lệ đang giữ (bão hoà tại PREROLL_FRAMES)
+
+// ---- Đường gửi WS: task riêng + queue frame PCM ----
+//
+// LÝ DO: webSocket.sendBIN() gửi đồng bộ — WebSockets::write() lặp tcp->write() chờ hết byte tới
+// timeout 5s. Khi TCP nghẽn (WiFi giật) nó block hàng giây NGAY TRONG loop(), nên i2s_read không
+// được gọi và backend không nhận byte nào ≥800ms -> flushIfSilent cắt utterance làm đôi, sinh ra
+// mảnh 48-160ms bị bỏ (đo 17/08: 2 stream có sendBIN block 1372ms và 1979ms, khớp đúng 2 mảnh
+// backend tách ra). Chi tiết: plans/reports/debug-260817-1736-...-tach-cau-report.md.
+//
+// Thư viện links2004/WebSockets KHÔNG thread-safe (sendBIN và loop() đều chạm _client.tcp), nên
+// wsSendTask sở hữu TRỌN VẸN webSocket: vừa gọi webSocket.loop() vừa gọi sendBIN. loop() chính chỉ
+// đẩy frame vào queue và không bao giờ chờ mạng.
+//
+// Queue giữ CON TRỎ vào pool frame đặt ở PSRAM (128 frame x 512B = 64KB): để 64KB trong DRAM là
+// tiếc chỗ, còn queue con trỏ chỉ tốn 512B DRAM. 128 frame = ~2s audio, phủ được cả lần block
+// 1979ms nặng nhất đo được.
+struct WsFrame {
+  uint16_t samples;                 // số mẫu hợp lệ (i2s_read có thể trả về ít hơn)
+  int16_t  pcm[I2S_READ_SAMPLES];
+};
+static const size_t WS_QUEUE_FRAMES = 128;
+static WsFrame     *wsFramePool = nullptr;
+static QueueHandle_t wsQueue     = nullptr;  // frame đã có dữ liệu, chờ gửi
+static QueueHandle_t wsFreeQueue = nullptr;  // frame rỗng, chờ được ghi
+static TaskHandle_t  wsSendTaskHandle = nullptr;
+
+// Đẩy 1 frame PCM sang wsSendTask. Không bao giờ chờ mạng.
+// samples == 0 là MARKER hết câu: wsSendTask sẽ gửi khung text "eou" đúng thứ tự sau frame cuối
+// (xem wsSendTask).
+// Trả về false khi chưa có queue (lỗi cấp phát lúc setup) — lúc đó loop() tự gửi như bản cũ, vì
+// wsSendTask cũng không chạy nên không ai tranh webSocket.
+static bool wsQueuePush(const int16_t *pcm, size_t samples) {
+  if (!wsQueue || !wsFreeQueue) return false;
+
+  WsFrame *f = nullptr;
+  if (xQueueReceive(wsFreeQueue, &f, 0) != pdTRUE) {
+    // Hết frame rỗng = WS đang block lâu hơn 2s dung lượng queue. Thả frame CŨ NHẤT đang chờ để
+    // giữ phần MỚI NHẤT của câu (cùng nguyên tắc ô chờ IR 1 slot): người dùng nói lại thì phần
+    // mới mới là phần đáng gửi.
+    if (xQueueReceive(wsQueue, &f, 0) != pdTRUE) return true;  // task vừa lấy hết: bỏ frame này
+    wsQueueDropped.fetch_add(1);
+  }
+
+  size_t n = samples > I2S_READ_SAMPLES ? I2S_READ_SAMPLES : samples;
+  if (n > 0) memcpy(f->pcm, pcm, n * sizeof(int16_t));
+  f->samples = (uint16_t)n;
+  if (xQueueSend(wsQueue, &f, 0) != pdTRUE) {
+    xQueueSend(wsFreeQueue, &f, 0);  // queue đầy đúng lúc chen ngang: trả frame về pool
+    wsQueueDropped.fetch_add(1);
+  }
+  return true;
+}
+
+// Task sở hữu webSocket: bơm sự kiện lib + gửi hết frame đang chờ. Block bao lâu cũng không ảnh
+// hưởng mic — loop() chính chỉ ghi vào queue.
+static void wsSendTask(void *) {
+  for (;;) {
+    webSocket.loop();  // sự kiện + reconnect nội bộ lib (trước đây gọi trong loop() chính)
+
+    WsFrame *f = nullptr;
+    while (xQueueReceive(wsQueue, &f, 0) == pdTRUE) {
+      if (webSocket.isConnected()) {
+        uint32_t t0 = (uint32_t)esp_timer_get_time();
+        if (f->samples == 0) {
+          // Marker hết câu: khung TEXT. Backend coi MỌI khung text là tín hiệu cắt câu
+          // (voice/stream.go), nội dung chỉ để đọc log cho người.
+          webSocket.sendTXT("eou");
+        } else {
+          webSocket.sendBIN(reinterpret_cast<uint8_t *>(f->pcm), f->samples * sizeof(int16_t));
+        }
+        uint32_t us = (uint32_t)esp_timer_get_time() - t0;
+        if (us > wsSendMaxUs.load()) wsSendMaxUs.store(us);
+      }
+      xQueueSend(wsFreeQueue, &f, portMAX_DELAY);  // pool có sẵn chỗ nên không thực sự chờ
+    }
+    vTaskDelay(pdMS_TO_TICKS(2));  // nhả CPU cho WiFi/LWIP cùng core 0
+  }
+}
 
 // ---- Trạng thái presence (nhận từ MQTT home/room/presence) ----
 // Ghi trong onMqtt (chạy đồng bộ trong mqtt.loop() ở loop()), đọc trong loop().
@@ -727,6 +824,9 @@ void setupOTA() {
   ArduinoOTA.onStart([]() {
     Serial.println("\n[ota] bắt đầu — dừng I2S + WS");
     voiceState = VoiceState::LISTENING;
+    // Dừng wsSendTask TRƯỚC khi chạm webSocket: lib không thread-safe, task đang có thể ở giữa một
+    // sendBIN. Sau OTA board reboot nên không cần chạy lại task.
+    if (wsSendTaskHandle) vTaskSuspend(wsSendTaskHandle);
     webSocket.disconnect();
     i2s_stop(I2S_PORT);
     i2s_driver_uninstall(I2S_PORT);
@@ -768,6 +868,35 @@ void setup() {
 #endif
   webSocket.onEvent(onWsEvent);
   webSocket.setReconnectInterval(3000);  // tự thử lại mỗi 3s nếu rớt kết nối
+
+  // Tách đường gửi WS sang task riêng (xem khai báo WsFrame): sendBIN block khi TCP nghẽn, để nó
+  // trong loop() là nghẽn luôn mic. Cấp phát lỗi thì KHÔNG chặn boot — loop() quay về gửi đồng bộ
+  // như bản cũ (còn bug tách câu, nhưng vẫn nghe được lệnh), và cũng không ai tranh webSocket vì
+  // task không chạy.
+  wsFramePool = (WsFrame *)heap_caps_malloc(WS_QUEUE_FRAMES * sizeof(WsFrame), MALLOC_CAP_SPIRAM);
+  wsQueue     = xQueueCreate(WS_QUEUE_FRAMES, sizeof(WsFrame *));
+  wsFreeQueue = xQueueCreate(WS_QUEUE_FRAMES, sizeof(WsFrame *));
+  if (wsFramePool && wsQueue && wsFreeQueue) {
+    for (size_t i = 0; i < WS_QUEUE_FRAMES; i++) {
+      WsFrame *f = &wsFramePool[i];
+      xQueueSend(wsFreeQueue, &f, 0);
+    }
+    // Core 0 (cùng WiFi/LWIP — nơi công việc mạng vốn thuộc về), priority 2 > loopTask (1): task này
+    // gần như luôn ngủ trong tcp->write, ưu tiên cao chỉ để nó gửi ngay khi có frame, không phải
+    // chờ hết một vòng loop mic.
+    // Stack 6144: task chạy cả WebSockets loop (parse frame, gọi onWsEvent có Serial.printf — printf
+    // ngốn stack) lẫn sendBIN. 4096 là sát quá cho đường có printf trong callback.
+    xTaskCreatePinnedToCore(wsSendTask, "wsSend", 6144, nullptr, 2, &wsSendTaskHandle, 0);
+    Serial.printf("[ws] send task tạo xong: queue=%u frame (~%ums audio), pool PSRAM %uKB\n",
+                  (unsigned)WS_QUEUE_FRAMES,
+                  (unsigned)(WS_QUEUE_FRAMES * I2S_READ_SAMPLES * 1000 / SAMPLE_RATE),
+                  (unsigned)(WS_QUEUE_FRAMES * sizeof(WsFrame) / 1024));
+  } else {
+    if (wsFramePool) { heap_caps_free(wsFramePool); wsFramePool = nullptr; }
+    if (wsQueue)     { vQueueDelete(wsQueue);     wsQueue = nullptr; }
+    if (wsFreeQueue) { vQueueDelete(wsFreeQueue); wsFreeQueue = nullptr; }
+    Serial.println("[ws] LỖI cấp phát queue gửi -> gửi đồng bộ trong loop() (còn bug tách câu)");
+  }
 
   net.setTimeout(1000);  // giới hạn TCP connect() bên trong mqtt.connect() — xem comment connectMQTT()
   mqtt.begin(MQTT_HOST, MQTT_PORT, net);
@@ -875,7 +1004,9 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   ArduinoOTA.handle();  // rẻ khi rảnh (chỉ ngó gói UDP); chỉ chặn lúc đang nạp thật
-  webSocket.loop();  // bơm sự kiện WS + xử lý reconnect nội bộ của lib
+  // webSocket.loop() chạy trong wsSendTask (lib không thread-safe: chỉ MỘT task được chạm
+  // webSocket). Chỉ gọi ở đây khi task không tạo được — xem setup().
+  if (!wsSendTaskHandle) webSocket.loop();
 
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop();  // keepalive MQTT (i2s_read timeout 200ms đảm bảo gọi đủ thường)
@@ -949,7 +1080,12 @@ void loop() {
   // mic/driver có vấn đề; timeout hết thì bỏ qua vòng này, thử lại vòng sau.
   size_t bytesRead = 0;
   esp_err_t err = i2s_read(I2S_PORT, i2sRawBuf, sizeof(i2sRawBuf), &bytesRead, pdMS_TO_TICKS(200));
-  if (err != ESP_OK || bytesRead == 0) return;
+  if (err != ESP_OK || bytesRead == 0) {
+    // Timeout/0 byte: loop() không xử lý frame này nên không gửi — nếu đang STREAMING thì đó là
+    // một khe hở trong chuỗi PCM tới backend. Đếm để đối chiếu với mảnh utterance backend tách ra.
+    if (voiceState == VoiceState::STREAMING) streamI2STimeout++;
+    return;
+  }
 
   size_t samples = bytesRead / sizeof(int32_t);
   // INMP441 xuất dữ liệu MSB-aligned trong khung 32-bit -> lấy 16-bit cao
@@ -1032,31 +1168,47 @@ void loop() {
       // nghĩa. Mà giá trị thực tế của nó vốn mỏng: chỉ giúp khi muốn huỷ câu giữa chừng, tình
       // huống hiếm. Đánh đổi tồi, nên bỏ.
       //
-      // Khung text "eou" phía backend (voice/stream.go) GIỮ NGUYÊN — không ai gửi nữa nên vô hại,
-      // và là chỗ móc sẵn nếu sau này có cách chống dư âm đáng tin hơn (vd đòi điểm số cao hơn hẳn
-      // ngưỡng thường, hoặc dùng chính model wakeword phân biệt tiếng vọng).
+      // Khung text "eou" giờ dùng cho việc KHÁC: báo hết câu ở cuối utterance (xem chỗ kết thúc
+      // stream bên dưới), không phải ngắt câu giữa chừng. Nếu sau này có cách chống dư âm đáng tin
+      // hơn (đòi điểm cao hơn hẳn ngưỡng, hoặc dùng chính model wakeword phân biệt tiếng vọng) thì
+      // đường ngắt-giữa-chừng vẫn dựng lại được trên cùng khung tín hiệu đó.
       bool duDieuKienKich =
           (voiceState == VoiceState::LISTENING && now >= wakewordCooldownUntilMs);
       if (duDieuKienKich && score > WAKEWORD_THRESHOLD) {
         voiceState  = VoiceState::STREAMING;
         streamStartMs = now;
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
+        // Bắt đầu stream mới: reset bộ đếm send-gap (tránh lẫn với stream cũ nếu kết thúc không chạy
+        // nhánh reset — ví dụ đang chạy env VOICE_RECORD_MODE không reset ở chỗ kết thúc utterance).
+        streamSendGapUsMax = 0;
+        streamSendCount = 0;
+        streamI2STimeout = 0;
+        streamSendLastUs = 0;
+        wsSendMaxUs.store(0);
+        wsQueueDropped.store(0);
         Serial.printf("[wakeword] TRIGGER score=%.3f -> STREAMING\n", score);
         // Gửi bù phần đã giữ TRƯỚC frame hiện tại để chuỗi PCM liền mạch, không mất âm đầu.
         // Ring buffer nên frame cũ nhất KHÔNG nằm ở đầu mảng: đi ngược preRollCount frame từ chỗ
         // ghi tiếp theo. Nếu đoạn đó vắt qua cuối mảng thì gửi làm hai lần — backend nối byte thô
         // theo thứ tự nhận nên hai message liền nhau vẫn ra đúng một chuỗi PCM liên tục.
-        if (webSocket.isConnected() && preRollCount > 0) {
+        //
+        // Đẩy preRoll vào queue theo TỪNG frame (không một cục 16KB như trước): queue vốn giữ frame
+        // rời, và 32 frame liên tiếp trong queue vẫn ra đúng một chuỗi PCM liền mạch ở backend.
+        if (preRollCount > 0) {
           size_t oldest = (preRollWrite + PREROLL_FRAMES - preRollCount) % PREROLL_FRAMES;
-          size_t untilEnd = PREROLL_FRAMES - oldest;
-          size_t firstFrames = preRollCount < untilEnd ? preRollCount : untilEnd;
-          webSocket.sendBIN(reinterpret_cast<uint8_t *>(&preRoll[oldest * I2S_READ_SAMPLES]),
-                            firstFrames * I2S_READ_SAMPLES * sizeof(int16_t));
-          if (preRollCount > firstFrames) {
-            webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
-                              (preRollCount - firstFrames) * I2S_READ_SAMPLES * sizeof(int16_t));
+          for (size_t i = 0; i < preRollCount; i++) {
+            size_t idx = (oldest + i) % PREROLL_FRAMES;
+            if (!wsQueuePush(&preRoll[idx * I2S_READ_SAMPLES], I2S_READ_SAMPLES) &&
+                webSocket.isConnected()) {
+              // Đường lui (không có queue): gửi đồng bộ như bản cũ.
+              webSocket.sendBIN(reinterpret_cast<uint8_t *>(&preRoll[idx * I2S_READ_SAMPLES]),
+                                I2S_READ_SAMPLES * sizeof(int16_t));
+            }
           }
+          streamSendCount += preRollCount;
         }
+        // Mốc đo gap bắt đầu từ đây: khoảng cách preRoll -> frame STREAMING đầu tiên cũng phải nhỏ.
+        streamSendLastUs = (uint32_t)esp_timer_get_time();
         preRollCount = 0;  // đã flush; bắt đầu tích luỹ lại từ đầu cho lần kế tiếp
       }
     }
@@ -1099,9 +1251,12 @@ void loop() {
         Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
         // Đường VAD chỉ cần bù đúng số frame bị debounce giữ lại, nên dùng preRollCount như bộ đếm
         // TUYẾN TÍNH từ đầu mảng (không quay vòng như đường wakeword) — mảng thừa sức chứa.
-        if (webSocket.isConnected() && preRollCount > 0) {
-          webSocket.sendBIN(reinterpret_cast<uint8_t *>(preRoll),
-                            preRollCount * I2S_READ_SAMPLES * sizeof(int16_t));
+        for (size_t i = 0; i < preRollCount; i++) {
+          if (!wsQueuePush(&preRoll[i * I2S_READ_SAMPLES], I2S_READ_SAMPLES) &&
+              webSocket.isConnected()) {
+            webSocket.sendBIN(reinterpret_cast<uint8_t *>(&preRoll[i * I2S_READ_SAMPLES]),
+                              I2S_READ_SAMPLES * sizeof(int16_t));
+          }
         }
         preRollCount = 0;
       }
@@ -1134,7 +1289,7 @@ void loop() {
   // thẳng xuống WAV (/api/voice/record) để có bộ mẫu thu qua ĐÚNG mic và ĐÚNG vị trí thật —
   // model snore train trên dataset thu gần bị lệch miền, xem plans/reports/...snore...
   // Chỉ env esp32s3_record định nghĩa cờ này; đường chạy thật không bao giờ vào nhánh dưới.
-  if (webSocket.isConnected()) {
+  if (!wsQueuePush(pcmBuf, samples) && webSocket.isConnected()) {
     webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
   }
   if (now - lastRecordLogMs >= 5000) {
@@ -1144,7 +1299,17 @@ void loop() {
   }
 #else
   if (voiceState == VoiceState::STREAMING) {
-    if (webSocket.isConnected()) {
+    // Đo khoảng cách giữa 2 lần ĐẨY frame: đây là tính liên tục của chuỗi PCM tới backend, và giờ
+    // nó chỉ phụ thuộc nhịp i2s_read (~16ms), không còn phụ thuộc TCP (xem khai báo WsFrame).
+    uint32_t pushUs = (uint32_t)esp_timer_get_time();
+    if (streamSendLastUs != 0) {
+      uint32_t gapUs = pushUs - streamSendLastUs;
+      if (gapUs > streamSendGapUsMax) streamSendGapUsMax = gapUs;
+    }
+    streamSendLastUs = pushUs;
+    streamSendCount++;
+
+    if (!wsQueuePush(pcmBuf, samples) && webSocket.isConnected()) {
       webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
     }
     // Cửa sổ tối thiểu tính từ lúc VÀO STREAMING, không từ lastVoiceMs: lastVoiceMs có thể được
@@ -1154,6 +1319,16 @@ void loop() {
       // Kết thúc utterance: NGỪNG gửi frame, KHÔNG đóng WS — giữ kết nối để
       // câu tiếp theo gửi ngay, không tốn thời gian bắt tay lại.
       voiceState = VoiceState::LISTENING;
+      // Báo hết câu CHỦ ĐỘNG (marker samples=0 -> wsSendTask gửi khung text "eou").
+      //
+      // Vì sao cần: backend cắt câu khi KHÔNG nhận byte nào trong ASR_SILENCE_MS. Queue giữ mic
+      // chạy khi TCP tắc, nhưng phía backend vẫn im đúng bằng thời gian tắc — đo 18/08 thấy một
+      // lần sendBIN block 1,23s cắt đôi câu "BẬT ĐIỀU HÒA" (1504ms) + "Ừ" (1968ms) dù gapMaxMs chỉ
+      // 240ms. Node mới là chỗ BIẾT câu đã hết, nên nói thẳng ra thay để backend đoán theo im lặng.
+      // Marker đi qua ĐÚNG queue của audio nên luôn tới sau frame cuối, kể cả khi TCP đang tắc.
+      if (!wsQueuePush(nullptr, 0) && webSocket.isConnected()) {
+        webSocket.sendTXT("eou");
+      }
 #ifdef ENABLE_WAKEWORD
       // Cooldown tính từ lúc BẮT ĐẦU stream, không phải lúc kết thúc.
       //
@@ -1170,6 +1345,23 @@ void loop() {
       // thì cooldown chắc chắn đã hết hạn, và dư âm của "Vừng ơi" từ 3s trước cũng đã tắt từ lâu.
       wakewordCooldownUntilMs = streamStartMs + WAKEWORD_COOLDOWN_MS;
 #endif
+      // Tổng kết stream vừa xong (xem khai báo ở đầu file): gapMaxMs phải ≤ ~50ms sau fix; wsSendMax
+      // vẫn có thể hàng giây khi TCP giật nhưng KHÔNG còn kéo gap theo; dropped>0 = block lâu hơn
+      // dung lượng queue (~2s), lúc đó câu vẫn rỗng một khúc và cần tăng WS_QUEUE_FRAMES.
+      if (streamSendCount > 0) {
+        Serial.printf("[stream] end sends=%lu gapMaxMs=%lu wsSendMaxUs=%lu dropped=%lu "
+                      "i2sTimeout=%lu\n",
+                      (unsigned long)streamSendCount, (unsigned long)(streamSendGapUsMax / 1000),
+                      (unsigned long)wsSendMaxUs.load(), (unsigned long)wsQueueDropped.load(),
+                      (unsigned long)streamI2STimeout);
+      }
+      // Reset bộ đếm cho stream kế tiếp.
+      streamSendGapUsMax = 0;
+      streamSendCount = 0;
+      streamI2STimeout = 0;
+      streamSendLastUs = 0;
+      wsSendMaxUs.store(0);
+      wsQueueDropped.store(0);
       Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
     }
   }
