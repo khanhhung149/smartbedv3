@@ -77,7 +77,7 @@ Tests cover:
 | Node | MCU | Purpose | Env |
 |------|-----|---------|-----|
 | **radar-node** | ESP32-S2 Mini | LD2410C radar → MQTT presence/motion | `lolin_s2_mini` / `lolin_s2_mini_ota` |
-| **voice-node** | ESP32-S3 (primary) / WROOM-32 (fallback) | INMP441 mic + state machine + IR Daikin + MQTT sub | `esp32s3` / `esp32dev` / `esp32s3_kws` (KWS) |
+| **voice-node** | ESP32-S3-DevKitC-1 N16R8 | INMP441 mic + wakeword + state machine + IR Daikin + MQTT sub | `esp32s3_kws` (+ `esp32s3_kws_ota`) |
 | **door-node** | ESP32-S2 | PIR interrupt → MQTT motion | `lolin_s2_mini` |
 | **room-node** | ESP32-S2 | LD2410C (no WiFi) → ESP-NOW to voice-node | (No OTA/MQTT) |
 

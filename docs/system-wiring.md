@@ -35,7 +35,8 @@ Each board runs on its own USB-C power. **No hardwired inter-board power sharing
 **Environment**: `firmware/voice-node/platformio.ini`  
 **Source**: `firmware/voice-node/src/main.cpp` lines 1–68
 
-**Fallback env `esp32dev`** (older ESP32-WROOM-32 board) uses different I2S pins but same IR pin (GPIO4).
+The WROOM-32 board and its `esp32dev` env were dropped 2026-08-18; GPIO4 remains the code default for IR
+but every build now overrides it to GPIO8 (see `platformio.ini`).
 
 #### I2S Microphone (INMP441)
 
@@ -322,7 +323,7 @@ No OTA available. To update firmware, must hold BOOT pin, tap RST, then flash vi
 | **Radar UART alive** | Subscribe `tele/<DEVICE>/SENSOR`: see `"Detect":1`, `"Moving":N`, `"Static":N` values changing with motion | ☐ |
 | **Missing LD2410 GND** | If `"Moving":0,"Static":0` but `"Detect":1` and BLE app shows energy smooth → **check GND wire, not dead sensor** | ☐ |
 | **Presence reaches voice-node** | Serial monitor on voice-node: nod/wave near radar → `[hb] presence=1 ... seq=N` increments (`main.cpp` line 534) | ☐ |
-| **Mic receives audio** (env `esp32s3`/`esp32dev`, VAD) | Serial monitor: speak near mic → `RMS=... nen=... nguong=600 state=STREAMING ws=...` (`main.cpp` line 678; ngưỡng 600 = `VAD_THRESHOLD_MIN`, đo thực địa 31/07 — xem comment tại chỗ khai báo) | ☐ |
+| **Mic receives audio** | Serial monitor: speak near mic → `RMS=... nen=... nguong=600 state=LISTENING ws=up`; say "Vừng ơi" → `[wakeword] TRIGGER ... -> STREAMING` (ngưỡng 600 = `VAD_THRESHOLD_MIN`, đo thực địa 31/07 — nay dùng để cắt cuối câu và học nền nhiễu, không phải để mở stream) | ☐ |
 | **Mic receives audio** (env `esp32s3_kws`, wakeword) | Serial monitor: nói "Vừng ơi" → `[wakeword] TRIGGER score=0.XXX -> STREAMING` (`main.cpp` line 596) | ☐ |
 | **Voice E2E** | Nói lệnh AC rõ ràng → Serial log `[ir] Daikin ON (25C)` xuất hiện sau khi utterance kết thúc | ☐ |
 

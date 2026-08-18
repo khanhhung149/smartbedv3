@@ -1,11 +1,14 @@
-// Voice node — ESP32-S3 (env esp32s3/esp32s3_kws) hoặc ESP32-WROOM-32 (env esp32dev) + mic INMP441 (I2S)
-// Env esp32s3_kws: mở stream bằng WAKEWORD "vừng ơi" (model microWakeWord chạy tflite-micro tại
-// board, xem wakeword_features.{h,cpp}/wakeword_model.{h,cpp}) thay cho VAD năng lượng cũ.
-// Env esp32dev/esp32s3 (không có esp32s3_kws): KHÔNG build wakeword — env đó là đường lui, giữ
-// nguyên VAD năng lượng cũ (xem #ifdef WAKEWORD_GATE bên dưới).
-// Sau khi mở stream (bằng wakeword hoặc VAD, tuỳ env): gửi binary PCM16 qua WebSocket tới backend
-// ASR; im lặng một khoảng -> ngừng gửi (không đóng WS) để backend không phải nhận rác lúc không ai
-// nói. Toàn bộ ASR nằm ở backend, board chỉ có nhiệm vụ stream audio sạch.
+// Voice node — ESP32-S3-DevKitC-1 N16R8 + mic INMP441 (I2S), env DUY NHẤT esp32s3_kws.
+//
+// Mở stream bằng WAKEWORD "vừng ơi" (model microWakeWord chạy tflite-micro tại board, xem
+// wakeword_features.{h,cpp}/wakeword_model.{h,cpp}). Sau khi mở: gửi binary PCM16 qua WebSocket tới
+// backend ASR, kèm khung text "eou" khi hết câu; im lặng một khoảng -> ngừng gửi (không đóng WS) để
+// backend không phải nhận rác lúc không ai nói. Toàn bộ ASR nằm ở backend, board chỉ stream audio sạch.
+//
+// Các env cũ đã BỎ 18/08 sau khi đường wakeword chạy ổn định: esp32dev/esp32dev_ota (WROOM-32),
+// esp32s3 (đường lui VAD năng lượng) và esp32s3_record (thu mẫu WAV). VAD năng lượng không còn là
+// đường mở stream — RMS/vadThreshold vẫn dùng để cắt cuối câu (SILENCE_MS) và học nền nhiễu. Thu
+// mẫu giờ làm bằng ASR_DUMP_DIR ở service ASR, không cần firmware riêng.
 //
 // Wiring thật (INMP441), xem docs/system-wiring.md. Số chân I2S khác nhau giữa
 // hai board nên lấy từ build_flags, xem khối CFG_I2S_* bên dưới:
@@ -35,12 +38,10 @@
 
 #include "config.h"
 
-#ifdef ENABLE_WAKEWORD
 #include "wakeword_features.h"
 #include "wakeword_model.h"
 #include "snore_features.h"
 #include "snore_model.h"
-#endif
 
 // ---- Phần cứng ----
 // Mặc định là số chân của WROOM-32; env S3 ghi đè qua build_flags. Bản đồ GPIO của
@@ -62,8 +63,8 @@ static const uint8_t PIN_I2S_SD  = CFG_I2S_SD;   // DOUT từ mic (trên WROOM-3
 // ---- IR điều hoà Daikin ----
 // KHÔNG dùng chân strapping: nó phải ở mức đúng lúc boot, mà đèn IR kéo chân xuống LOW là
 // board không boot. (Strapping ESP32: GPIO0, 2, 5, 12, 15.  ESP32-S3: GPIO0, 3, 45, 46.)
-// Mặc định GPIO4 — ngoài cả hai danh sách, dùng được cho cả hai board.
-// env esp32s3 ghi đè sang GPIO8: trên board S3-CAM, GPIO4-7 nằm ở header camera với khoảng
+// Mặc định GPIO4 giữ lại làm giá trị cơ sở; build_flags ghi đè sang GPIO8.
+// Vì sao GPIO8: trên board S3-CAM, GPIO4-7 nằm ở header camera với khoảng
 // cách chân rất hẹp, hàn tay khó; GPIO8 ở hàng GPIO thường nên thoáng hơn. GPIO8 không phải
 // strapping, không thuộc bus flash (26-32) hay PSRAM octal (33-37) của bản N16R8.
 #ifndef CFG_IR_PIN
@@ -88,8 +89,6 @@ static const char *TOPIC_AC_CMD   = "home/room/ac_cmd";
 static const char *TOPIC_AC_STATE = "home/room/ac_state";
 // SUBSCRIBE (không publish) — nguồn presence duy nhất là radar-node.
 static const char *TOPIC_PRESENCE = "home/room/presence";
-// TOPIC_SNORE_EVENT khai báo cùng khối #ifdef ENABLE_WAKEWORD với phần state snore khác (bên dưới) —
-// chỉ dùng trong loop() ở nhánh đó, khai riêng ở env esp32dev/esp32s3 (không wakeword) sẽ là biến chết.
 
 // ---- Nguồn radar: radar-node publish home/room/presence ----
 // voice-node chỉ NGHE topic này ({"ts","present"}); mọi lọc tinh (cự ly/năng lượng,
@@ -146,9 +145,9 @@ static const size_t I2S_READ_SAMPLES = 256;
 // câu nói nhỏ; phòng ồn thì tự nâng để khỏi mở cho nhiễu. Đổi MIC_SHIFT về sau KHÔNG cần tinh
 // chỉnh lại, vì cả nền lẫn tiếng nói đều scale cùng hệ số — chỉ VAD_THRESHOLD_MIN phải scale theo.
 static const float    VAD_NOISE_MULT     = 2.0f;
-// Hệ số chỉ 2.0 (không phải 3-4) vì debounce VAD_ONSET_FRAMES đã lo phần gai nhiễu đơn lẻ; hệ số
-// này chỉ cần lo mức duy trì. Đo thực địa: gai nhiễu đạt 2-3x nền nhưng gần như không bao giờ
-// duy trì 3 frame liền, còn tiếng nói vượt 2x nền rất thoải mái.
+// Hệ số 2.0 đủ vì ngưỡng này giờ chỉ quyết định lastVoiceMs (mốc cắt cuối câu) và việc học nền
+// nhiễu — mở stream là việc của wakeword. Đo thực địa: gai nhiễu đạt 2-3x nền, tiếng nói vượt 2x
+// nền rất thoải mái.
 // SÀN 150 -> 600 (31/07). Đo trên 66 utterance thu thật: nhiễu phòng RMS 90-250, giọng nói thật
 // RMS 1200-3300 — hai dải cách nhau rất xa, mà sàn 150 (ngưỡng thực tế ~200 vì nền ~100) nằm ĐÚNG
 // TRONG dải nhiễu. Hậu quả đo được: 45/66 utterance gửi lên whisper là nhiễu thuần, và whisper gặp
@@ -170,20 +169,13 @@ static const uint32_t SILENCE_MS         = 800;     // im đủ lâu mới coi h
 // nhiệt độ" dài ~2s nhưng utterance gửi lên chỉ 0,96-1,23s, ASR nhận thiếu chữ và trả về
 // "ƠI TĂNG MỘT CẦU".
 //
-// Không sửa bằng cách hạ vadThreshold: cùng hằng số đó còn là đường TRIGGER của env
-// esp32dev/esp32s3 (không có wakeword) và là điều kiện học nền nhiễu. Hạ xuống 250 sẽ khiến hai
-// env kia tự kích liên tục vì nhiễu nền đã 148.
+// Không sửa bằng cách hạ vadThreshold: hằng số đó còn là điều kiện học nền nhiễu và mốc cắt cuối
+// câu. Hạ xuống 250 thì nhiễu nền (đã 148) đủ sức giữ lastVoiceMs luôn mới và câu không bao giờ cắt.
 //
 // 3000ms: câu lệnh dài nhất trong bộ ("vừng ơi, giảm hai nhiệt độ") đo được ~2s kể cả wakeword,
 // nên đây là biên an toàn 50%. Dài hơn nữa thì tăng độ trễ phản hồi và kéo theo đuôi im lặng dài
 // gửi cho ASR — mà đuôi im lặng chính là thứ làm model bịa chữ.
 static const uint32_t MIN_STREAM_MS      = 3000;
-
-// Cần VAD_ONSET_FRAMES frame LIÊN TIẾP vượt ngưỡng mới mở utterance. Nhiễu nền chạm sát ngưỡng nên
-// một gai đơn lẻ đủ mở stream -> khoảng 3/4 utterance gửi lên whisper chỉ là nhiễu, mà whisper gặp
-// nhiễu thì ảo giác (đã thấy nó phun ra câu chào cuối video YouTube). Tiếng nói thật kéo dài nhiều
-// frame liền nhau, gai nhiễu thì không -> debounce tách được hai loại.
-static const uint8_t  VAD_ONSET_FRAMES = 3;
 
 // Lọc thông cao một cực (DC blocker) ~80Hz, chạy ngay sau khi hạ bit và TRƯỚC khi clamp.
 // INMP441 nhạy hạ tần rất mạnh: đo được clip có dc=-1562 và zcr=0.0028 (tương đương ~45Hz — không
@@ -248,14 +240,8 @@ uint32_t loopTailUsMax = 0;
 uint32_t loopHeadStartUs = 0;  // mốc đầu vòng hiện tại
 std::atomic<uint32_t> wsSendMaxUs{0};    // max thời gian 1 lần sendBIN trong stream (µs)
 std::atomic<uint32_t> wsQueueDropped{0}; // frame bị thả vì queue đầy (tăng ở wsQueuePush)
-#ifdef VOICE_RECORD_MODE
-uint32_t lastRecordLogMs = 0;  // throttle log chế độ thu (5s/lần, đủ để biết còn sống)
-#endif
 float    noiseFloor  = 0.0f;   // EMA nền nhiễu; 0 = chưa học, seed bằng frame đầu tiên đọc được
 
-#ifndef ENABLE_WAKEWORD
-uint8_t  onsetFrames = 0;      // (chỉ đường lui VAD) số frame liên tiếp vượt ngưỡng, chờ đủ VAD_ONSET_FRAMES
-#endif
 
 // Trạng thái bộ lọc thông cao — phải giữ qua các lần gọi, nếu reset mỗi frame thì mỗi ranh giới
 // frame thành một bước nhảy và tự sinh ra tiếng tách 62.5Hz (16000/256).
@@ -264,7 +250,7 @@ float    hpfPrevY = 0.0f;      // y[n-1] — mẫu RA trước đó (đã lọc)
 
 // Ring buffer giữ ~512ms audio gần nhất, flush ngay khi mở stream để không mất đầu câu lệnh.
 //
-// Kích thước cũ ((VAD_ONSET_FRAMES-1) * 256 = 32ms) tính theo debounce của VAD năng lượng, KHÔNG
+// Kích thước cũ (2 frame = 32ms) tính theo debounce của VAD năng lượng thời nó còn mở stream, KHÔNG
 // đủ cho wakeword: model streaming chỉ chốt điểm sau khi đã nghe trọn "Vừng ơi" cộng độ trễ tích
 // luỹ khung, nên lúc TRIGGER thì người dùng thường đã nói sang động từ. Đo 2026-08-14 trên 15 mẫu
 // thật: 2 mẫu mất hẳn động từ — CẢ BA model ASR độc lập (Whisper-small, PhoWhisper, Zipformer)
@@ -392,7 +378,6 @@ uint32_t lastManualMs   = 0;      // lần lệnh tay cuối (0 = chưa có), đ
 
 uint32_t lastHeartbeatMs = 0;
 
-#ifdef ENABLE_WAKEWORD
 // ---- Wakeword "Vừng ơi" (thay VAD năng lượng làm điều kiện mở stream, xem loop()) ----
 WakewordFeatures wakewordFeatures;
 WakewordModel    wakewordModel;
@@ -491,7 +476,6 @@ static const char *TOPIC_SNORE_EVENT = "home/room/snore_event";
 // giây, và I2S DMA (16 buffer x 256 mẫu = 256ms) thừa sức đệm audio trong lúc loop() chờ nên
 // KHÔNG mất mẫu, chỉ trễ xử lý.
 SemaphoreHandle_t tfliteMutex = nullptr;
-#endif
 
 IRDaikin152 ac(PIN_IR_SEND);   // 152-bit: NGẮN NHẤT trong các biến thể còn setPower thật
                                // (64/128 chỉ có setPowerToggle -> không diễn tả được bật/tắt).
@@ -743,7 +727,6 @@ float computeRms(const int16_t *buf, size_t n) {
   return (float)sqrt(sumSq / (double)n);
 }
 
-#ifdef ENABLE_WAKEWORD
 // ---- Task snore (core 0) — model thật (plans/260812-1401-...-snore-model-integration/) ----
 // Chờ notify từ loop() (core 1) mỗi khi snoreSnapshotBuf có 1 cửa sổ ~1s (16000 mẫu) mới, chạy
 // SnoreFeatures::pushSamples() + SnoreModel::infer() thật (thay computeRms() placeholder cũ), log
@@ -809,7 +792,6 @@ void snoreTask(void *) {
     }
   }
 }
-#endif
 
 // ---- Log trạng thái WS (không gọi logic nghiệp vụ ở đây, chỉ debug) ----
 void onWsEvent(WStype_t type, uint8_t *payload, size_t length) {
@@ -833,7 +815,6 @@ void onWsEvent(WStype_t type, uint8_t *payload, size_t length) {
 // WiFi thì OTA bó tay.
 //
 // Bảng partition có sẵn otadata + app0/app1, không phải tự chế:
-//   WROOM-32 (esp32dev)  default.csv        -> mỗi slot 1.25MB
 //   ESP32-S3 (esp32s3)   default_16MB.csv   -> mỗi slot 6.5MB
 void setupOTA() {
   ArduinoOTA.setHostname(OTA_HOSTNAME);
@@ -878,14 +859,7 @@ void setup() {
   ac.begin();     // IR Daikin (chân theo CFG_IR_PIN: WROOM=4, S3=8)
   setupI2S();
 
-#ifdef VOICE_RECORD_MODE
-  // Đường thu dữ liệu ghi WAV thẳng xuống đĩa, KHÁC đường ASR — nhãn trong query đi vào tên file
-  // để lúc gán nhãn khỏi phải đoán đoạn nào là gì. Đổi nhãn bằng -DVOICE_RECORD_LABEL=...
-  webSocket.begin(BACKEND_WS_HOST, BACKEND_WS_PORT, "/api/voice/record?label=" VOICE_RECORD_LABEL);
-  Serial.println("[record] CHẾ ĐỘ THU DỮ LIỆU — stream liên tục, wakeword không dùng tới");
-#else
   webSocket.begin(BACKEND_WS_HOST, BACKEND_WS_PORT, BACKEND_WS_PATH);
-#endif
   webSocket.onEvent(onWsEvent);
   webSocket.setReconnectInterval(3000);  // tự thử lại mỗi 3s nếu rớt kết nối
 
@@ -923,7 +897,6 @@ void setup() {
   mqtt.onMessage(onMqtt);
   connectMQTT();
 
-#ifdef ENABLE_WAKEWORD
   // Sau I2S (cần SAMPLE_RATE đã cấu hình) — lỗi ở đây chỉ tắt wakeword, KHÔNG chặn boot: board vẫn
   // lên WiFi/MQTT/OTA/fusion bình thường, chỉ không bao giờ tự mở stream (an toàn, không phải im
   // lặng-báo-lỗi: log rõ để thấy ngay lúc cắm Serial).
@@ -977,7 +950,6 @@ void setup() {
   } else {
     Serial.println("[snore] LỖI cấp phát PSRAM -> snore task TẮT (wakeword không ảnh hưởng)");
   }
-#endif
 }
 
 // Chính sách AC: presence (từ radar-node qua MQTT) ổn định đủ lâu -> bật; vắng đủ lâu -> tắt.
@@ -1045,7 +1017,6 @@ void loop() {
     }
   }
 
-#ifdef ENABLE_WAKEWORD
   // snoreTask (core 0) chỉ đặt cờ — publish LUÔN chạy ở đây (core 1, cùng task với mqtt.loop() ở trên)
   // vì lib 256dpi/MQTT không có mutex nội bộ nào (xem khai báo snoreEventPending phía trên).
   // acquire: nếu thấy pending=true, đảm bảo thấy đúng giá trị confidence mà core 0 đã ghi TRƯỚC đó.
@@ -1062,7 +1033,6 @@ void loop() {
     bool ok = mqtt.publish(TOPIC_SNORE_EVENT, payload, false, 1);
     Serial.printf("[snore] publish %s -> %s\n", payload, ok ? "OK" : "LỖI");
   }
-#endif
 
   updateFusion(now);
   flushIR(now);   // sau updateFusion: gộp được cả lệnh MQTT lẫn quyết định fusion trong cùng vòng
@@ -1076,7 +1046,6 @@ void loop() {
                   present, occupied, (unsigned long)lastRadarSeq,
                   WiFi.status() == WL_CONNECTED, mqtt.connected());
 
-#ifdef ENABLE_WAKEWORD
     // Đo thật thay suy đoán: latency Invoke() của wakeword arena (DIRAM, xem wakeword_model.cpp —
     // từng thử PSRAM 12/08, revert 13/08 do esp-nn DepthwiseConv2D ghi ngoài vùng cấp phát gây
     // crash-loop khi arena ở PSRAM), và stack high-water-mark thật của loopTask/snoreTask (trước đây
@@ -1099,7 +1068,6 @@ void loop() {
                  (unsigned)wwStats.count, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram(),
                  (unsigned)loopStackFreeBytes, (unsigned)snoreStackFreeBytes,
                  (unsigned)wsStackFreeBytes);
-#endif
   }
 
   // Đọc I2S có timeout — không dùng portMAX_DELAY để tránh treo loop nếu
@@ -1108,9 +1076,6 @@ void loop() {
   if (headUs > loopHeadUsMax) loopHeadUsMax = headUs;
 
   // Mốc chia đoạn wakeword — khai báo NGOÀI mọi nhánh #ifdef vì tailUs ở cuối loop() cần chúng kể
-  // cả trên env đường lui (esp32dev/esp32s3) vốn không biên dịch khối wakeword. Env đó để wwUs = 0,
-  // nghĩa là toàn bộ phần sau i2s_read tính hết vào tailUs — đúng, vì ở đó không có khối nào khác.
-  //
   // Mốc đặt ngay sau i2s_read chứ không sát khối wakeword: ba đoạn head/ww/tail phải phủ KÍN một
   // vòng, nếu không thì phần lọt giữa (HPF + RMS trên 256 mẫu) không nằm ở đâu và tổng ba số nhỏ
   // hơn thời gian vòng thật — đúng loại sai số làm người đọc đi tìm nhầm chỗ.
@@ -1158,9 +1123,7 @@ void loop() {
     lastVoiceMs = now;
   }
 
-#if defined(ENABLE_WAKEWORD) && !defined(VOICE_RECORD_MODE)
-  // KHÔNG chạy trong VOICE_RECORD_MODE: chế độ thu gửi mọi frame thẳng lên backend, không dùng
-  // wakeword để làm gì cả. Mà inference đo được 6,3-12,9ms mỗi frame trong khi frame I2S về mỗi
+  // Ngân sách vòng lặp: inference đo được 6,3-12,9ms mỗi frame trong khi frame I2S về mỗi
   // 16ms — chiếm 40-80% ngân sách vòng lặp, cộng snore trên core 0 và WS gửi 32KB/s. Vượt ngân
   // sách thì I2S DMA tràn và mẫu rơi ÂM THẦM.
   //
@@ -1217,8 +1180,7 @@ void loop() {
         voiceState  = VoiceState::STREAMING;
         streamStartMs = now;
         lastVoiceMs = now;  // seed SILENCE_MS ngay lúc trigger, tránh cắt sớm nếu frame này RMS thấp
-        // Bắt đầu stream mới: reset bộ đếm send-gap (tránh lẫn với stream cũ nếu kết thúc không chạy
-        // nhánh reset — ví dụ đang chạy env VOICE_RECORD_MODE không reset ở chỗ kết thúc utterance).
+        // Bắt đầu stream mới: reset bộ đếm send-gap để số của stream trước không lẫn sang.
         streamSendGapUsMax = 0;
         streamSendCount = 0;
         streamI2STimeout = 0;
@@ -1281,42 +1243,6 @@ void loop() {
       if (snoreTaskHandle) xTaskNotifyGive(snoreTaskHandle);
     }
   }
-#else
-  // Đường lui VAD năng lượng (env esp32dev/esp32s3, không có wakeword) — logic gốc, chỉ đổi tên
-  // biến trạng thái streaming -> voiceState.
-  if (voiceState == VoiceState::LISTENING) {
-    if (rms > vadThreshold) {
-      if (++onsetFrames >= VAD_ONSET_FRAMES) {
-        voiceState  = VoiceState::STREAMING;
-        streamStartMs = now;
-        onsetFrames = 0;
-        Serial.println("VAD: phát hiện tiếng nói -> bắt đầu stream");
-        // Đường VAD chỉ cần bù đúng số frame bị debounce giữ lại, nên dùng preRollCount như bộ đếm
-        // TUYẾN TÍNH từ đầu mảng (không quay vòng như đường wakeword) — mảng thừa sức chứa.
-        for (size_t i = 0; i < preRollCount; i++) {
-          if (!wsQueuePush(&preRoll[i * I2S_READ_SAMPLES], I2S_READ_SAMPLES) &&
-              webSocket.isConnected()) {
-            webSocket.sendBIN(reinterpret_cast<uint8_t *>(&preRoll[i * I2S_READ_SAMPLES]),
-                              I2S_READ_SAMPLES * sizeof(int16_t));
-          }
-        }
-        preRollCount = 0;
-      }
-    } else {
-      // Chuỗi đứt -> gai nhiễu đơn lẻ, quên hẳn. Không tích lũy qua các lần rời rạc.
-      onsetFrames  = 0;
-      preRollCount = 0;
-    }
-  }
-
-  // Đang chờ xác nhận onset: giữ frame lại. Chỉ giữ frame đủ độ dài để bước nhảy trong preRoll
-  // luôn đúng I2S_READ_SAMPLES (i2s_read có thể trả về ít hơn khi timeout dở).
-  if (voiceState == VoiceState::LISTENING && onsetFrames > 0 &&
-      preRollCount < (size_t)(VAD_ONSET_FRAMES - 1) && samples == I2S_READ_SAMPLES) {
-    memcpy(&preRoll[preRollCount * I2S_READ_SAMPLES], pcmBuf, samples * sizeof(int16_t));
-    preRollCount++;
-  }
-#endif  // ENABLE_WAKEWORD
 
   // Học nền nhiễu CHỈ từ frame dưới ngưỡng và CHỈ khi đang LISTENING. Hai điều kiện đều cần: học
   // lúc STREAMING sẽ để tiếng nói kéo nền lên rồi tự tắt chính nó, còn học frame trên ngưỡng sẽ để
@@ -1326,20 +1252,6 @@ void loop() {
     noiseFloor += NOISE_EMA_ALPHA * (rms - noiseFloor);
   }
 
-#ifdef VOICE_RECORD_MODE
-  // Chế độ THU DỮ LIỆU: gửi mọi frame, không qua wakeword, không cắt theo im lặng. Backend ghi
-  // thẳng xuống WAV (/api/voice/record) để có bộ mẫu thu qua ĐÚNG mic và ĐÚNG vị trí thật —
-  // model snore train trên dataset thu gần bị lệch miền, xem plans/reports/...snore...
-  // Chỉ env esp32s3_record định nghĩa cờ này; đường chạy thật không bao giờ vào nhánh dưới.
-  if (!wsQueuePush(pcmBuf, samples) && webSocket.isConnected()) {
-    webSocket.sendBIN(reinterpret_cast<uint8_t *>(pcmBuf), samples * sizeof(int16_t));
-  }
-  if (now - lastRecordLogMs >= 5000) {
-    lastRecordLogMs = now;
-    Serial.printf("[record] đang thu, RMS=%.0f nen=%.0f ws=%s\n", rms, noiseFloor,
-                  webSocket.isConnected() ? "up" : "down");
-  }
-#else
   if (voiceState == VoiceState::STREAMING) {
     // Đo khoảng cách giữa 2 lần ĐẨY frame: đây là tính liên tục của chuỗi PCM tới backend, và giờ
     // nó chỉ phụ thuộc nhịp i2s_read (~16ms), không còn phụ thuộc TCP (xem khai báo WsFrame).
@@ -1371,7 +1283,6 @@ void loop() {
       if (!wsQueuePush(nullptr, 0) && webSocket.isConnected()) {
         webSocket.sendTXT("eou");
       }
-#ifdef ENABLE_WAKEWORD
       // Cooldown tính từ lúc BẮT ĐẦU stream, không phải lúc kết thúc.
       //
       // Cooldown sinh ra để chặn dư âm cuối câu "Vừng ơi" trigger lại ngay khi vừa quay về
@@ -1386,7 +1297,6 @@ void loop() {
       // An toàn vì stream tối thiểu đã 3s, dài hơn cooldown 1,2s rất nhiều: lúc utterance kết thúc
       // thì cooldown chắc chắn đã hết hạn, và dư âm của "Vừng ơi" từ 3s trước cũng đã tắt từ lâu.
       wakewordCooldownUntilMs = streamStartMs + WAKEWORD_COOLDOWN_MS;
-#endif
       // Tổng kết stream vừa xong (xem khai báo ở đầu file): gapMaxMs phải ≤ ~50ms sau fix; wsSendMax
       // vẫn có thể hàng giây khi TCP giật nhưng KHÔNG còn kéo gap theo; dropped>0 = block lâu hơn
       // dung lượng queue (~2s), lúc đó câu vẫn rỗng một khúc và cần tăng WS_QUEUE_FRAMES.
@@ -1411,7 +1321,6 @@ void loop() {
       Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
     }
   }
-#endif  // VOICE_RECORD_MODE
 
   // Log định kỳ (không phải mỗi vòng ~16ms) để debug RMS/streaming qua Serial.
   if (now - lastLogMs >= 500) {

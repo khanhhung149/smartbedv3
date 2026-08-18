@@ -67,12 +67,12 @@ cần portproxy. Nếu chạy broker trong WSL thì IP đổi mỗi restart → 
 ```bash
 # Lần đầu (USB)
 cd firmware/radar-node && pio run -e lolin_s2_mini -t upload   # S2: giữ nút 0, tap RST, thả 0
-cd firmware/voice-node && pio run -e esp32dev      -t upload
+cd firmware/voice-node && pio run -e esp32s3_kws   -t upload
 
 # Sau đó nạp qua WiFi (OTA) — khỏi tháo dây nguồn
 export OTA_PASSWORD='...'
 cd firmware/radar-node && pio run -e lolin_s2_mini_ota -t upload
-cd firmware/voice-node && pio run -e esp32dev_ota      -t upload
+cd firmware/voice-node && pio run -e esp32s3_kws_ota   -t upload
 ```
 Secrets: copy `include/config.h.example` → `config.h`, điền WiFi/MQTT/OTA password.
 

@@ -408,31 +408,34 @@ không đủ tự tin để bắn EVENT.
 Cách thu hẹp: thu mẫu qua ĐÚNG mic, ĐÚNG vị trí, ĐÚNG nhiễu nền, rồi trộn với dataset gốc và
 train lại.
 
-### Đường thu
+### Đường thu (từ 18/08: qua service ASR, không còn firmware riêng)
 
-Board (env `esp32s3_record`) bỏ qua wakeword, stream PCM16 liên tục vào `/api/voice/record`;
-backend (`internal/voice/record.go`) ghi thẳng thành WAV, cắt từng đoạn 60s.
+Env `esp32s3_record` đã BỎ cùng các env đường lui — nó tồn tại để stream liên tục vào
+`/api/voice/record`, nhưng mỗi buổi thu phải nạp firmware hai lần (thu xong nạp lại bản chạy thật),
+và bản thu đó không có wakeword nên board mất chức năng suốt buổi.
 
-Tách hẳn khỏi đường `/api/voice/stream` đang chạy: đường wakeword→ASR→lệnh AC đã ổn định, không
-đáng để một công cụ thu dữ liệu tạm thời chen vào.
+Thay bằng `ASR_DUMP_DIR` ở service ASR: mọi utterance đi qua đường chạy thật đều được lưu WAV, board
+giữ nguyên firmware và vẫn nghe lệnh bình thường. Đổi lại chỉ thu được đoạn **sau wakeword** — đủ cho
+mẫu lệnh thoại, KHÔNG đủ cho snore (không ai nói "Vừng ơi" trước khi ngáy). Muốn thu snore ban đêm
+thì phải dựng lại một đường stream liên tục; endpoint `/api/voice/record` phía backend vẫn còn nguyên.
 
-### Quy trình
+### Quy trình thu mẫu lệnh thoại
 
-1. Bật ghi ở backend — `VOICE_RECORD_DIR=/records` (rỗng = endpoint không được đăng ký):
+1. Bật lưu mẫu ở service ASR (thư mục con để khỏi lẫn với bộ mẫu cũ):
    ```
-   cd backend && VOICE_RECORD_DIR=/records docker compose up -d --no-deps backend
+   cd backend && ASR_DUMP_DIR=/samples/<ngay>-<chu-de> docker compose up -d --no-deps asr
    ```
-2. Đổi nhãn buổi thu trong `platformio.ini` env `esp32s3_record`
-   (`VOICE_RECORD_LABEL`: `snore` | `quiet` | `fan` | `talk`), rồi nạp:
-   ```
-   pio run -e esp32s3_record -t upload
-   ```
+2. Nói các câu cần thu; kiểm tra bằng `docker exec home-asr ls /samples/<ngay>-<chu-de>`.
+3. Gán nhãn theo tiền tố `on-`/`off-`/`up-`/`down-` rồi chấm bằng `asr/score_samples.py`.
+4. Tắt lưu mẫu khi xong: `docker compose up -d --no-deps --build asr` (không có biến môi trường).
+
+### Quy trình cũ cho mẫu snore (cần dựng lại đường thu liên tục)
+
 3. Đặt mic **cách đầu người nằm 30-40cm**. Tính từ số đo thật: nền phòng ngủ ~30 dBA ↔ RMS 40-60;
    ngáy nhẹ 40 dBA@1m thành ~49 dBA ở 35cm ↔ RMS ~400, tức gấp 8-10 lần nền. Xa hơn 1m thì ngáy
    nhẹ chìm vào nền và không model nào cứu được.
-4. Thu. Kiểm tra bằng log Serial `[record] đang thu, RMS=... ws=up` (5s/lần) và
+4. Thu qua `/api/voice/record` (bật bằng `VOICE_RECORD_DIR=/records` ở backend), kiểm tra bằng
    `docker exec home-backend ls /records`.
-5. Xong thì trả board về bản chạy thật: `pio run -e esp32s3_kws -t upload`.
 
 ### Cần thu những gì
 

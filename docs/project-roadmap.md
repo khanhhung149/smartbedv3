@@ -96,7 +96,7 @@
 
 **Deliverables**:
 - [x] PlatformIO OTA protocol (ArduinoOTA library)
-- [x] `esp32dev_ota` and `lolin_s2_mini_ota` environments
+- [x] OTA environments (`esp32s3_kws_ota` for voice-node — was `esp32dev_ota` before the WROOM-32 board was dropped 2026-08-18 — and `lolin_s2_mini_ota` for radar-node)
 - [x] Password-protected upload
 - [x] Fallback: USB flash manually if OTA breaks WiFi
 - [x] Tested: 3+ OTA cycles per node without data loss
