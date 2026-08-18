@@ -139,3 +139,4 @@ hardware/vo-so-*.stl
 hardware/vo-so-*.png
 # Bản đã lắp chỉ để xem, không in
 hardware/vo-hop-LAP-RAP-xem-thoi.stl
+backend/bin/
