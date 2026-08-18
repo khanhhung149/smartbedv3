@@ -235,6 +235,17 @@ uint32_t streamI2STimeout = 0;  // số lần i2s_read timeout/0-byte trong stre
 uint32_t streamSendGapUsMax = 0; // khoảng cách lớn nhất giữa 2 lần đẩy frame (µs)
 uint32_t streamSendLastUs = 0;   // mốc lần đẩy frame trước (0 = chưa có)
 uint32_t streamSendCount = 0;    // số frame đã đẩy trong stream hiện tại
+
+// Chia nhỏ thời gian một vòng loop() để biết gapMaxMs (88-240ms) đến từ đâu. Quan trọng vì đệm DMA
+// của I2S chỉ giữ dma_buf_count*dma_buf_len mẫu (xem setupI2S): vòng loop trễ hơn ngần ấy là DMA
+// ghi đè và MẤT mẫu thật, không chỉ trễ. Chính phép đo này chỉ ra 16 buffer (256ms) là thiếu.
+//   headUs = từ đầu loop() tới ngay trước i2s_read — WiFi check, OTA, MQTT, fusion/IR, heartbeat+log
+//   wwUs   = khối wakeword (feature + Invoke) sau khi có frame
+//   tailUs = phần còn lại tới cuối loop() — snore accum, đẩy queue, log định kỳ
+uint32_t loopHeadUsMax = 0;
+uint32_t loopWwUsMax   = 0;
+uint32_t loopTailUsMax = 0;
+uint32_t loopHeadStartUs = 0;  // mốc đầu vòng hiện tại
 std::atomic<uint32_t> wsSendMaxUs{0};    // max thời gian 1 lần sendBIN trong stream (µs)
 std::atomic<uint32_t> wsQueueDropped{0}; // frame bị thả vì queue đầy (tăng ở wsQueuePush)
 #ifdef VOICE_RECORD_MODE
@@ -289,7 +300,9 @@ struct WsFrame {
   uint16_t samples;                 // số mẫu hợp lệ (i2s_read có thể trả về ít hơn)
   int16_t  pcm[I2S_READ_SAMPLES];
 };
-static const size_t WS_QUEUE_FRAMES = 128;
+// 192 frame = ~3s audio, khớp MIN_STREAM_MS. 128 (~2s) đã thấy dropped=10 khi sendBIN block 1,58s:
+// queue còn phải chứa 32 frame preRoll và phần tồn đọng trước đó, nên trần thực thấp hơn 2s.
+static const size_t WS_QUEUE_FRAMES = 192;
 static WsFrame     *wsFramePool = nullptr;
 static QueueHandle_t wsQueue     = nullptr;  // frame đã có dữ liệu, chờ gửi
 static QueueHandle_t wsFreeQueue = nullptr;  // frame rỗng, chờ được ghi
@@ -677,7 +690,14 @@ void setupI2S() {
       // chờ tfliteMutex trong lúc snore inference giữ khoá (~105ms) — 128ms là quá sát, chỉ cần
       // một nhịp jitter là DMA tràn và mất mẫu audio giữa câu. 256ms cho biên gấp đôi.
       // Giá: 16 x 256 x 4 byte = 16KB DIRAM (slot 32-bit), lấy từ ~150KB heap còn trống.
-      .dma_buf_count = 16,
+      // 48 x 256 mẫu = 12288 mẫu = 768ms đệm @16kHz (48KB DRAM).
+      //
+      // 16 buffer (256ms) là KHÔNG đủ: đo 18/08 thấy loop() bị chặn tới 540ms mỗi lần bắn IR
+      // (ac.send() của IRremoteESP8266 bận-chờ suốt khung Daikin) và tới 190ms khi chờ tfliteMutex
+      // lúc snoreTask đang Invoke. Chặn lâu hơn đệm thì DMA ring ghi đè lên mẫu chưa đọc — mất
+      // audio ÂM THẦM, i2s_read vẫn trả về đủ byte nên không có lỗi nào lộ ra. 768ms phủ được cả
+      // hai nguồn cộng lại.
+      .dma_buf_count = 48,
       .dma_buf_len = 256,
       .use_apll = false,
       .tx_desc_auto_clear = false,
@@ -1000,6 +1020,7 @@ void updateFusion(uint32_t now) {
 }
 
 void loop() {
+  loopHeadStartUs = (uint32_t)esp_timer_get_time();
   uint32_t now = millis();
 
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
@@ -1083,6 +1104,9 @@ void loop() {
 
   // Đọc I2S có timeout — không dùng portMAX_DELAY để tránh treo loop nếu
   // mic/driver có vấn đề; timeout hết thì bỏ qua vòng này, thử lại vòng sau.
+  uint32_t headUs = (uint32_t)esp_timer_get_time() - loopHeadStartUs;
+  if (headUs > loopHeadUsMax) loopHeadUsMax = headUs;
+
   size_t bytesRead = 0;
   esp_err_t err = i2s_read(I2S_PORT, i2sRawBuf, sizeof(i2sRawBuf), &bytesRead, pdMS_TO_TICKS(200));
   if (err != ESP_OK || bytesRead == 0) {
@@ -1138,6 +1162,7 @@ void loop() {
   // chưa tối ưu sớm khi chưa có số đo CPU thật). Chạy VÔ ĐIỀU KIỆN kể cả khi đã STREAMING để state
   // nội bộ của frontend (noise/PCAN) và model không bị cold-start mỗi lần quay về LISTENING; điểm
   // số trong lúc STREAMING bị bỏ qua ở switch dưới (không đánh giá lại wakeword giữa một utterance).
+  uint32_t wwStartUs = (uint32_t)esp_timer_get_time();
   if (wakewordReady) {
     uint16_t wwFeatures[WakewordFeatures::kFramesPerInference][WakewordFeatures::kNumChannels];
     if (wakewordFeatures.pushSamples(pcmBuf, samples, wwFeatures)) {
@@ -1218,6 +1243,9 @@ void loop() {
       }
     }
   }
+
+  uint32_t wwUs = (uint32_t)esp_timer_get_time() - wwStartUs;
+  if (wwUs > loopWwUsMax) loopWwUsMax = wwUs;
 
   // preRoll: ghi vòng liên tục trong lúc LISTENING, luôn giữ PREROLL_FRAMES khung gần nhất.
   // Flush lúc TRIGGER ở trên để bù độ trễ phát hiện của model streaming (xem khai báo preRoll).
@@ -1354,17 +1382,21 @@ void loop() {
       // vẫn có thể hàng giây khi TCP giật nhưng KHÔNG còn kéo gap theo; dropped>0 = block lâu hơn
       // dung lượng queue (~2s), lúc đó câu vẫn rỗng một khúc và cần tăng WS_QUEUE_FRAMES.
       if (streamSendCount > 0) {
-        Serial.printf("[stream] end sends=%lu gapMaxMs=%lu wsSendMaxUs=%lu dropped=%lu "
-                      "i2sTimeout=%lu\n",
+        Serial.printf("[stream] end sends=%lu gapMaxMs=%lu headMs=%lu wwMs=%lu tailMs=%lu "
+                      "wsSendMaxUs=%lu dropped=%lu i2sTimeout=%lu\n",
                       (unsigned long)streamSendCount, (unsigned long)(streamSendGapUsMax / 1000),
-                      (unsigned long)wsSendMaxUs.load(), (unsigned long)wsQueueDropped.load(),
-                      (unsigned long)streamI2STimeout);
+                      (unsigned long)(loopHeadUsMax / 1000), (unsigned long)(loopWwUsMax / 1000),
+                      (unsigned long)(loopTailUsMax / 1000), (unsigned long)wsSendMaxUs.load(),
+                      (unsigned long)wsQueueDropped.load(), (unsigned long)streamI2STimeout);
       }
       // Reset bộ đếm cho stream kế tiếp.
       streamSendGapUsMax = 0;
       streamSendCount = 0;
       streamI2STimeout = 0;
       streamSendLastUs = 0;
+      loopHeadUsMax = 0;
+      loopWwUsMax = 0;
+      loopTailUsMax = 0;
       wsSendMaxUs.store(0);
       wsQueueDropped.store(0);
       Serial.println("[stream] im lặng -> kết thúc utterance (ngừng gửi, giữ WS mở)");
@@ -1380,4 +1412,9 @@ void loop() {
                   vadThreshold, voiceState == VoiceState::STREAMING ? "STREAMING" : "LISTENING",
                   webSocket.isConnected() ? "up" : "down");
   }
+
+  // Chốt tailUs ở CUỐI hàm, sau khối log trên: Serial 115200 baud là nghi phạm hàng đầu (~90µs/ký
+  // tự), để phép đo dừng trước nó thì đúng thứ cần soi lại nằm ngoài số đo.
+  uint32_t tailUs = (uint32_t)esp_timer_get_time() - wwStartUs - wwUs;
+  if (tailUs > loopTailUsMax) loopTailUsMax = tailUs;
 }

@@ -128,6 +128,28 @@ cắt utterance làm đôi, sinh mảnh 48-160ms bị bỏ.
 đó, `dropped=0`, `i2sTimeout=0` — dù `wsSendMaxUs` vẫn lên tới 1,23s khi TCP giật. Backend hết mảnh ngắn:
 6 TRIGGER → đúng 6 utterance.
 
+### 4.3b. Ngân sách jitter của vòng mic — vì sao đệm DMA phải 768ms
+
+Đo 18/08 bằng cách chia nhỏ một vòng `loop()` (`headMs`/`wwMs`/`tailMs` trong log `[stream] end`):
+
+| Đoạn | Max đo được | Nguồn |
+|---|---|---|
+| `headMs` (đầu loop → trước `i2s_read`) | **540ms** | `ac.send()` bắn IR Daikin — IRremoteESP8266 bận-chờ suốt khung, luôn thấy `[ir] Daikin` ngay sau |
+| `wwMs` (khối wakeword) | **189ms** | chờ `tfliteMutex` khi `snoreTask` đang Invoke (~80ms); riêng Invoke wakeword chỉ ~7ms |
+| `tailMs` (phần còn lại) | 13ms | `Serial.printf` — nghi phạm ban đầu, hoá ra không đáng kể |
+
+Đệm DMA cũ `dma_buf_count=16 × dma_buf_len=256` = 4096 mẫu = **256ms**, nhỏ hơn cả `headMs`. Chặn lâu
+hơn đệm thì ring ghi đè lên mẫu chưa đọc: **mất audio âm thầm**, `i2s_read` vẫn trả đủ byte và
+`i2sTimeout` vẫn bằng 0 nên không có gì lộ ra trong log. Đây nhiều khả năng là nguồn còn lại của các
+câu "nghe hụt" ngay sau một lệnh (đúng lúc IR vừa bắn).
+
+Nâng lên `dma_buf_count=48` → 768ms, phủ được cả `headMs` + `wwMs` cộng lại, tốn 48KB DRAM (heap còn
+~118KB). Không đụng logic — chỉ là đệm hấp thụ jitter, đúng chỗ nó nên được hấp thụ.
+
+Cùng lần đo: `WS_QUEUE_FRAMES` 128 (~2s) thấy `dropped=10` khi `sendBIN` block 1,58s — queue còn phải
+chứa 32 frame preRoll và phần tồn đọng nên trần thực thấp hơn 2s. Nâng lên 192 (~3s, khớp
+`MIN_STREAM_MS`): đo lại với block 1,45s cho `dropped=0`.
+
 ### 4.4. Khi nào mới cân nhắc kiến trúc Ring Buffer đầy đủ (Option A gốc)
 
 Nếu đo thật thấy: (a) snore inference trên core 0 vẫn ảnh hưởng core 1 (VD do tranh bus/cache, hiếm
@@ -354,6 +376,9 @@ Kết luận: PSRAM dư rất nhiều (~96.4% còn trống), không phải đi�
 | `loopTask` (core 1, Arduino main loop) | 8192 byte | 5232 byte | 2960 byte | 36.1% |
 | `snoreTask` (core 0) | 8192 byte | 3804 byte | 4388 byte | 53.6% |
 | `wsSendTask` (core 0, thêm 18/08) | 6144 byte | 4272 byte | 1872 byte | 30.5% |
+
+Ngoài stack, hai vùng đệm đổi trong ngày 18/08 (xem 4.3b): DMA I2S 16→48 buffer (16KB→48KB DRAM) và
+pool frame WS 128→192 (64KB→96KB PSRAM).
 
 Cả 3 task còn dư margin an toàn (>30% dùng, tức >69% free ở `wsSendTask`), không cần tăng kích
 thước stack. `wsSendTask` đo 18/08 sau khi đã chạy qua nhiều utterance thật (gồm cả lần TCP

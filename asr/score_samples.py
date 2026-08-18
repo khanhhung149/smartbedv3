@@ -3,9 +3,9 @@
 Chạy trong container home-asr (nơi có faster-whisper + cache model):
     docker exec home-asr python /app/score_samples.py small medium
 
-Nhãn đúng lấy từ TIỀN TỐ tên file: "on-*.wav" là câu "bật", "off-*.wav" là câu "tắt".
+Nhãn đúng lấy từ TIỀN TỐ tên file: "on-*", "off-*", "up-*" (tăng nhiệt độ), "down-*" (giảm).
 Đặt tiền tố sau khi thu (xem plans/reports/...voice-accuracy...): thu 10 câu bật -> đổi tên
-loạt đó thành on-*, rồi thu 10 câu tắt -> đổi thành off-*.
+loạt đó thành on-*, rồi thu 10 câu tắt -> đổi thành off-*, tương tự up-/down-.
 
 Nạp model TUẦN TỰ rồi giải phóng, không giữ cả hai trong RAM cùng lúc (medium int8 ~1.5GB).
 Service đang chạy KHÔNG bị đụng tới: script tự nạp model riêng, không đổi ASR_MODEL.
@@ -35,31 +35,56 @@ def strip_diacritics(s: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
+# Từ đồng nghĩa — giữ khớp với command.go (tuBat/tuTat/tuTang/tuGiam).
+TU_BAT = {"bat", "mo"}
+TU_TAT = {"tat"}
+TU_TANG = {"tang", "nang", "len"}
+TU_GIAM = {"giam", "ha", "xuong"}
+
+
 def parse_command(text: str) -> str | None:
     """Bản sao ParseVietCommand (backend/internal/voice/command.go) — NGUỒN SỰ THẬT là file Go.
 
-    Trả "on" / "off" / None. Câu chứa CẢ bật lẫn tắt bị loại (None), không chọn một trong hai.
+    Trả "on"/"off"/"up"/"down"/None. Câu mơ hồ bị loại (None), không chọn một trong hai — kể cả
+    khi trộn hai nhóm nguồn/nhiệt độ, giống hệt bên Go.
+
+    So khớp theo TỪ TRỌN VẸN, không phải chuỗi con: "mo" nằm trong "mot", "ha" nằm trong "nhanh".
     """
     if text and not unicodedata.is_normalized("NFC", text):
         print(f"    ⚠️  text không phải NFC — bên Go sẽ bỏ dấu hụt: {text!r}")
 
     normalized = strip_diacritics(text.strip().lower())
-    if "dieu hoa" not in normalized and "may lanh" not in normalized:
+    am_tiet = set(normalized.split())
+
+    co_ac = "dieu hoa" in normalized or "may lanh" in normalized
+    want_on = co_ac and bool(am_tiet & TU_BAT)
+    want_off = co_ac and bool(am_tiet & TU_TAT)
+
+    # Nhánh nhiệt độ KHÔNG đòi nhắc điều hoà (xem lý do ở command.go), chỉ đòi cụm "nhiet do".
+    co_temp = "nhiet do" in normalized
+    want_up = co_temp and bool(am_tiet & TU_TANG)
+    want_down = co_temp and bool(am_tiet & TU_GIAM)
+
+    nhom = (want_on or want_off) + (want_up or want_down)
+    if nhom > 1 or (want_on and want_off) or (want_up and want_down):
         return None
 
-    want_on = "bat" in normalized
-    want_off = "tat" in normalized
-    if want_on and want_off:
-        return None
     if want_on:
         return "on"
     if want_off:
         return "off"
+    if want_up:
+        return "up"
+    if want_down:
+        return "down"
     return None
 
 
+NHAN = ("on", "off", "up", "down")
+
+
 def load_samples() -> list[tuple[str, str]]:
-    """Trả [(đường dẫn, nhãn đúng)] cho các file có tiền tố on-/off-. File chưa gán nhãn bị bỏ."""
+    """Trả [(đường dẫn, nhãn đúng)] cho file có tiền tố on-/off-/up-/down-. File khác bị bỏ."""
     if not os.path.isdir(SAMPLE_DIR):
         sys.exit(f"Không thấy thư mục mẫu {SAMPLE_DIR} — đã bật ASR_DUMP_DIR chưa?")
 
@@ -67,15 +92,15 @@ def load_samples() -> list[tuple[str, str]]:
     for name in sorted(os.listdir(SAMPLE_DIR)):
         if not name.endswith(".wav"):
             continue
-        if name.startswith("on-"):
-            samples.append((os.path.join(SAMPLE_DIR, name), "on"))
-        elif name.startswith("off-"):
-            samples.append((os.path.join(SAMPLE_DIR, name), "off"))
+        nhan = next((n for n in NHAN if name.startswith(f"{n}-")), None)
+        if nhan:
+            samples.append((os.path.join(SAMPLE_DIR, name), nhan))
         else:
             unlabeled += 1
 
     if unlabeled:
-        print(f"Bỏ qua {unlabeled} file chưa gán nhãn (cần đổi tên thành on-*.wav / off-*.wav)\n")
+        print(f"Bỏ qua {unlabeled} file chưa gán nhãn "
+              f"(cần đổi tên thành {'/'.join(f'{n}-*.wav' for n in NHAN)})\n")
     if not samples:
         sys.exit("Chưa có mẫu nào được gán nhãn.")
     return samples
@@ -115,9 +140,8 @@ def score(model_name: str, samples: list[tuple[str, str]]) -> dict:
 def main() -> None:
     models = sys.argv[1:] or ["small", "medium"]
     samples = load_samples()
-    print(f"{len(samples)} mẫu: "
-          f"{sum(1 for _, t in samples if t == 'on')} bật / "
-          f"{sum(1 for _, t in samples if t == 'off')} tắt")
+    dem = {n: sum(1 for _, t in samples if t == n) for n in NHAN}
+    print(f"{len(samples)} mẫu: " + " / ".join(f"{dem[n]} {n}" for n in NHAN if dem[n]))
 
     results = {name: score(name, samples) for name in models}
 
@@ -126,7 +150,7 @@ def main() -> None:
     for name, r in results.items():
         print(f"{name:<10}{r['dung']:>5}/{n:<2}{r['sai']:>12}{r['loai']:>10}"
               f"{r['tong_giay'] / n:>11.1f}")
-    print("\nSAI chiều phải là 0 — bật thành tắt là hỏng nặng hơn hẳn không nhận ra lệnh.")
+    print("\nSAI chiều phải là 0 — bật thành tắt (hay tăng thành giảm) hỏng nặng hơn hẳn không nhận ra lệnh.")
 
 
 if __name__ == "__main__":
