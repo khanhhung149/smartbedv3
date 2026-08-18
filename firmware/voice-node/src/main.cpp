@@ -1107,6 +1107,16 @@ void loop() {
   uint32_t headUs = (uint32_t)esp_timer_get_time() - loopHeadStartUs;
   if (headUs > loopHeadUsMax) loopHeadUsMax = headUs;
 
+  // Mốc chia đoạn wakeword — khai báo NGOÀI mọi nhánh #ifdef vì tailUs ở cuối loop() cần chúng kể
+  // cả trên env đường lui (esp32dev/esp32s3) vốn không biên dịch khối wakeword. Env đó để wwUs = 0,
+  // nghĩa là toàn bộ phần sau i2s_read tính hết vào tailUs — đúng, vì ở đó không có khối nào khác.
+  //
+  // Mốc đặt ngay sau i2s_read chứ không sát khối wakeword: ba đoạn head/ww/tail phải phủ KÍN một
+  // vòng, nếu không thì phần lọt giữa (HPF + RMS trên 256 mẫu) không nằm ở đâu và tổng ba số nhỏ
+  // hơn thời gian vòng thật — đúng loại sai số làm người đọc đi tìm nhầm chỗ.
+  uint32_t wwStartUs = (uint32_t)esp_timer_get_time();
+  uint32_t wwUs = 0;
+
   size_t bytesRead = 0;
   esp_err_t err = i2s_read(I2S_PORT, i2sRawBuf, sizeof(i2sRawBuf), &bytesRead, pdMS_TO_TICKS(200));
   if (err != ESP_OK || bytesRead == 0) {
@@ -1162,7 +1172,6 @@ void loop() {
   // chưa tối ưu sớm khi chưa có số đo CPU thật). Chạy VÔ ĐIỀU KIỆN kể cả khi đã STREAMING để state
   // nội bộ của frontend (noise/PCAN) và model không bị cold-start mỗi lần quay về LISTENING; điểm
   // số trong lúc STREAMING bị bỏ qua ở switch dưới (không đánh giá lại wakeword giữa một utterance).
-  uint32_t wwStartUs = (uint32_t)esp_timer_get_time();
   if (wakewordReady) {
     uint16_t wwFeatures[WakewordFeatures::kFramesPerInference][WakewordFeatures::kNumChannels];
     if (wakewordFeatures.pushSamples(pcmBuf, samples, wwFeatures)) {
@@ -1244,7 +1253,7 @@ void loop() {
     }
   }
 
-  uint32_t wwUs = (uint32_t)esp_timer_get_time() - wwStartUs;
+  wwUs = (uint32_t)esp_timer_get_time() - wwStartUs;
   if (wwUs > loopWwUsMax) loopWwUsMax = wwUs;
 
   // preRoll: ghi vòng liên tục trong lúc LISTENING, luôn giữ PREROLL_FRAMES khung gần nhất.
