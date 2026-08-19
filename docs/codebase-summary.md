@@ -7,7 +7,7 @@
 ```
 esp32-presence-ac/
 ├── backend/           Go server: REST API, MQTT subscriptions, state machine, SQLite history
-├── firmware/          PlatformIO: 4 node binaries (radar-node, voice-node, door-node, room-node)
+├── firmware/          PlatformIO: 2 node binaries (radar-node ESP-IDF, voice-node arduino+espidf)
 ├── app/               Flutter Android: 5-tab UI, Riverpod state mgmt
 ├── asr/               Python FastAPI: Whisper-based transcription service
 ├── hardware/          OpenSCAD enclosure designs + collision-check scripts
@@ -70,16 +70,30 @@ Tests cover:
 
 ## Firmware (`firmware/`)
 
-**Framework**: PlatformIO, Arduino core
+**Framework**: PlatformIO, platform pioarduino 55.03.311 (ESP-IDF 5.5.5) ghim ở cả hai node —
+radar-node dùng `framework = espidf` thuần, voice-node dùng `framework = arduino, espidf`
 
 ### Node Map
 
 | Node | MCU | Purpose | Env |
 |------|-----|---------|-----|
-| **radar-node** | ESP32-S2 Mini | LD2410C radar → MQTT presence/motion | `lolin_s2_mini` / `lolin_s2_mini_ota` |
+| **radar-node** | ESP32-S2 Mini | LD2410C radar → MQTT presence/motion (ESP-IDF thuần) | `lolin_s2_mini` / `lolin_s2_mini_ota` |
 | **voice-node** | ESP32-S3-DevKitC-1 N16R8 | INMP441 mic + wakeword + state machine + IR Daikin + MQTT sub | `esp32s3_kws` (+ `esp32s3_kws_ota`) |
-| **door-node** | ESP32-S2 | PIR interrupt → MQTT motion | `lolin_s2_mini` |
-| **room-node** | ESP32-S2 | LD2410C (no WiFi) → ESP-NOW to voice-node | (No OTA/MQTT) |
+
+### radar-node Details
+
+ESP-IDF thuần từ 2026-08-18 (trước đó Arduino). Không còn thư viện Arduino nào — parser LD2410,
+WiFi, MQTT, OTA đều là component IDF hoặc code trong repo:
+
+| File | Vai trò |
+|------|---------|
+| `src/main.c` | `app_main` + luật presence (hold 300ms / debounce 30s) + toàn bộ publish MQTT |
+| `src/ld2410.c` | Parser khung UART LD2410 (port 1:1 từ thư viện `ncmreynolds/ld2410` cũ), task đọc nền |
+| `src/net.c` | WiFi STA tự nối lại + SNTP + mDNS |
+| `src/ota.c` | Endpoint HTTP `POST /update` — thay ArduinoOTA/espota (IDF thuần không có phía thiết bị) |
+
+`sdkconfig.defaults` + `partitions.csv` (4MB, hai khe OTA 1984KB) nằm trong project để bố cục không
+đổi khi platform cập nhật.
 
 ### voice-node Details
 
@@ -93,14 +107,10 @@ Tests cover:
   queue — `sendBIN()` blocks for seconds when TCP stalls, and in `loop()` that stalled
   `i2s_read()` too (see `docs/voice-node-snore-wakeword-architecture.md`)
 
-**Fallback target**: `esp32dev` (WROOM-32)
-- Kept as escape hatch if S3 experiment breaks WiFi
-- Same logic, different GPIO map
-
-**Experimental target**: `esp32s3_kws` (wakeword inference)
+**Chỉ còn một env**: `esp32s3_kws` (+ `esp32s3_kws_ota`). Các env đường lui (`esp32dev` WROOM-32,
+`esp32s3` VAD, `esp32s3_record` thu mẫu) bỏ 2026-08-18 sau khi đường wakeword chạy ổn định
 - Platform: Arduino + ESP-IDF hybrid (pioarduino 55.03.311)
 - Reason: esp-nn SIMD for wakeword model inference (50ms→5.4ms)
-- State: **Compiles & boots, model not yet wired into loop**
 - Risk: MFCC feature extraction must match Python training exactly
 
 ### Shared Config Pattern

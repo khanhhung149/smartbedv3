@@ -140,3 +140,7 @@ hardware/vo-so-*.png
 # Bản đã lắp chỉ để xem, không in
 hardware/vo-hop-LAP-RAP-xem-thoi.stl
 backend/bin/
+
+# Dữ liệu runtime của backend (SQLite lịch sử event, mẫu seed từ CSV).
+# Sinh ra lúc chạy, không phải nguồn — mỗi máy một bản.
+backend/data/

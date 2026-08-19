@@ -1,21 +1,23 @@
 # System Wiring — Physical GPIO Pinout & Hazards
 
-**Last Updated**: 2026-08-10  
+**Last Updated**: 2026-08-18  
 **Scope**: Physical hardware assembly only — GPIO pins, power connections, soldering hazards, electrical constraints. For software architecture (MQTT topics, state machines, API contracts), see [`docs/system-architecture.md`](./system-architecture.md).
 
 ---
 
 ## What Changed from Previous Doc
 
-The old `docs/system-wiring.md` (2026-07-24 rev4) claimed:
-- **"2 boards WiFi + shared power (S2 was board source)"** → **Now 4 independent boards, each own USB-C**
-- **"PIR removed from system"** → **WRONG**. Door-node added 2026-07-15 with PIR on GPIO7, still active
+The old `docs/system-wiring.md` (2026-07-24 rev4) claimed **"2 boards WiFi + shared power (S2 was
+board source)"** — power is now independent per board, which is the part that still matters.
 
-This is a **full rewrite**, not a patch. If returning from git history, ignore the old topology.
+Board count went 2 → 4 → 2 again: `room-node` (ESP-NOW relay) and `door-node` (PIR) were retired
+2026-08-18 and their firmware deleted. Presence comes from `radar-node` alone, motion from its
+LD2410 UART. If returning from git history, ignore both the old shared-power topology and the
+4-board one.
 
 ---
 
-## System Overview: 4 Independent ESP32 Boards
+## System Overview: 2 Independent ESP32 Boards
 
 Each board runs on its own USB-C power. **No hardwired inter-board power sharing** (old 2-board shared 5V is gone).
 
@@ -23,8 +25,6 @@ Each board runs on its own USB-C power. **No hardwired inter-board power sharing
 |-------|---|---|---|---|
 | **voice-node** | ESP32-S3-DevKitC-1 N16R8 | INMP441 mic, IR transmitter | USB-C 5V | WiFi + MQTT (audio to backend WS) |
 | **radar-node** | Wemos S2 Mini | LD2410C radar | USB-C 5V | WiFi + MQTT (native UART to sensor) |
-| **room-node** | Wemos S2 Mini | LD2410C radar | USB-C 5V | **No WiFi** — ESP-NOW only to voice-node |
-| **door-node** | Wemos S2 Mini | PIR sensor | USB-C 5V | WiFi + MQTT |
 
 ---
 
@@ -90,7 +90,7 @@ WROOM-32 used GPIO26/25/34 — all forbidden on S3. Pins 5/6/7 are safe across a
 
 ### Board 2: Radar-Node (Wemos S2 Mini, ESP32-S2)
 
-**Source**: `firmware/radar-node/src/main.cpp` lines 1–38  
+**Source**: `firmware/radar-node/src/main.c` lines 1–22 (ESP-IDF thuần) + `src/ld2410.c` (parser UART)  
 **Sensor**: LD2410C 24GHz millimeter-wave radar
 
 #### LD2410C Wiring
@@ -106,50 +106,10 @@ WROOM-32 used GPIO26/25/34 — all forbidden on S3. Pins 5/6/7 are safe across a
 **UART Baud**: 256000 (firmware config matches sensor default)
 
 **Protocol**:
-- ON boot, firmware initializes UART and sends config commands to radar
+- On boot, firmware opens the UART read-only — it never sends config commands (radar keeps its own settings)
 - Firmware reads **both** OUT pin (debounced) and UART (for distance/energy) as presence signal
 - UART failure: ON pin still works, only loses distance/energy diagnostics
 - GPIO16 failure: firmware stops reporting presence entirely
-
----
-
-### Board 3: Room-Node (Wemos S2 Mini, ESP32-S2)
-
-**Source**: `firmware/room-node/src/main.cpp` lines 1–69  
-**Sensor**: LD2410C (identical to radar-node)
-
-**Wiring is IDENTICAL to radar-node** (same LD2410C pinout). **Difference is 100% firmware**:
-- **radar-node**: WiFi + MQTT, publishes to broker
-- **room-node**: No WiFi, no MQTT, no OTA. Uses ESP-NOW to relay presence to voice-node only.
-
-**Tradeoff** (user decision 2026-07-17):
-- No WiFi → No OTA (USB-only flashing: hold BOOT pin, tap RST, `pio run -t upload`)
-- No WiFi → No NTP (no real-time clock) → voice-node timestamps all events
-
-**ESP-NOW Channel Hazard**:
-- voice-node stays on WiFi (audio, MQTT, OTA) → radio locked to router's WiFi channel
-- room-node cannot change that channel with ESP-NOW → must scan SSIDs to find matching channel
-- **Wrong channel = packets vanish silently, no error logged**
-
----
-
-### Board 4: Door-Node (Wemos S2 Mini, ESP32-S2)
-
-**Source**: `firmware/door-node/src/main.cpp` lines 1–8
-
-#### PIR Motion Sensor Wiring
-
-| PIR Pin | → S2 GPIO | Notes |
-|---|---|---|
-| **VCC** (power) | **3V3** | PIR modules are 3.3V-compatible |
-| **OUT** (motion high) | **GPIO7** | HIGH when motion detected |
-| **GND** | **GND** | |
-
-**Power**: USB-C 5V (board uses on-board LDO to supply 3.3V to PIR)
-
-**GPIO7 Status**: Firmware comment notes *"XÁC NHẬN pinout board thật trước khi hàn"* (verify against real board before soldering). GPIO7 is **not** an S2 strapping pin (S2 strapping: GPIO0, 3, 45, 46), but verify board variant before committing to soldering.
-
-**Important Note**: The old doc (2026-07-24) incorrectly stated **"PIR removed from system"** and marked GPIO27 unused. This is **stale and wrong**. Door-node has used PIR since 2026-07-15 (commit `3fc5875`) and remains active in current architecture. Do not re-introduce the old belief.
 
 ---
 
@@ -177,7 +137,7 @@ Old design (2026-07-24): S2 sourced 5V to WROOM via shared wire.
 - **NEVER** tie multiple boards' 5V rails together (will cause diode conflicts, slow brownout, watchdog reset).
 - Each board has its own USB-C with dedicated charger or hub. Minimum 2A per port for stable 5V.
 - GND is **not** shared between boards (each is isolated by its USB hub's GND).
-- If sensing shared signals across boards (e.g., room-node reading LD2410 and relaying via ESP-NOW to voice-node), only the **signal GPIO** travels; power stays isolated.
+- If a signal ever crosses boards, only the **signal GPIO** travels; power stays isolated.
 
 ---
 
@@ -280,16 +240,16 @@ Each board has USB (TTL) for initial flashing and a fallback OTA path (WiFi).
 
 ```bash
 # USB (first time or fallback)
-pio run -e esp32s3 -t upload
+pio run -e esp32s3_kws -t upload
 
 # OTA (after WiFi configured)
 export OTA_PASSWORD='...'  # from include/config.h
-pio run -e esp32s3_ota -t upload
+pio run -e esp32s3_kws_ota -t upload
 ```
 
 **USB caveat**: Board has two USB-C ports (TTL and OTA native). **Plug into TTL port only** (the one labeled TTL or next to the CH340 chip). Native USB port causes re-enumeration on every reset (known issue with S3-CAM).
 
-### Radar-Node & Door-Node (Wemos S2 Mini)
+### Radar-Node (Wemos S2 Mini)
 
 ```bash
 # USB (first time or fallback)
@@ -300,18 +260,12 @@ export OTA_PASSWORD='...'
 pio run -e lolin_s2_mini_ota -t upload
 ```
 
+**OTA path differs from voice-node**: radar-node runs plain ESP-IDF, which has no espota receiver.
+The `_ota` env POSTs `firmware.bin` to the board's own HTTP endpoint instead (`curl`, see
+`upload_command` in `platformio.ini` and `firmware/radar-node/src/ota.c`). `curl` must be on PATH.
+`curl http://radar-node.local/` answers with the running build's version — a quick liveness check.
+
 **S2 USB caveat**: Native USB port re-enumerates on reset (`ttyACM0` → `ttyACM1`). On WSL, use `usbipd attach --wsl --auto-attach --busid <id>` for auto re-attach. First upload may fail; running again usually succeeds.
-
-### Room-Node (Wemos S2 Mini, No WiFi)
-
-```bash
-# USB only (no OTA — board has no WiFi)
-pio run -e lolin_s2_mini -t upload
-```
-
-No OTA available. To update firmware, must hold BOOT pin, tap RST, then flash via USB.
-
----
 
 ## Verification Checklist After Soldering
 
@@ -329,31 +283,15 @@ No OTA available. To update firmware, must hold BOOT pin, tap RST, then flash vi
 
 ---
 
-## Radar-Node Self-Test Firmware
-
-`firmware/radar-node/platformio.ini` includes an `env:selftest` configuration that builds only `src/selftest.cpp`. Use this to isolate UART/GPIO issues:
-
-```bash
-pio run -e selftest -t upload
-```
-
-This mode scans through multiple baud rates and GPIO configurations to diagnose LD2410 connectivity independent of the main firmware. Useful for:
-- Verifying LD2410 module is powered and responsive
-- Checking UART wiring (TX/RX not swapped)
-- Testing GPIO16 (OUT pin) pullup/pulldown
-
----
-
 ## Related Documentation
 
 - **`docs/system-architecture.md`**: Logical architecture, MQTT topics, state machines, API contracts (software view)
 - **`firmware/voice-node/src/main.cpp`** (lines 1–68): Full hardware comments and strapping pin explanation
-- **`firmware/radar-node/src/main.cpp`** (lines 1–38): LD2410 UART protocol and GPIO layout
-- **`firmware/room-node/src/main.cpp`** (lines 1–69): ESP-NOW relay, channel scanning, tradeoffs
-- **`firmware/door-node/src/main.cpp`** (lines 1–19): PIR configuration and boot note
+- **`firmware/radar-node/src/main.c`** (lines 1–22): GPIO layout and presence rules
+- **`firmware/radar-node/src/ld2410.c`**: LD2410 UART frame format, offset by offset
 - **`plans/260810-0843-voice-node-wakeword-gate/phase-01-*`**: IR module verification (diymore PCB0100 specs, 2026-08-10)
 
 ---
 
-**Last verified**: 2026-08-10 by reading all firmware source files  
+**Last verified**: 2026-08-18 by reading all firmware source files  
 **Status**: Reflects current git HEAD (`master` branch)
