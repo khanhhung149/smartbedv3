@@ -14,17 +14,25 @@ from pydantic import BaseModel, Field, ValidationError
 
 class SecDataPayload(BaseModel):
     device_id: str = Field(min_length=1, max_length=32)
-    ts: int = Field(ge=0)                       # unix seconds
+    ts: int = Field(ge=0)                       # unix seconds — gắn tại MCU (NTP sync)
+    ts_pad: int | None = Field(default=None, ge=0)  # mốc pad báo trong frame (có thể lệch)
     status: int = Field(ge=0, le=255)
     heart_rate: int = Field(ge=0, le=255)
     resp_rate: float = Field(ge=0, le=100)
     sdata: int = Field(ge=0, le=65535)
     pdata: int = Field(ge=0, le=65535)
+    uart_ok: bool = Field(default=True)         # cờ lỗi: False = mẫu không hợp lệ
+
+    # Doanh nghiệp suy ra từ trường raw: heart_rate = 0 là dropout pad báo (đánh dấu lỗi).
+    @property
+    def on_bed(self) -> bool:
+        return self.status != 0 or self.heart_rate > 0 or self.resp_rate > 0
 
 
 class MinDataPayload(BaseModel):
     device_id: str = Field(min_length=1, max_length=32)
     ts: int = Field(ge=0)
+    ts_pad: int | None = Field(default=None, ge=0)
     status: int = Field(ge=0, le=255)
     heart_rate: int = Field(ge=0, le=255)
     resp_rate: float = Field(ge=0, le=100)
@@ -33,6 +41,7 @@ class MinDataPayload(BaseModel):
     resp_disorder: int = Field(ge=0, le=65535)
     pthd: int = Field(ge=0, le=255)
     temp: float = Field(ge=0, le=60)
+    uart_ok: bool = Field(default=True)
 
 
 class EnvDataPayload(BaseModel):

@@ -47,6 +47,15 @@ class Settings(BaseSettings):
     # Contact form destination
     contact_to_email: str = "hi@sleeptech.me"
 
+    # Sleep-session boundaries, from the Legact Pro V2 protocol PDF p.2. Kept
+    # configurable because the on-bed rule (hr>0 OR rr>0) is an inference: the
+    # protocol says 0 also means "could not be computed", so a noisy sensor can
+    # look like an empty bed. Expect to retune these against a real night.
+    session_open_seconds: int = 30
+    session_close_seconds: int = 1800
+    session_max_minutes: int = 1440
+    session_tick_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

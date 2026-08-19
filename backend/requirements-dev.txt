@@ -1,0 +1,5 @@
+# Dev-only. Not installed into the app image (app/Dockerfile uses app/requirements.txt).
+# Deliberately minimal: sessions/rules.py is pure functions, so the tests here need
+# no database, no fixtures, and no conftest. A fuller harness (conftest + docker
+# fixtures) is being built on branch feat/ws-user-combined — do not duplicate it.
+pytest==8.3.4

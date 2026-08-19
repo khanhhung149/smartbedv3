@@ -38,9 +38,50 @@ cp .env.prod.example .env.prod
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.prod up -d
 ```
 
+## Applying schema changes
+
+`postgres/init.sql` is mounted into `/docker-entrypoint-initdb.d`, which Postgres
+runs **only when the data volume is empty**. A database that already holds data
+never sees a new schema file that way — that is how `postgres/smart_watch_data.sql`
+ended up with no way to reach a running database.
+
+Use the script instead. Every statement in every schema file is `IF NOT EXISTS`,
+so it is safe to re-run:
+
+```bash
+cd backend
+set -a && source .env.dev && set +a
+bash scripts/apply-schema.sh
+```
+
+It applies, in order: `init.sql` → `smart_watch_data.sql` → `sleep_sessions.sql` → `samples.sql`.
+**Add every new schema file to the loop in that script**, not just to `postgres/`.
+
+Target container defaults to `sleeppad-postgres`; override with `POSTGRES_CONTAINER`.
+
+## Phase 01 — canonical samples + dashboard
+
+- **Bảng `samples`** (`postgres/samples.sql`): dòng chuẩn đúng 9 cột CSV take-home
+  (`t, presence, hr_bpm, resp_amplitude, motion, weight_kg, spo2, temp_c, humidity`)
+  + kênh raw của pad (status, sdata, pdata, movement, snore_count, resp_disorder, pthd,
+  body_temp) + nhiệt độ/độ ẩm môi trường + cờ `uart_ok`. `t` = epoch do **MCU** gắn
+  (payload `ts`), không phải server now(). Subscriber ghép kênh 1/phút + /temp vào mẫu
+  sec qua cache per-device để không mất kênh nào.
+- **Retention:** `add_retention_policy('samples', INTERVAL '30 days')` — giữ 30 đêm;
+  chunk cũ hơn 1 ngày được nén. Quét tự động bởi TimescaleDB.
+- **Dashboard local:** `/dashboard/` — realtime 2 phút + xem lại một đêm
+  (`?device=CNU...&token=<JWT>` hoặc nhập trên trang). Trang gọi
+  `GET /data/{device_id}/samples?from=&to=` (JWT trong Authorization header, cửa sổ ≤ 48h).
+
+```bash
+# ví dụ — lấy 1 giờ mẫu gần nhất
+curl -H "Authorization: Bearer $JWT" \
+  'http://localhost:8000/data/CNUXXXXXXXX/samples?from=2026-08-18T12:00:00Z&to=2026-08-18T13:00:00Z'
+```
+
 ## Services
 
-- `postgres` — TimescaleDB (PostgreSQL 16 + timescaledb extension). Schema auto-loaded from `postgres/init.sql`.
+- `postgres` — TimescaleDB (PostgreSQL 16 + timescaledb extension). Schema from `postgres/*.sql` — see *Applying schema changes* above.
 - `redis` — Pub/sub for realtime WebSocket fan-out + online status cache.
 - `mosquitto` — MQTT broker. Dev: anon TCP 1883 + WS 9001. Prod: auth WS 9001 (TLS via cloudflared).
 - `fastapi` — Application server + MQTT subscriber + alert engine. Port 8000.
@@ -61,6 +102,10 @@ backend/
 │   ├── mosquitto-prod.conf      auth WS
 │   └── passwords.example        example passwords file layout
 ├── postgres/init.sql            schema + TimescaleDB hypertables
+├── postgres/sleep_sessions.sql  sleep_sessions table + sec/min received_at
+├── postgres/samples.sql         canonical samples (CSV schema) + retention 30 ngày
+├── app/static/dashboard.html    dashboard local web (realtime + xem lại một đêm)
+├── scripts/apply-schema.sh      apply every postgres/*.sql to a running DB
 └── scripts/
     └── setup-mosquitto-passwords.sh   generate mosquitto passwords file for prod
 ```

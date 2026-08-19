@@ -31,6 +31,7 @@ from data.models import (
 from data.service import (
     get_history,
     get_latest_sec,
+    get_samples,
     get_sync_data,
     get_user_device_ids,
     get_watch_snapshot,
@@ -73,6 +74,32 @@ async def history(
         range=range,
         points=[HistoryPoint(**r) for r in rows],
     )
+
+
+@router.get("/data/{device_id}/samples")
+async def samples(
+    device_id: str,
+    from_time: datetime = Query(alias="from"),
+    to_time: datetime = Query(alias="to"),
+    user_id=Depends(get_current_user_id),
+    pool: asyncpg.Pool = Depends(get_db_pool_from_request),
+) -> dict:
+    """Raw 1Hz samples (bảng chuẩn CSV take-home) trong cửa sổ [from, to).
+
+    Dashboard local "xem lại một đêm". Cửa sổ tối đa 48h để không kéo nguyên bảng.
+    """
+    if not await user_can_access_device(pool, user_id, device_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
+    if from_time.tzinfo is None:
+        from_time = from_time.replace(tzinfo=timezone.utc)
+    if to_time.tzinfo is None:
+        to_time = to_time.replace(tzinfo=timezone.utc)
+    if from_time > to_time:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "from must be before to")
+    if (to_time - from_time).total_seconds() > 48 * 3600:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "window max 48h")
+    rows = await get_samples(pool, device_id, from_time, to_time)
+    return {"device_id": device_id, "from": from_time, "to": to_time, "samples": rows}
 
 
 @router.get("/data/sync", response_model=SyncDataResponse)

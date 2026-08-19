@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sleep Pad Dashboard — Phase 01</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { opacity: .7; font-size: 13px; margin-bottom: 12px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  .controls input { font-size: 13px; padding: 3px 6px; }
+  .controls label { font-size: 13px; display: flex; align-items: center; gap: 4px; }
+  button { font-size: 13px; padding: 4px 10px; }
+  .status { font-size: 13px; margin-bottom: 8px; }
+  .ok { color: #16a34a; } .bad { color: #dc2626; }
+  canvas { max-width: 100%; }
+  .card { margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 6px; }
+</style>
+</head>
+<body>
+  <h1>Sleep Pad — 1Hz samples (bảng CSV chuẩn)</h1>
+  <div class="sub">Dashboard local (Jetson). Kênh: t, presence, hr_bpm, resp_amplitude, motion, weight_kg, spo2, temp_c, humidity + raw (sdata, pdata, movement, snore_count, temp môi trường).</div>
+
+  <div class="controls">
+    <label>Device: <input id="device" size="12" placeholder="CNUxxxxxxxx"></label>
+    <label>Token: <input id="token" size="40" placeholder="JWT"></label>
+    <label>Ngày (đêm): <input type="date" id="date"></label>
+    <label><input type="checkbox" id="live" checked> Realtime (2 phút cuối)</label>
+    <button id="load">Xem lại đêm</button>
+  </div>
+
+  <div class="status" id="status">Điền device + token rồi bấm Xem lại đêm (hoặc bật Realtime).</div>
+
+  <div class="card"><h2>Presence (trên giường)</h2><canvas id="c-presence" height="80"></canvas></div>
+  <div class="card"><h2>hr_bpm (0 = dropout)</h2><canvas id="c-hr" height="140"></canvas></div>
+  <div class="card"><h2>resp_amplitude (resp_rate)</h2><canvas id="c-rr" height="100"></canvas></div>
+  <div class="card"><h2>Nhiệt độ môi trường (°C) + độ ẩm (%)</h2><canvas id="c-env" height="100"></canvas></div>
+  <div class="card"><h2>Movement / Snore count (kênh 1/phút)</h2><canvas id="c-move" height="90"></canvas></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const fmt = t => new Date(t).toLocaleString('vi-VN');
+const colors = { presence:'#16a34a', hr:'#dc2626', rr:'#2563eb', temp:'#f59e0b', humi:'#06b6d4', move:'#9333ea', snore:'#64748b' };
+
+const charts = {};
+function mk(id, yTitle) {
+  charts[id] = new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [] },
+    options: {
+      animation: false,
+      spanGaps: true,
+      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { x: { ticks: { font: { size: 10 } } },
+                y: { title: { display: true, text: yTitle, font: { size: 11 } } } }
+    }
+  });
+}
+function setData(id, labels, datasets) {
+  const c = charts[id];
+  c.data.labels = labels; c.data.datasets = datasets; c.update();
+}
+function series(name, data, color) {
+  return { label: name, data, borderColor: color, borderWidth: 1.2, pointRadius: 0, tension: 0 };
+}
+function downsample(labels, xs, max) {
+  if (labels.length <= max) return { labels, xs };
+  const step = Math.ceil(labels.length / max);
+  const ol = [], ox = [];
+  for (let i = 0; i < labels.length; i += step) { ol.push(labels[i]); ox.push(xs[i]); }
+  return { labels: ol, xs: ox };
+}
+
+async function fetchSamples(device, token, fromMs, toMs) {
+  const q = `from=${new Date(fromMs).toISOString()}&to=${new Date(toMs).toISOString()}`;
+  const r = await fetch(`/data/${device}/samples?${q}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()));
+  const j = await r.json();
+  return j.samples || [];
+}
+
+function render(samples) {
+  const labels = samples.map(s => fmt(new Date(s.t).getTime()));
+  const n = samples.length;
+  const status = document.getElementById('status');
+  if (n === 0) { status.textContent = 'Không có mẫu trong khoảng này.'; return; }
+  const nBad = samples.filter(s => s.hr_bpm === 0 && s.uart_ok === false).length;
+  const nDropout = samples.filter(s => s.hr_bpm === 0).length;
+  status.innerHTML = `${n.toLocaleString('vi-VN')} mẫu · ${fmt(new Date(samples[0].t).getTime())} → ${fmt(new Date(samples[n-1].t).getTime())}` +
+    (nDropout ? ` · <span class="bad">${nDropout} mẫu hr=0 (dropout)</span>` : ' · <span class="ok">hr OK</span>');
+
+  const p = downsample(labels, samples.map(s => s.presence ? 1 : 0), 2000);
+  setData('c-presence', p.labels, [series('presence', p.xs, colors.presence)]);
+
+  const h = downsample(labels, samples.map(s => s.hr_bpm), 2000);
+  setData('c-hr', h.labels, [series('hr_bpm', h.xs, colors.hr)]);
+
+  const r = downsample(labels, samples.map(s => s.resp_amplitude), 2000);
+  setData('c-rr', r.labels, [series('resp_rate', r.xs, colors.rr)]);
+
+  const t = downsample(labels, samples.map(s => s.temp_c), 2000);
+  const u = downsample(labels, samples.map(s => s.humidity), 2000);
+  setData('c-env', t.labels, [
+    series('temp_c', t.xs, colors.temp),
+    series('humidity', u.xs, colors.humi),
+  ]);
+
+  const m = downsample(labels, samples.map(s => s.movement), 2000);
+  const sn = downsample(labels, samples.map(s => s.snore_count), 2000);
+  setData('c-move', m.labels, [
+    series('movement', m.xs, colors.move),
+    series('snore_count', sn.xs, colors.snore),
+  ]);
+}
+
+let liveTimer = null;
+function startLive() {
+  stopLive();
+  liveTimer = setInterval(async () => {
+    const device = document.getElementById('device').value.trim();
+    const token = document.getElementById('token').value.trim();
+    if (!device) return;
+    try {
+      const now = Date.now();
+      const samples = await fetchSamples(device, token, now - 120_000, now);
+      if (samples.length) render(samples);
+      document.getElementById('status').textContent = 'Realtime: ' + new Date().toLocaleTimeString('vi-VN');
+    } catch (e) {
+      document.getElementById('status').textContent = 'Realtime lỗi: ' + e.message;
+    }
+  }, 2000);
+}
+function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+
+async function loadNight() {
+  stopLive();
+  const device = document.getElementById('device').value.trim();
+  const token = document.getElementById('token').value.trim();
+  if (!device) { document.getElementById('status').textContent = 'Cần device id.'; return; }
+  const d = document.getElementById('date').value || new Date().toISOString().slice(0,10);
+  const start = new Date(d + 'T12:00:00');   // đêm: 12:00 trưa trước → 12:00 trưa nay
+  const end = new Date(start.getTime() + 24*3600*1000);
+  const status = document.getElementById('status');
+  status.textContent = 'Đang tải đêm ' + d + '…';
+  try {
+    const samples = await fetchSamples(device, token, start.getTime(), end.getTime());
+    render(samples);
+  } catch (e) {
+    status.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+document.getElementById('load').addEventListener('click', loadNight);
+document.getElementById('live').addEventListener('change', e => e.target.checked ? startLive() : stopLive());
+
+function init() {
+  mk('c-presence', 'presence');
+  mk('c-hr', 'bpm');
+  mk('c-rr', 'lần/phút');
+  mk('c-env', '°C / %');
+  mk('c-move', 'count');
+  document.getElementById('date').value = new Date().toISOString().slice(0,10);
+  // Đọc device/token từ query ?device=...&token=... cho tiện
+  const q = new URLSearchParams(location.search);
+  if (q.get('device')) document.getElementById('device').value = q.get('device');
+  if (q.get('token')) document.getElementById('token').value = q.get('token');
+  if (document.getElementById('device').value && document.getElementById('live').checked) startLive();
+}
+init();
+</script>
+</body>
+</html>

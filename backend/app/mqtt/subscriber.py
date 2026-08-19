@@ -26,7 +26,7 @@ import asyncpg
 import redis.asyncio as redis
 
 from config import get_settings
-from mqtt.parser import device_id_from_topic, parse_env, parse_min, parse_sec
+from mqtt.parser import device_id_from_topic, parse_env, parse_min, parse_sec, to_timestamptz
 from redis_client import PAIRED_DEVICES_KEY, online_key
 
 logger = logging.getLogger(__name__)
@@ -116,12 +116,14 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
         if payload is None or payload.device_id != device_id:
             return
         await _insert_sec(pool, now, payload)
+        await _insert_sample(pool, device_id, payload, _latest_motion(device_id), _latest_env(device_id))
         await _mark_online(pool, rds, device_id, now)
         await rds.publish(f"realtime:{device_id}", payload.model_dump_json())
     elif topic.endswith("/min"):
         payload = parse_min(msg.payload)
         if payload is None or payload.device_id != device_id:
             return
+        _cache_motion(device_id, payload)
         await _insert_min(pool, now, payload)
         await _mark_online(pool, rds, device_id, now)
         # Also forward min frames to the realtime channel so the app can show
@@ -133,6 +135,7 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
         payload = parse_env(msg.payload)
         if payload is None or payload.device_id != device_id:
             return
+        _cache_env(device_id, payload)
         await _mark_online(pool, rds, device_id, now)
         # Forward ambient temp + humidity on the realtime channel using distinct
         # keys so they don't collide with MinData.temp (body temp). /ws/user maps
@@ -170,27 +173,35 @@ async def _is_paired(pool: asyncpg.Pool, rds: redis.Redis, device_id: str) -> bo
 
 
 async def _insert_sec(pool: asyncpg.Pool, ts: datetime, p) -> None:
+    # received_at is stamped here, not by the device: the pad clock drifts and the
+    # firmware never sends the 0x0B sync frame, so `time` (device ts) is unreliable.
+    # Readers use COALESCE(received_at, time) — rows written before this column
+    # existed keep received_at NULL and are not backfilled.
     await pool.execute(
         """
-        INSERT INTO sec_data (time, device_id, status, heart_rate, resp_rate, sdata, pdata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO sec_data
+          (time, device_id, status, heart_rate, resp_rate, sdata, pdata, received_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
         ts, p.device_id, p.status,
         p.heart_rate, p.resp_rate, p.sdata, p.pdata,
+        datetime.now(timezone.utc),
     )
 
 
 async def _insert_min(pool: asyncpg.Pool, ts: datetime, p) -> None:
+    # See _insert_sec for why received_at exists.
     await pool.execute(
         """
         INSERT INTO min_data
           (time, device_id, status, heart_rate, resp_rate,
-           movement, snore_count, resp_disorder, pthd, temp)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           movement, snore_count, resp_disorder, pthd, temp, received_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         """,
         ts, p.device_id, p.status,
         p.heart_rate, p.resp_rate, p.movement,
         p.snore_count, p.resp_disorder, p.pthd, p.temp,
+        datetime.now(timezone.utc),
     )
 
 
@@ -203,3 +214,62 @@ async def _mark_online(
     except Exception as exc:  # noqa: BLE001
         logger.warning("redis online set failed: %s", exc)
     await pool.execute("UPDATE devices SET last_seen = $1 WHERE id = $2", ts, device_id)
+
+
+# ---------------------------------------------------------------------------
+# Canonical samples (Phase 01) — schema khớp CSV take-home
+# ---------------------------------------------------------------------------
+# Pad là master đẩy 1Hz; các kênh chỉ có ở frame 0x86 (1/phút) và /temp được ghép vào
+# mẫu sec qua cache per-device để 1 dòng samples = đủ TẤT CẢ kênh (không mất kênh nào).
+# `t` dùng MCU timestamp (payload.ts) chứ không phải server now() — đúng yêu cầu framework
+# "timestamp gắn tại thiết bị". received_at vẫn lưu để đối chiếu độ lệch đồng hồ.
+_latest_motion_cache: dict[str, "MinDataPayload"] = {}
+_latest_env_cache: dict[str, "EnvDataPayload"] = {}
+
+
+def _cache_motion(device_id: str, p) -> None:
+    _latest_motion_cache[device_id] = p
+
+
+def _cache_env(device_id: str, p) -> None:
+    _latest_env_cache[device_id] = p
+
+
+def _latest_motion(device_id: str):
+    return _latest_motion_cache.get(device_id)
+
+
+def _latest_env(device_id: str):
+    return _latest_env_cache.get(device_id)
+
+
+async def _insert_sample(pool: asyncpg.Pool, device_id: str, sec, min_p, env_p) -> None:
+    """Ghi 1 dòng samples (bảng chuẩn CSV) cho frame sec 0x85 vừa nhận."""
+    # t = MCU timestamp (epoch giây) nếu hợp lệ, nếu không dùng received_at.
+    ts = to_timestamptz(sec.ts) if sec.ts > 0 else datetime.now(timezone.utc)
+    # presence: pad không có chân OUT — suy từ status/hr/rr (cả ba = 0 thì vắng).
+    presence = sec.on_bed
+    # Các kênh 1/phút lấy từ cache min gần nhất (movement, snore_count, resp_disorder...).
+    movement = min_p.movement if min_p else None
+    snore = min_p.snore_count if min_p else None
+    resp_disorder = min_p.resp_disorder if min_p else None
+    pthd = min_p.pthd if min_p else None
+    body_temp = (min_p.temp / 10.0) if min_p and min_p.temp else None
+    # Kênh môi trường từ topic /temp.
+    env_temp = env_p.temp if env_p else None
+    humidity = env_p.humi if env_p else None
+
+    await pool.execute(
+        """
+        INSERT INTO samples
+          (t, device_id, presence, hr_bpm, resp_amplitude, motion,
+           weight_kg, spo2, temp_c, humidity,
+           status, sdata, pdata, movement, snore_count, resp_disorder, pthd, body_temp,
+           uart_ok, ts_pad, received_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        """,
+        ts, device_id, presence, sec.heart_rate, sec.resp_rate,
+        movement, None, None, env_temp, humidity,
+        sec.status, sec.sdata, sec.pdata, movement, snore, resp_disorder, pthd, body_temp,
+        sec.uart_ok, sec.ts_pad, datetime.now(timezone.utc),
+    )

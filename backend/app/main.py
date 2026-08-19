@@ -11,6 +11,8 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from alerts.engine import run_alert_engine
 from alerts.router import router as alerts_router
@@ -23,6 +25,8 @@ from devices.service import warm_paired_cache
 from fcm import init_fcm
 from mqtt.subscriber import run_subscriber
 from redis_client import redis_lifespan
+from sessions.builder import run_session_builder
+from sessions.router import router as sessions_router
 from sharing.router import router as sharing_router
 from watch.router import router as watch_router
 from watch.worker import run_watch_data_worker
@@ -60,7 +64,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             run_watch_data_worker(pool, app.state.redis, stop_event),
             name="watch-data-worker",
         )
-        stack.push_async_callback(_stop_tasks, stop_event, [mqtt_task, alerts_task, watch_task])
+        sessions_task = asyncio.create_task(
+            run_session_builder(pool, app.state.redis, stop_event),
+            name="session-builder",
+        )
+        # Every task created above must appear here, or shutdown leaves it
+        # running and asyncio reports it as never retrieved.
+        stack.push_async_callback(
+            _stop_tasks, stop_event,
+            [mqtt_task, alerts_task, watch_task, sessions_task],
+        )
 
         yield
 
@@ -83,16 +96,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_PROD_ORIGINS = [
+    "https://sleeptech.me",
+    "https://www.sleeptech.me",
+    "http://localhost:5173",
+    "http://localhost:4173",
+]
+
+# The Flutter web client sends its JWT in an Authorization header and is served
+# from whatever port the dev server picked that run, so neither the fixed origin
+# list nor the header list can accommodate it. Both are widened for dev only —
+# ENV is set per environment file, and prod keeps exactly the list above.
+_is_dev = os.getenv("ENV", "").lower() == "dev"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://sleeptech.me",
-        "https://www.sleeptech.me",
-        "http://localhost:5173",
-        "http://localhost:4173",
-    ],
+    allow_origins=_PROD_ORIGINS,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?$" if _is_dev else None,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"] if _is_dev else ["Content-Type"],
     allow_credentials=False,
 )
 
@@ -103,6 +125,16 @@ app.include_router(alerts_router)
 app.include_router(sharing_router)
 app.include_router(contact_router)
 app.include_router(watch_router)
+app.include_router(sessions_router)
+
+# Dashboard local web (Phase 01): /dashboard — xem realtime + xem lại một đêm.
+# Serve tĩnh từ app/static/. Trang tự gọi /api/data/{id}/samples với JWT (token người dùng
+# nhập trên trang, hoặc ?token=... trong URL) — đúng quyền của người dùng đó.
+app.mount(
+    "/dashboard",
+    StaticFiles(directory=Path(__file__).resolve().parent / "static"),
+    name="dashboard",
+)
 
 
 @app.get("/health")

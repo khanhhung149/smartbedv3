@@ -206,6 +206,31 @@ async def get_latest_sec(pool: asyncpg.Pool, device_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+async def get_samples(
+    pool: asyncpg.Pool, device_id: str, from_time, to_time
+) -> list[dict]:
+    """Raw samples (bảng chuẩn CSV take-home) trong cửa sổ [from, to].
+
+    Trả về đúng 9 cột CSV + kênh raw. Dùng cho dashboard local "xem lại một đêm".
+    """
+    rows = await pool.fetch(
+        """
+        SELECT
+          t, device_id, presence, hr_bpm, resp_amplitude, motion,
+          weight_kg, spo2, temp_c, humidity,
+          status, sdata, pdata, movement, snore_count, resp_disorder, pthd,
+          body_temp, uart_ok, ts_pad, received_at
+        FROM samples
+        WHERE device_id = $1 AND t >= $2 AND t < $3
+        ORDER BY t ASC
+        """,
+        device_id,
+        from_time,
+        to_time,
+    )
+    return [dict(r) for r in rows]
+
+
 async def get_history(
     pool: asyncpg.Pool, device_id: str, range_key: str
 ) -> list[dict]:
