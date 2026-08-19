@@ -23,7 +23,7 @@ voice-node (S3-DevKit N16R8) ─ SUB presence ─→ fusion tại BOARD ─→ I
 **ESP32 là bộ não duy nhất**: voice-node nghe presence rồi tự quyết AC. Backend **không** tự phát `ac_cmd`
 theo occupancy (2 nơi cùng quyết thì lệch nhau) — chỉ chuyển tiếp lệnh **tay/voice**.
 
-Chi tiết: [`docs/system-architecture.md`](./docs/system-architecture.md).
+Chi tiết: [`docs/system-architecture.md`](./system-architecture.md).
 
 ## Directory Map
 
@@ -42,12 +42,12 @@ Chi tiết: [`docs/system-architecture.md`](./docs/system-architecture.md).
 
 | Doc | Cho | Nội dung |
 |-----|-----|----------|
-| [`docs/project-overview-pdr.md`](./docs/project-overview-pdr.md) | Product | Vấn đề, scope, quyết định, metrics |
-| [`docs/system-architecture.md`](./docs/system-architecture.md) | Designer | Sơ đồ, MQTT/voice contract, fusion tại board, API |
-| [`docs/codebase-summary.md`](./docs/codebase-summary.md) | Dev mới | Cấu trúc code, module, file thật |
-| [`docs/code-standards.md`](./docs/code-standards.md) | Contributor | Quy ước đặt tên, pattern, test |
-| [`docs/project-roadmap.md`](./docs/project-roadmap.md) | PM | Trạng thái pha, việc còn treo |
-| [`docs/system-wiring.md`](./docs/system-wiring.md) | Phần cứng | Pinout, đấu nối, cảnh báo điện |
+| [`docs/project-overview-pdr.md`](./project-overview-pdr.md) | Product | Vấn đề, scope, quyết định, metrics |
+| [`docs/system-architecture.md`](./system-architecture.md) | Designer | Sơ đồ, MQTT/voice contract, fusion tại board, API |
+| [`docs/codebase-summary.md`](./codebase-summary.md) | Dev mới | Cấu trúc code, module, file thật |
+| [`docs/code-standards.md`](./code-standards.md) | Contributor | Quy ước đặt tên, pattern, test |
+| [`docs/project-roadmap.md`](./project-roadmap.md) | PM | Trạng thái pha, việc còn treo |
+| [`docs/system-wiring.md`](./system-wiring.md) | Phần cứng | Pinout, đấu nối, cảnh báo điện |
 
 ## Setup
 
@@ -159,7 +159,7 @@ cd app && flutter analyze
 | 5: OTA 2 node | ✅ |
 | 6: Vỏ hộp in 3D modular | ⏳ STL xong, chưa in ướm |
 
-Chi tiết: [`docs/project-roadmap.md`](./docs/project-roadmap.md).
+Chi tiết: [`docs/project-roadmap.md`](./project-roadmap.md).
 
 ---
 **Last updated**: 2026-08-10

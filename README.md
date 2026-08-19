@@ -10,30 +10,39 @@ Many sensor inputs, many control outputs, all addressable from outside. Develope
 
 | Dir | Runs on | Contents |
 |---|---|---|
-| `firmware/` | ESP32 | Sensor nodes, mechanical handler, safety, e-stop. **The only layer allowed to drive an actuator.** |
+| `firmware/` | ESP32 | Every MCU node: `camera-node`, `esp32cam-stream`, `radar-node`, `voice-node`, `sleep-pad-node{,-idf}`. **The only layer allowed to drive an actuator.** |
 | `edge/` | Jetson Orin | Sensor collection, signal processing, MediaPipe Pose, sleep staging, local dashboard |
-| `cloud/` | K8s | Backend, user profiles, template registry |
-| `app/` | Flutter | Tablet + phone client (Android/iOS). Phase 06. |
-| `mech/` | — | CAD for the 3-plate lift frame |
-| `presence-ac/` | ESP32 + Go | Presence/AC/voice system. Its `backend/` is **the backend the app talks to today** (`:8080`, prefix `/api`) |
-| `sleep-pad/` | ESP32 + Python | Sleep-pad platform. Its FastAPI tier **owns MQTT ingest** — every row in Postgres arrives through it |
-| `docs/` | — | Architecture, safety, meeting minutes, sensor characterisation |
-| `plans/` | — | Phased implementation plan |
+| `cloud/` | server / K8s | Backends and services: `presence-ac` (Go, `:8080`), `sleeppad` (FastAPI, `:8000`), `asr`, `mqtt`, `landing` |
+| `app/` | Flutter | Three clients: `smartbed` (this project), `presence-ac`, `sleep-pad` |
+| `mech/` | — | CAD for the 3-plate lift frame, plus `presence-ac-enclosure` |
+| `docs/` | — | Architecture, safety, meeting minutes, sensor characterisation; `docs/presence-ac/` and `docs/sleep-pad/` hold each merged project's own docs |
+| `plans/` | — | Phased implementation plan; `plans/sleep-pad/` holds the sleep-pad plans |
+| `scripts/` | — | Repo tooling, plus `scripts/presence-ac/` |
 
-### `presence-ac/` and `sleep-pad/` were separate repos
+**Which backend does the app actually call?** `cloud/presence-ac` (Go, `:8080`, prefix `/api`).
+`cloud/sleeppad` is not on that path but **owns MQTT ingest** — every row in Postgres arrives
+through it, so it is not legacy and cannot be switched off.
 
-Both were merged in with `git subtree`, full history and authorship intact (213 commits, 9 authors).
-The original clones still exist and still carry their remotes:
+### Two projects were merged into this layout
 
-| Prefix here | Origin | Note |
+`esp32-presence-ac` and `sleep-pad-ai` were separate repos, merged with `git subtree` (full history
+and authorship intact — 214 commits, 9 authors), then their files were redistributed into the tier
+folders above. The original clones still exist and still carry their remotes:
+
+| Merged from | Origin | Now lives in |
 |---|---|---|
-| `presence-ac/` | `github.com/khanhhung149/esp32-presence-ac` (private, effectively solo) | |
-| `sleep-pad/` | `github.com/Sleep-Tech-AI/sleep-pad-ai` (**org repo, 7 contributors**) | Merged from branch `feat/sleep-sessions` |
+| `esp32-presence-ac` | `github.com/khanhhung149/esp32-presence-ac` (private, effectively solo) | `cloud/presence-ac`, `firmware/{radar,voice}-node`, `app/presence-ac`, `docs/presence-ac`, `mech/presence-ac-enclosure` |
+| `sleep-pad-ai` | `github.com/Sleep-Tech-AI/sleep-pad-ai` (**org repo, 7 contributors**) | `cloud/sleeppad`, `firmware/sleep-pad-node{,-idf}`, `app/sleep-pad`, `docs/sleep-pad`, `plans/sleep-pad` |
 
-**`sleep-pad/` is a live team codebase, not a fork to abandon.** Work done only here will silently
-diverge from what Michael and the team push to `Sleep-Tech-AI`. Either push changes back from the
-original clone, or agree with the team that this repo becomes the source of truth. Choosing neither
-is how two codebases quietly stop matching.
+**Redistributing the files gave up `git subtree push`.** Because no single prefix holds either
+project's tree any more, changes made here cannot be pushed back automatically. The only route to
+`Sleep-Tech-AI` is the original clone at `/mnt/d/sleep_pad_AI`. That repo is a live team codebase —
+work done only here will silently diverge from what Michael and the team push. Decide which repo is
+the source of truth; choosing neither is how two codebases quietly stop matching.
+
+`docs/sleep-pad/ci/deploy.yml` is the team's deploy workflow, **parked as documentation on purpose**.
+It runs on the self-hosted runner `sleeptech-host` and deploys their production; putting it back
+under `.github/workflows/` would let this repo fire a deploy at their infrastructure.
 
 Secrets did not come along — `.env`, `.env.dev` are gitignored by design. Copy them from the
 original clones before running either stack.

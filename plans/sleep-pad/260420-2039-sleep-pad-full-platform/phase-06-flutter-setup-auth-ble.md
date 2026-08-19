@@ -94,7 +94,7 @@ dependencies:
 
 ## BLE UUIDs (constants.dart)
 
-**Authoritative contract:** [`docs/protocols/ble-provisioning-and-mqtt-auth.md`](../../docs/protocols/ble-provisioning-and-mqtt-auth.md).
+**Authoritative contract:** [`docs/protocols/ble-provisioning-and-mqtt-auth.md`](../../../docs/sleep-pad/protocols/ble-provisioning-and-mqtt-auth.md).
 
 ```dart
 const kBleServiceUuid         = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';

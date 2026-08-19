@@ -12,4 +12,4 @@ This is the only tier allowed to drive an actuator, and the only tier that stays
 
 Three things this tier must do even with Linux dead: **emergency stop, stall detection, hold position on power loss.**
 
-Toolchain: **PlatformIO with `framework = espidf`** (not Arduino) — decided 2026-08-13 when the first camera node was added, following the precedent already proven in `esp32-presence-ac/firmware/voice-node/`. Applies project-wide, not just this node. Pin the platform version in `platformio.ini` (`platform = espressif32@55.3.311`); letting it resolve to the default broke a build once already.
+Toolchain: **PlatformIO with `framework = espidf`** (not Arduino) — decided 2026-08-13 when the first camera node was added, following the precedent already proven in `firmware/voice-node/`. Applies project-wide, not just this node. Pin the platform version in `platformio.ini` (`platform = espressif32@55.3.311`); letting it resolve to the default broke a build once already.

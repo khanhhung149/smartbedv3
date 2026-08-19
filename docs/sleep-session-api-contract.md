@@ -1,8 +1,8 @@
 # Hợp đồng API — phiên ngủ
 
 **Phiên bản:** 1 · **Cập nhật:** 2026-08-19
-**Client:** `app/` · **Backend app đang gọi:** `presence-ac/backend/internal/{api,sessions}/` (Go, `:8080`, prefix **`/api`**)
-**Bản tham chiếu:** `sleep-pad/backend/app/sessions/` (FastAPI, `:8000`) — luật dựng phiên gốc, Go port lại và đối chiếu số
+**Client:** `app/smartbed/` · **Backend app đang gọi:** `cloud/presence-ac/internal/{api,sessions}/` (Go, `:8080`, prefix **`/api`**)
+**Bản tham chiếu:** `cloud/sleeppad/app/sessions/` (FastAPI, `:8000`) — luật dựng phiên gốc, Go port lại và đối chiếu số
 
 > **Luật:** sửa endpoint là sửa file này **trong cùng commit**. Hai cài đặt phải trả cùng shape;
 > file này là thứ duy nhất giữ chúng không trôi khỏi nhau.
@@ -15,7 +15,7 @@
 Đích kiến trúc vẫn là cloud K8s ở `smartbedv3/cloud/` theo `phase-06` của plan
 `260713-1019-smartbed-v3-mvp` — quyết định đó **không** bị đảo ngược.
 
-Nguồn dữ liệu là TimescaleDB của `sleep-pad/` vì nó **đang chạy thật và đã có dữ liệu**,
+Nguồn dữ liệu là TimescaleDB của `cloud/sleeppad/` vì nó **đang chạy thật và đã có dữ liệu**,
 trong khi cả 8 phase của plan MVP chưa bắt đầu và smartbedv3 chưa sinh ra bản ghi nào.
 Tầng ingest vẫn là FastAPI: mọi hàng vào `samples`/`sec_data`/`min_data` đi qua nó. Go chỉ
 **ghi bảng dẫn xuất** `sleep_sessions` và đọc phần còn lại.

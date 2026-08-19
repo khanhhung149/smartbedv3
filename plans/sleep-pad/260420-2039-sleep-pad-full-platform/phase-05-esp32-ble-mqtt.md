@@ -25,7 +25,7 @@ Remove WiFiManager + local web server from firmware. Add BLE GATT server to rece
 
 ## BLE GATT Design
 
-**Authoritative contract:** [`docs/protocols/ble-provisioning-and-mqtt-auth.md`](../../docs/protocols/ble-provisioning-and-mqtt-auth.md). Any mismatch — treat that doc as source of truth.
+**Authoritative contract:** [`docs/protocols/ble-provisioning-and-mqtt-auth.md`](../../../docs/sleep-pad/protocols/ble-provisioning-and-mqtt-auth.md). Any mismatch — treat that doc as source of truth.
 
 ```
 Service UUID:       4fafc201-1fb5-459e-8fcc-c5c9c331914b

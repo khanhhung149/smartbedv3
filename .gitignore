@@ -48,7 +48,12 @@ venv/
 # ── Recorded sleep data — NEVER commit (large + personal biometric data) ────
 # Real overnight recordings from Phase 01 onward. Disk is cheap, git is not,
 # and this is biometric data about identifiable people.
-data/
+#
+# Anchored with a leading slash on purpose. A bare `data/` matches a directory
+# named data at ANY depth, and it silently swallowed app/lib/data/ — the app's
+# whole data layer was untracked for as long as that rule stood. Point at the
+# directories that actually hold recordings; add new ones explicitly.
+/edge/data/
 recordings/
 *.sqlite
 *.sqlite3
@@ -68,7 +73,6 @@ kubeconfig
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
-app/build/
 GoogleService-Info.plist
 google-services.json
 
@@ -94,14 +98,44 @@ logs.txt
 # ── Local scratch (NAS shortcuts, throwaway files) ─────────────────────────
 stuffs/
 
-# ── app/ (Flutter client) ──────────────────────────────────────────────────
-app/build/
-app/.dart_tool/
-app/.flutter-plugins-deps
-app/android/.gradle/
-app/android/local.properties
+# ── app/ (Flutter) ─────────────────────────────────────────────────────────
+# Artifact của từng client nằm ở khối "rải theo tier" bên dưới — app/ giờ có ba
+# thư mục con nên luật neo thẳng vào app/build/ không còn đúng.
 app/**/*.iml
 # The dev token is a real 30-day credential, passed via --dart-define or the
 # in-app settings screen — never a file. This is belt-and-braces for the case
 # where someone writes one down anyway.
 *.env
+
+# ── Sau khi rải presence-ac và sleep-pad theo tier ─────────────────────────
+# Các luật dưới đây trước nằm trong .gitignore riêng của hai repo và neo theo
+# đường dẫn cũ. File đã đổi chỗ nên luật phải đổi theo — mỗi dòng đang che một
+# secret thật hoặc một artifact sinh lại được, đừng xoá vì tưởng trùng lặp.
+
+# Bí mật của broker và backend
+cloud/mqtt/passwd
+cloud/sleeppad/mosquitto/passwords
+cloud/sleeppad/secrets/
+cloud/sleeppad/.env.dev
+cloud/sleeppad/.env.prod
+cloud/presence-ac/bin/
+cloud/presence-ac/data/
+
+# Firmware: config.h chứa SSID/mật khẩu WiFi, chỉ commit bản .example
+firmware/**/config.h
+firmware/**/config.h.bak*
+firmware/**/managed_components/
+firmware/**/sdkconfig.*
+
+# Artifact của ba app Flutter
+app/*/build/
+app/*/.dart_tool/
+app/*/.flutter-plugins-deps
+app/*/android/.gradle/
+app/*/android/local.properties
+app/**/test/failures/
+
+# CAD sinh lại được từ nguồn
+mech/presence-ac-enclosure/vo-so-*.stl
+mech/presence-ac-enclosure/vo-so-*.png
+mech/presence-ac-enclosure/vo-hop-LAP-RAP-xem-thoi.stl

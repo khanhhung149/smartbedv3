@@ -114,7 +114,7 @@ Add one section per cluster using the shape above: configuration, measured throu
 
 ### Presence radar (LD2410C) → `home/room/sample`
 
-- **Firmware:** [`esp32-presence-ac/firmware/radar-node/`](../../esp32-presence-ac/firmware/radar-node/) (Wemos S2 Mini + LD2410C, ESP-IDF thuần)
+- **Firmware:** [`firmware/radar-node/`](../firmware/radar-node/) (Wemos S2 Mini + LD2410C, ESP-IDF thuần)
 - **Transport:** MQTT JSON → Go backend SQLite (bảng `samples`)
 
 | | |

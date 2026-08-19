@@ -7,11 +7,11 @@ Chạy trên Android (điện thoại + tablet) và web.
 
 ## Dữ liệu đến từ đâu
 
-Vòng này app đọc backend Go ở `../presence-ac/backend` (`:8080`, prefix `/api`) — **cầu tạm**,
+Vòng này app đọc backend Go ở `../../cloud/presence-ac` (`:8080`, prefix `/api`) — **cầu tạm**,
 không phải đích kiến trúc. Đích vẫn là cloud K8s ở `../cloud/` theo `phase-06` của plan
 `260713-1019-smartbed-v3-mvp`.
 
-Backend Go đọc thẳng TimescaleDB của `../sleep-pad` qua `POSTGRES_URL`, nên **vẫn cần stack
+Backend Go đọc thẳng TimescaleDB của `../../cloud/sleeppad` qua `POSTGRES_URL`, nên **vẫn cần stack
 sleep-pad chạy** để có Postgres — nhưng FastAPI `:8000` thì không còn nằm trên đường đi của app.
 Thiếu `POSTGRES_URL` hoặc Postgres chết thì `/api/sessions*` trả `503` còn radar/AC vẫn chạy bình
 thường (log-and-continue, cố ý).
@@ -21,13 +21,13 @@ Hợp đồng API: [`../docs/sleep-session-api-contract.md`](../docs/sleep-sessi
 
 ## Chạy
 
-Cần hai thứ chạy: Postgres của `sleep-pad/` (nguồn dữ liệu) và backend Go (thứ app gọi).
+Cần hai thứ chạy: Postgres của `cloud/sleeppad/` (nguồn dữ liệu) và backend Go (thứ app gọi).
 
 ```bash
-cd ../sleep-pad/backend
+cd ../../cloud/sleeppad
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.dev up -d
 
-cd ../../presence-ac/backend
+cd ../presence-ac
 docker compose up -d
 ```
 
