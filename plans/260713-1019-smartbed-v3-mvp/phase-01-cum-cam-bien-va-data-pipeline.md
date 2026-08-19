@@ -76,8 +76,27 @@ Rẻ nhất, nhanh nhất, rủi ro gần bằng không, mà lại mở khoá ch
 ## Rủi ro
 
 | Rủi ro | Giảm thiểu |
-|---|---|
+|---|---|      
 | Radar nhiễu khi có chăn dày, hoặc mất tín hiệu khi nằm nghiêng | Rủi ro thật, đã gặp trong project autogate. Test sớm ngay tuần 1. Nếu yếu quá thì đổi sang radar 60GHz (ví dụ Infineon BGT60) hoặc bù bằng BCG từ piezo pad |
 | Piezo pad không xuyên được nệm dày | Test với nhiều độ dày nệm ngay tuần 1. Nếu không đạt, cân nhắc đặt piezo trên mặt nệm dưới ga, hoặc quay lại loadcell như phương án dự phòng |
 | LD2510B khó mua / khan hàng ở VN | Đặt sớm (hạn 18/07). Có sẵn LD2410B làm dự phòng để không chặn tiến độ |
 | Hơi thở làm ẩm cảm biến SHT | Đặt lệch khỏi luồng thở, ghi rõ vị trí trong tài liệu |
+
+## Cập nhật triển khai 19/08 — schema CSV thực tế + phần cứng radar
+
+**Schema CSV của bài take-home thật (dataset `smartbed-sensor-stream.csv`, đã tải về `edge/data/`) KHÁC schema chốt trong mục 48:**
+
+| Cột plan chốt | Cột dataset thật |
+|---|---|
+| `t` | `timestamp_s` (giây, 10Hz) |
+| `weight_kg` | `loadcell_kg` |
+| `presence` | `presence` |
+| `motion` | `motion_intensity` (float 0..1, không phải nhị phân) |
+| `resp_amplitude` | `chest_disp` (độ lệch ngực, ~mm) |
+| `hr_bpm` | `hr_bpm` |
+| `spo2` | `spo2` |
+| `temp_c` / `humidity` | **không có** trong dataset |
+
+→ Bảng `samples` ở cả hai repo được dựng là **superset**: đủ 9 cột plan + kênh raw của từng sensor. Dataset thật không có kênh nào bị thiếu — chỉ là tên khác. Trọng lượng thật đến từ loadcell trong dataset take-home (67 kg), còn phần cứng sản phẩm chọn piezo (mục 33) nên `weight_kg` sẽ là NULL trên bản chạy thật.
+
+**Radar:** cụm presence hiện triển khai bằng **LD2410C** (phần cứng đang có, không phải LD2510B chốt ở mục 21 — quyết định chủ repo 19/08). Mất kênh track 2 người/vị trí; các cột đó trong `samples` để 0/NULL kèm cờ `uart_ok`, không bịa số. Xem `docs/sensor-characterization.md` mục "Data-acquisition contract".

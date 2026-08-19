@@ -45,6 +45,13 @@ Phần thực sự có giá trị, làm được bằng mã hoá thường:
 
 ## 3. App + cloud
 
+> **Ghi chú liên kết (2026-08-19).** Một app Flutter *một phần* của mục này đang được dựng sớm ở
+> [`plans/260819-0909-smartbed-flutter-sleep-session-app/`](../260819-0909-smartbed-flutter-sleep-session-app/plan.md):
+> chỉ phần **báo cáo giấc ngủ**, nuôi bằng backend FastAPI của `sleep_pad_AI` vì Phase 01–05 chưa bắt đầu.
+> **Không thay đổi gì ở phase này** — K8s vẫn là đích, điều khiển/template/manifest vẫn thuộc Phase 06.
+> Backend FastAPI là cầu tạm, không phải đảo ngược quyết định K8s của Michael.
+
+
 - **App Flutter** (chốt 13/07): chạy cả Android + iOS. Báo cáo giấc ngủ, điều khiển tư thế, cài lịch, ghi đè bằng tay, load template.
 - **Backend: K8s** (Michael chốt 13/07 — K8s, không phải K3s).
   - ⚠️ *Ghi chú kỹ thuật:* với vài chục giường thì K8s là kiến trúc nặng hơn nhu cầu; một backend đơn + Postgres đã đủ. Nhưng Michael chốt K8s để không phải migrate khi mở rộng, và vì định vị framework/platform cần chỗ cho multi-tenant + marketplace về sau. Ghi lại trade-off này, không tự ý đảo ngược.

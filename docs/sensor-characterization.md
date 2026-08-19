@@ -89,3 +89,50 @@ Note on that 3.0 s: OpenCV's FFMPEG backend defaults to a **30 second** read tim
 Not characterized yet: LD2510B radar, piezoelectric pad, SHT10/31, omnidirectional mic, CO₂ sensor.
 
 Add one section per cluster using the shape above: configuration, measured throughput, reliability, conditions during measurement, and an explicit list of what remains unmeasured.
+
+---
+
+## Data-acquisition contract (Phase 01 firmware/collector)
+
+**Measured on hardware, not extrapolated.** These rows record what the current nodes actually deliver into the pipeline, including the gaps the plan's ideal cadence cannot reach with the hardware we have.
+
+### Sleep pad (Legact V2) → `sleeppad/{id}/sec|min`
+
+- **Firmware:** [`sleep_pad_AI/firmware/`](../../sleep_pad_AI/firmware/) (ESP32 + Legact V2 pad)
+- **Transport:** MQTT JSON → TimescaleDB (bảng `samples` schema CSV take-home)
+
+| | |
+|---|---|
+| Cadence | **1 Hz (sec 0x85), 1/min (min 0x86)** — pad là master tự đẩy frame, firmware KHÔNG thể ép thành 10 Hz. 10 Hz là mục tiêu của plan nhưng bị chặn bởi phần cứng pad (xem ghi chú bên dưới) |
+| Timestamp | `ts` epoch giây do **MCU** gắn (SNTP sync lúc boot), đẩy trong payload; `ts_pad` = mốc pad báo. Backend ghi `t = ts` (không dùng server now() làm nguồn thời gian) |
+| Chống mất mẫu | Ring buffer 64 ô trong firmware — MQTT mất kết nối thì mẫu xếp hàng, đẩy lại khi thông (bỏ cũ nhất nếu đầy) |
+| Đánh dấu lỗi | `heart_rate = 0` = dropout (pad báo, không bịa số); `uart_ok` bool trong payload. `presence` suy = status/hr/rr khác 0 |
+| Kênh raw | status, sdata, pdata (sec) + movement, snore_count, resp_disorder, pthd, temp (min) + env_temp/humidity (topic /temp) — lưu TẤT CẢ vào `samples` |
+| Retention | TimescaleDB `add_retention_policy('samples', 30 days)` — giữ 30 đêm; chunk > 1 ngày được nén |
+
+> **Ghi chú 10 Hz:** Legact V2 là thiết bị master phát frame 0x85 mỗi giây; ESP32 chỉ là khách lắng nghe UART, không có kênh nào để yêu cầu pad phát nhanh hơn. Firmware giữ vòng lặp **10 Hz cố định** (bám mốc tuyệt đối, không jitter) để đọc UART + drain ring buffer, nhưng số mẫu thực tế là 1 Hz theo nhịp pad. Để có 10 Hz thật phải thay cảm biến (vd radar ở cluster khác).
+
+### Presence radar (LD2410C) → `home/room/sample`
+
+- **Firmware:** [`esp32-presence-ac/firmware/radar-node/`](../../esp32-presence-ac/firmware/radar-node/) (Wemos S2 Mini + LD2410C, ESP-IDF thuần)
+- **Transport:** MQTT JSON → Go backend SQLite (bảng `samples`)
+
+| | |
+|---|---|
+| Cadence | **10 Hz cố định** (`SAMPLE_TICK_MS = 100`), bám mốc tuyệt đối |
+| Timestamp | `t` epoch **mili-giây** do MCU gắn (`net_epoch_ms`), không gắn ở Linux |
+| Chống mất mẫu | Ring buffer 64 mẫu (~6.4 s) trong firmware — MQTT nghẽn thì xếp hàng, drain khi thông |
+| Đánh dấu lỗi | `uart_ok` bool; UART radar chết → các kênh số liệu (moving/still) không đáng tin, `presence` vẫn đúng từ chân OUT. Kênh radar không đo được (hr_bpm, resp_amplitude, weight_kg, spo2, temp_c, humidity) ghi 0 — không bịa số |
+| Kênh raw | moving_dist_cm, moving_energy, still_dist_cm, still_energy (lưu tất cả) |
+| Retention | Go `RetainNights(30)` mỗi giờ — giữ 30 đêm theo mốc UTC nửa đêm; trần tuyệt đối 11M mẫu |
+
+> **Ghi chú LD2410C vs LD2510B:** plan tổng chốt LD2510B (track 2 người + vị trí); cụm này hiện dùng **LD2410C** (quyết định chủ repo, dùng phần cứng đang có). Hệ quả đã đo/ghi nhận: không có kênh 2 người, không có tọa độ, không có HR/resp. Các cột đó trong `samples` luôn 0/NULL kèm cờ — đúng quy tắc "không bịa số". Nâng cấp lên LD2510B là thay phần cứng + thêm parser, schema không đổi.
+
+### Dashboard local
+
+| Repo | URL | Dữ liệu |
+|---|---|---|
+| sleep_pad_AI | `/dashboard` (FastAPI static + JWT) | realtime 2 phút + xem lại một đêm từ bảng `samples` |
+| esp32-presence-ac | `/dashboard` (Go embed) | realtime 60 s + xem lại một đêm từ SQLite `samples` |
+
+Cả hai chạy ngay trên máy thu (Jetson), không cần app mobile. Không làm đẹp — công cụ engineer debug.
