@@ -1,5 +1,7 @@
-# Gộp repo về một + soát cổng Phase 01
+# Báo cáo tiến độ — gộp repo về một + soát cổng Phase 01
 
+- **Người gửi:** Hưng · **Người nhận:** Michael
+- **Loại:** báo cáo tiến độ (theo kỳ vọng "chủ động báo cáo hằng ngày" chốt 13/07)
 - **Ngày lập:** 2026-08-19
 - **Phạm vi:** hợp nhất `esp32-presence-ac` và `sleep_pad_AI` vào `smartbedv3`, rải theo bố cục tier, đối chiếu hiện trạng với cổng nghiệm thu Phase 01
 - **Plan gốc:** [`plans/260713-1019-smartbed-v3-mvp/plan.md`](../260713-1019-smartbed-v3-mvp/plan.md)
@@ -81,7 +83,7 @@ Luật dựng phiên port từ `rules.py` sang Go kèm 14 test đối chiếu; s
 
 | # | Tiêu chí | Trạng thái | Bằng chứng |
 |---|---|---|---|
-| 1 | Ghi liên tục 8 tiếng, mất dưới 0.1% mẫu | ❌ chưa | `docs/sensor-characterization.md`: node "chỉ từng chạy vài phút mỗi lần" |
+| 1 | Ghi liên tục 8 tiếng, mất dưới 0.1% mẫu | ❌ chưa — **chạy được ngay**, xem mục dưới | `docs/sensor-characterization.md`: node "chỉ từng chạy vài phút mỗi lần" |
 | 2 | Nhịp thở radar khớp đếm mắt (±2 brpm), ngửa và nghiêng | ❌ chưa | chưa có bài đo nào được ghi lại |
 | 3 | LD2510B track 2 người, ra vị trí từng người | ⛔ **không còn khả thi** | phần cứng đổi sang LD2410C (quyết định 19/08). Chip này không có kênh đó |
 | 4 | Piezo pad phân biệt trên giường / rời giường / trống | ❌ chưa | chưa có node piezo, chưa đặc tả |
@@ -99,6 +101,37 @@ Luật dựng phiên port từ `rules.py` sang Go kèm 14 test đối chiếu; s
 | `sleep-pad-node{,-idf}` | ngoài phạm vi Phase 01 | 6 / 8 | Từ dự án sleep-pad |
 | `camera-node` | **05** | 0 | Giữ chỗ cho Phase 05, README ghi rõ "Not started, confirm scope". **Không phải thiếu sót của Phase 01** |
 | `mech-handler` | 04 | — | Thư mục chưa tồn tại, đúng tiến độ |
+
+---
+
+## Sẵn sàng chạy bài đo 8 tiếng (tiêu chí 1) — đề nghị làm ngay
+
+Toàn bộ đường dữ liệu đã thông từ đầu tới cuối, nên bài đo 8 tiếng **chạy được ngay đêm nay**, không còn chờ phần mềm.
+
+| Mắt xích | Trạng thái |
+|---|---|
+| Vòng lấy mẫu 10Hz cố định tại MCU | ✅ `SAMPLE_TICK_MS 100` trong `firmware/radar-node/src/main.c`, timestamp gắn tại MCU |
+| Đẩy mẫu qua MQTT | ✅ topic `home/room/sample`, broker chạy |
+| Ingest → Postgres/TimescaleDB | ✅ FastAPI, đã chạy thật |
+| Dựng phiên tự động | ✅ goroutine Go, chu kỳ 60s |
+| Dọn dữ liệu cũ | ✅ `RetainNights` giữ 30 đêm gần nhất, có trần chống phình DB |
+| Xem lại | ✅ dashboard local + app Flutter, cả hai đã verify |
+
+**Số mẫu kỳ vọng:** 8 tiếng × 10Hz = **288.000 mẫu**. Ngưỡng đạt là mất dưới 0,1% → không quá **288 mẫu**.
+
+### Một hạn chế cần Michael biết trước khi tin con số
+
+Firmware **chưa có số thứ tự mẫu** (sequence counter). Tỷ lệ mất vẫn tính được bằng *số mẫu thực nhận / 288.000*, nhưng cách này **không phân biệt được** hai nguyên nhân:
+
+- MCU không lấy được mẫu (vòng lặp trượt nhịp, sensor không trả dữ liệu)
+- Mẫu có lấy nhưng rơi trên đường (WiFi, MQTT, ingest)
+
+Hai nguyên nhân này cần hai cách sửa khác hẳn nhau. Thêm một biến đếm tăng dần vào payload là việc nhỏ (dưới nửa ngày) và nên làm **trước** đêm đo đầu tiên, nếu không đêm đó cho ra một con số không truy được nguyên nhân.
+
+### Việc còn lại không thuộc phần mềm
+
+- Lắp cụm cảm biến lên bench rig, cấp **nguồn riêng cho mạch** (không lấy từ laptop — quy tắc Michael dặn 13/07)
+- Có người nằm thật; tiêu chí 5 cần **3 đêm**, nên chạy 3 đêm liên tiếp thay vì 1
 
 ---
 
