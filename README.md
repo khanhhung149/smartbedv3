@@ -15,8 +15,28 @@ Many sensor inputs, many control outputs, all addressable from outside. Develope
 | `cloud/` | K8s | Backend, user profiles, template registry |
 | `app/` | Flutter | Tablet + phone client (Android/iOS). Phase 06. |
 | `mech/` | — | CAD for the 3-plate lift frame |
+| `presence-ac/` | ESP32 + Go | Presence/AC/voice system. Its `backend/` is **the backend the app talks to today** (`:8080`, prefix `/api`) |
+| `sleep-pad/` | ESP32 + Python | Sleep-pad platform. Its FastAPI tier **owns MQTT ingest** — every row in Postgres arrives through it |
 | `docs/` | — | Architecture, safety, meeting minutes, sensor characterisation |
 | `plans/` | — | Phased implementation plan |
+
+### `presence-ac/` and `sleep-pad/` were separate repos
+
+Both were merged in with `git subtree`, full history and authorship intact (213 commits, 9 authors).
+The original clones still exist and still carry their remotes:
+
+| Prefix here | Origin | Note |
+|---|---|---|
+| `presence-ac/` | `github.com/khanhhung149/esp32-presence-ac` (private, effectively solo) | |
+| `sleep-pad/` | `github.com/Sleep-Tech-AI/sleep-pad-ai` (**org repo, 7 contributors**) | Merged from branch `feat/sleep-sessions` |
+
+**`sleep-pad/` is a live team codebase, not a fork to abandon.** Work done only here will silently
+diverge from what Michael and the team push to `Sleep-Tech-AI`. Either push changes back from the
+original clone, or agree with the team that this repo becomes the source of truth. Choosing neither
+is how two codebases quietly stop matching.
+
+Secrets did not come along — `.env`, `.env.dev` are gitignored by design. Copy them from the
+original clones before running either stack.
 
 ## Read first
 

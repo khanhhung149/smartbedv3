@@ -1,27 +1,35 @@
 # Hợp đồng API — phiên ngủ
 
 **Phiên bản:** 1 · **Cập nhật:** 2026-08-19
-**Backend:** `sleep_pad_AI/backend/app/sessions/` (FastAPI) · **Client:** `smartbedv3/app/`
+**Client:** `app/` · **Backend app đang gọi:** `presence-ac/backend/internal/{api,sessions}/` (Go, `:8080`, prefix **`/api`**)
+**Bản tham chiếu:** `sleep-pad/backend/app/sessions/` (FastAPI, `:8000`) — luật dựng phiên gốc, Go port lại và đối chiếu số
 
-> **Luật:** sửa endpoint là sửa file này **trong cùng commit**. Hai repo không có CI chung;
+> **Luật:** sửa endpoint là sửa file này **trong cùng commit**. Hai cài đặt phải trả cùng shape;
 > file này là thứ duy nhất giữ chúng không trôi khỏi nhau.
+
+> **Đường dẫn:** client ghép path trần (`/sessions`, `/sessions/{id}/timeline`), nên `baseUrl`
+> trỏ Go **phải kết thúc bằng `/api`**. Thiếu `/api` là `404` dù backend khoẻ.
 
 ## Backend này là cầu tạm
 
 Đích kiến trúc vẫn là cloud K8s ở `smartbedv3/cloud/` theo `phase-06` của plan
 `260713-1019-smartbed-v3-mvp` — quyết định đó **không** bị đảo ngược.
 
-FastAPI `sleep_pad_AI` được dùng ở vòng này vì nó **đang chạy thật và đã có dữ liệu**,
+Nguồn dữ liệu là TimescaleDB của `sleep-pad/` vì nó **đang chạy thật và đã có dữ liệu**,
 trong khi cả 8 phase của plan MVP chưa bắt đầu và smartbedv3 chưa sinh ra bản ghi nào.
+Tầng ingest vẫn là FastAPI: mọi hàng vào `samples`/`sec_data`/`min_data` đi qua nó. Go chỉ
+**ghi bảng dẫn xuất** `sleep_sessions` và đọc phần còn lại.
 Khi cloud K8s lên, app đổi `baseUrl` và giữ nguyên shape response nếu hợp đồng này được tôn trọng.
 
 ## Xác thực
 
-Mọi endpoint cần `Authorization: Bearer <JWT>`.
+**Backend Go hiện không kiểm tra `Authorization`** — router không gắn middleware auth, nó là
+dịch vụ chỉ-LAN. Client vẫn gắn header sẵn để khi cloud `phase-06` bật auth thì không phải sửa
+đường gọi. Các mã dưới đây là hợp đồng đã thoả thuận, app phải xử lý đúng ngay từ bây giờ.
 
-Token lấy bằng `POST /auth/login` (`{email, password}` → `{access_token}`), hạn 30 ngày
-(`jwt_expire_days`). Vòng này app **không có UI đăng nhập** — token nạp qua
-`--dart-define=DEV_TOKEN=...` hoặc màn hình cài đặt.
+Bản FastAPI **có** kiểm tra: token lấy bằng `POST /auth/login` (`{email, password}` →
+`{access_token}`), hạn 30 ngày (`jwt_expire_days`). Vòng này app **không có UI đăng nhập** —
+token nạp qua `--dart-define=DEV_TOKEN=...` hoặc màn hình cài đặt.
 
 | Mã | Nghĩa | App phải làm gì |
 |---|---|---|
