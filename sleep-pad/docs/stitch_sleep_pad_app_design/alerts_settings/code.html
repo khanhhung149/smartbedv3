@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alerts Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#101419",
+                        "on-primary-fixed-variant": "#00504c",
+                        "surface-tint": "#4fdad3",
+                        "tertiary-container": "#ffcb64",
+                        "tertiary": "#ffedd1",
+                        "surface-container-low": "#181c21",
+                        "primary-fixed": "#70f7ef",
+                        "on-surface": "#e0e2ea",
+                        "on-primary": "#003734",
+                        "surface-container-high": "#262a30",
+                        "secondary-fixed-dim": "#d4bbff",
+                        "outline-variant": "#3c4948",
+                        "secondary-fixed": "#ebdcff",
+                        "on-secondary-fixed": "#260058",
+                        "inverse-surface": "#e0e2ea",
+                        "inverse-primary": "#006a66",
+                        "on-tertiary-container": "#765500",
+                        "tertiary-fixed-dim": "#f2bf59",
+                        "error": "#ffb4ab",
+                        "on-secondary": "#3e1779",
+                        "error-container": "#93000a",
+                        "surface-bright": "#36393f",
+                        "on-secondary-fixed-variant": "#553291",
+                        "surface-dim": "#101419",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#31353b",
+                        "primary-fixed-dim": "#4fdad3",
+                        "on-surface-variant": "#bbc9c7",
+                        "secondary-container": "#553291",
+                        "on-error-container": "#ffdad6",
+                        "primary": "#a4fff8",
+                        "outline": "#859492",
+                        "surface-variant": "#31353b",
+                        "on-tertiary": "#412d00",
+                        "background": "#101419",
+                        "surface-container": "#1c2025",
+                        "on-primary-fixed": "#00201e",
+                        "on-primary-container": "#006661",
+                        "primary-container": "#5ee7df",
+                        "tertiary-fixed": "#ffdea5",
+                        "secondary": "#d4bbff",
+                        "on-tertiary-fixed": "#261900",
+                        "on-secondary-container": "#c5a5ff",
+                        "on-background": "#e0e2ea",
+                        "surface-container-lowest": "#0a0e13",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "inverse-on-surface": "#2d3136"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1.25rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0B0F14; }
+        
+        /* Custom range slider styling for cross-browser consistency */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: currentColor;
+            cursor: pointer;
+            margin-top: -10px; /* You need to specify a margin in Chrome, but in Firefox and IE it is automatic */
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border: 2px solid #101419;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+        }
+
+        /* Dual range logic requires slightly complex CSS or JS, simplifying for static mockup with overlapping absolute sliders or visual representation */
+        .slider-track {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            position: relative;
+        }
+        .slider-fill-teal {
+            position: absolute;
+            height: 100%;
+            background: #5EE7DF;
+            border-radius: 2px;
+        }
+        .slider-fill-lavender {
+            position: absolute;
+            height: 100%;
+            background: #B490F5;
+            border-radius: 2px;
+        }
+        .slider-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #101419;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .thumb-teal { background: #5EE7DF; }
+        .thumb-lavender { background: #B490F5; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="text-on-background antialiased pb-32">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 py-4 bg-[#101419]/70 backdrop-blur-2xl docked full-width fixed top-0 z-50 shadow-none">
+<!-- Left Hamburger -->
+<button class="p-2 w-10 flex items-center justify-center hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-[#8B96A5]">menu</span>
+</button>
+<!-- Center Title and Chip -->
+<div class="flex flex-col items-center">
+<h1 class="text-[#E6EDF3] font-bold tracking-tighter text-xl">Alerts</h1>
+<button class="text-[10px] text-primary-container flex items-center gap-0.5 mt-1 font-medium bg-[#1a2e2f] px-2.5 py-0.5 rounded-full hover:bg-[#1a2e2f]/80 transition-colors border border-[#234241]">
+                Grandma's room
+                <span class="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+</button>
+</div>
+<!-- Right Side Notification Bell -->
+<button class="relative active:scale-[0.98] transition-transform duration-200 hover:opacity-80 p-2 w-10 flex justify-end">
+<span class="material-symbols-outlined text-[#8B96A5]">notifications</span>
+<span class="absolute top-2.5 right-2.5 w-2 h-2 bg-[#ffb4ab] rounded-full border border-[#101419]"></span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="pt-28 px-6 max-w-lg mx-auto flex flex-col gap-6">
+<!-- Segmented Control -->
+<div class="bg-surface-container-low rounded-full p-1 flex w-full">
+<button class="flex-1 bg-surface-container-high text-primary-container rounded-full py-2 text-sm font-medium shadow-sm">
+                Thresholds
+            </button>
+<button class="flex-1 text-[#8B96A5] rounded-full py-2 text-sm font-medium hover:text-on-surface transition-colors">
+                History
+            </button>
+</div>
+<p class="text-[#8B96A5] text-sm text-center px-4 leading-relaxed font-body">
+            Alerts fire when vitals stay outside these ranges for over a minute.
+        </p>
+<!-- Cards Container -->
+<div class="flex flex-col gap-4">
+<!-- Heart Rate Card -->
+<div class="bg-surface-container-low rounded-DEFAULT p-6 flex flex-col gap-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined" data-icon="favorite" data-weight="fill" style="font-variation-settings: 'FILL' 1;">favorite</span>
+</div>
+<h2 class="text-on-surface font-semibold text-lg tracking-tight">Heart Rate</h2>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex justify-between text-sm">
+<span class="text-primary-container font-medium">Low 40</span>
+<span class="text-primary-container font-medium">High 120</span>
+</div>
+<!-- Visual representation of dual slider -->
+<div class="relative py-4">
+<div class="slider-track">
+<div class="slider-fill-teal" style="left: 15%; right: 40%;"></div>
+</div>
+<div class="slider-thumb thumb-teal" style="left: 15%;"></div>
+<div class="slider-thumb thumb-teal" style="left: 60%;"></div>
+</div>
+<div class="flex justify-between text-xs text-[#8B96A5]">
+<span>30 bpm</span>
+<span>250 bpm</span>
+</div>
+</div>
+</div>
+<!-- Respiration Rate Card -->
+<div class="bg-surface-container-low rounded-DEFAULT p-6 flex flex-col gap-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-[#B490F5]/10 flex items-center justify-center text-[#B490F5]">
+<span class="material-symbols-outlined" data-icon="air" data-weight="fill" style="font-variation-settings: 'FILL' 1;">air</span>
+</div>
+<h2 class="text-on-surface font-semibold text-lg tracking-tight">Respiration Rate</h2>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex justify-between text-sm">
+<span class="text-[#B490F5] font-medium">Low 5</span>
+<span class="text-[#B490F5] font-medium">High 30</span>
+</div>
+<!-- Visual representation of dual slider -->
+<div class="relative py-4">
+<div class="slider-track">
+<div class="slider-fill-lavender" style="left: 10%; right: 50%;"></div>
+</div>
+<div class="slider-thumb thumb-lavender" style="left: 10%;"></div>
+<div class="slider-thumb thumb-lavender" style="left: 50%;"></div>
+</div>
+<div class="flex justify-between text-xs text-[#8B96A5]">
+<span>0 rpm</span>
+<span>60 rpm</span>
+</div>
+</div>
+</div>
+<!-- Sleep Disturbances Card -->
+<div class="bg-surface-container-low rounded-DEFAULT p-6 flex flex-col gap-6 mb-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined" data-icon="warning" data-weight="fill" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+<h2 class="text-on-surface font-semibold text-lg tracking-tight">Sleep Disturbances</h2>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex justify-between text-sm">
+<span class="text-primary-container font-medium">Alert above 5/min</span>
+</div>
+<!-- Single slider -->
+<div class="relative py-4">
+<div class="slider-track">
+<div class="slider-fill-teal" style="left: 0%; right: 70%;"></div>
+</div>
+<div class="slider-thumb thumb-teal" style="left: 30%;"></div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Sticky Bottom Primary Action (Disabled state as requested) -->
+<div class="fixed bottom-[90px] w-full px-6 max-w-lg left-1/2 -translate-x-1/2 z-40">
+<button class="w-full bg-surface-container-high text-[#8B96A5] rounded-full py-4 font-semibold text-sm opacity-70 cursor-not-allowed tracking-wide shadow-[0_4px_20px_rgba(0,0,0,0.5)]" disabled="">
+            Save changes
+        </button>
+</div>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-[32px] bg-[#0a0e13]/70 backdrop-blur-3xl shadow-[0_-4px_40px_rgba(0,0,0,0.5)] bg-gradient-to-t from-[#0a0e13] to-[#101419]/90 border-t border-white/5">
+<div class="w-full flex justify-around items-center px-6 pb-10 pt-4 md:hidden">
+<!-- Home -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">home</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Home</span>
+</button>
+<!-- History -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">history</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">History</span>
+</button>
+<!-- Alerts (Active) -->
+<button class="flex flex-col items-center justify-center text-[#5EE7DF] scale-100 active:scale-95 transition-transform duration-200 relative">
+<div class="bg-[#1a383a] rounded-[16px] px-5 py-1 mb-1 relative">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">notifications</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest text-[#5EE7DF]">Alerts</span>
+</button>
+<!-- Devices -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">devices</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Devices</span>
+</button>
+<!-- Settings -->
+<button class="flex flex-col items-center justify-center text-[#8B96A5] opacity-80 hover:text-[#5EE7DF] hover:opacity-100 transition-all scale-100 active:scale-95 duration-200">
+<div class="px-5 py-1 mb-1">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</div>
+<span class="font-['Inter'] text-[10px] font-medium uppercase tracking-widest">Settings</span>
+</button>
+</div>
+</nav>
+</body></html>

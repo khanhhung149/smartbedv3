@@ -1,0 +1,265 @@
+{
+  "brand": "SleepTech",
+  "brand_tagline": "Sleep technology, made with care.",
+  "nav": {
+    "about": "About",
+    "products": "Products",
+    "testimonials": "Reviews",
+    "certifications": "Certifications",
+    "news": "News",
+    "contact": "Contact"
+  },
+  "hero": {
+    "kicker": "SleepTech",
+    "title_1": "Your sleep,",
+    "title_2": "understood.",
+    "subtitle": "AI sleep technology born from Japanese care. Real-time vital signs, restful insights, and quiet peace of mind for the whole family.",
+    "cta_primary": "Discover YumePad",
+    "cta_secondary": "Our products",
+    "scroll_hint": "Scroll to explore"
+  },
+  "about": {
+    "kicker": "About Us",
+    "title": "Caring for Japan's elders since 2012.",
+    "lead": "SleepTech was founded in Tokyo in 2012 with a single focus: keeping Japan's growing elderly population safe and comfortable through the night. What began as a research project in partnership with Japanese care homes has grown into an internationally recognised sleep-technology family trusted in 20+ countries.",
+    "story": "Japan's culture of caring for its elders — rooted in the concept of oyakoko, filial devotion — runs through everything we make. Our engineers combine traditional Japanese craftsmanship with safety-critical medical-grade sensing, translating the quiet attentiveness of a bedside caregiver into hardware that listens without waking. Every stitch of fabric, every sensor placement, and every AI inference is shaped by one question: would you trust this beside your mother?",
+    "stats": [
+      { "value": "2012", "label": "Founded in Japan" },
+      { "value": "20+", "label": "Countries served" },
+      { "value": "12", "label": "International awards" }
+    ],
+    "regions_title": "Trusted across continents",
+    "regions_lead": "From care homes in Osaka to families in London, Sydney, and São Paulo — SleepTech devices now watch over loved ones in more than 20 countries across Europe, North America, Australia, and Asia.",
+    "awards_title": "Recognition & awards",
+    "awards_lead": "Recognised by the world's most prestigious design and innovation bodies for combining human-centred care with precision engineering.",
+    "awards": [
+      { "year": "2024", "name": "Good Design Award (Japan)" },
+      { "year": "2023", "name": "iF Design Award (Germany)" },
+      { "year": "2022", "name": "CES Innovation Honoree (USA)" },
+      { "year": "2021", "name": "Red Dot Award" },
+      { "year": "2019", "name": "Tokyo Care Tech Excellence Prize" }
+    ],
+    "pillars": [
+      {
+        "title": "Japanese craft",
+        "body": "Hardware tuned for stillness. We obsess over fabric finish, sensor placement, and the subtleties of restful design."
+      },
+      {
+        "title": "AI-driven insight",
+        "body": "Edge sensing fed into a private cloud. Heart rate variability, breath rate, body movement — translated into actionable nightly stories."
+      },
+      {
+        "title": "Family-shared",
+        "body": "Invite siblings, partners, or caregivers. Receive alerts when a loved one's vitals stray from baseline. Privacy-first, always opt-in."
+      }
+    ]
+  },
+  "products": {
+    "kicker": "Products",
+    "title": "Built for life's quietest hours.",
+    "lead": "A growing family of devices, all speaking the same SleepTech language.",
+    "items": {
+      "yumepad": {
+        "name": "YumePad",
+        "kanji": "夢",
+        "subtitle": "Sleep Pad AI",
+        "tagline": "Where dreams are measured.",
+        "description": "Slip YumePad under any mattress. Non-contact ballistocardiography captures heart rate variability, breath rate, body movement, and bed-presence — feeding a private AI that learns your rhythm and watches over your loved ones.",
+        "features": [
+          "HRV + breath rate (BCG sensors, no skin contact)",
+          "Body movement & bed-presence detection",
+          "AI baseline learning per sleeper",
+          "Real-time push alerts for vital deviations",
+          "Family sharing with role-based access",
+          "Offline edge processing — your data stays yours"
+        ],
+        "status": "Available now",
+        "cta": "Order"
+      },
+      "smart_bed": {
+        "name": "Smart Bed",
+        "tagline": "The bed that listens, adjusts, learns.",
+        "description": "A full smart bedframe with zone-controlled climate, gentle elevation, and integrated YumePad sensing — choreographed to your sleep stages.",
+        "status": "Q3 2026",
+        "cta": "Join waitlist"
+      },
+      "smart_pillow": {
+        "name": "Smart Pillow",
+        "tagline": "Snore detection. Posture nudge. Quiet presence.",
+        "description": "Memory-foam pillow with embedded microphone array and micro-haptics. Detects snoring, suggests gentle posture shifts, syncs with YumePad and Smart Bed.",
+        "status": "In development",
+        "cta": "Get notified"
+      }
+    },
+    "common": {
+      "learn_more": "Learn more",
+      "key_features": "Key features"
+    }
+  },
+  "testimonials": {
+    "kicker": "Reviews",
+    "title": "Loved by families across Asia.",
+    "lead": "Real stories from people who reclaimed peaceful nights with SleepTech.",
+    "items": [
+      {
+        "quote": "Within two weeks YumePad noticed my apnea before I did. The night-by-night story is what convinced my husband to see a doctor.",
+        "author": "Aiko M.",
+        "location": "Tokyo, Japan",
+        "verified": "Verified YumePad owner"
+      },
+      {
+        "quote": "I live in Hanoi but my mother is in Hue. Family sharing means I can check her vitals every morning. It's like she's two streets away.",
+        "author": "Linh P.",
+        "location": "Hanoi, Vietnam",
+        "verified": "Verified YumePad owner"
+      },
+      {
+        "quote": "The pad disappears under the mattress. No straps, no charging, no hassle. The app just tells me a clear story each morning.",
+        "author": "Somchai T.",
+        "location": "Bangkok, Thailand",
+        "verified": "Verified YumePad owner"
+      },
+      {
+        "quote": "Setup was five minutes. The Japanese attention to detail shows in every part — packaging, fabric, app rhythm. Premium without being loud.",
+        "author": "Hiroshi K.",
+        "location": "Osaka, Japan",
+        "verified": "Verified YumePad owner"
+      }
+    ]
+  },
+  "certifications": {
+    "kicker": "Trust",
+    "title": "Tested, certified, transparent.",
+    "lead": "We hold our hardware and data practices to the highest international standards.",
+    "items": [
+      { "code": "ISO 13485", "label": "Medical device QMS" },
+      { "code": "ISO 27001", "label": "Information security" },
+      { "code": "CE", "label": "EU conformity" },
+      { "code": "FCC", "label": "FCC Part 15B" },
+      { "code": "PSE", "label": "Japan electrical safety" },
+      { "code": "RoHS", "label": "Hazardous substance compliance" }
+    ]
+  },
+  "cta": {
+    "kicker": "Ready when you are",
+    "title": "Begin your sleep story tonight.",
+    "lead": "Join thousands of families who chose calmer mornings.",
+    "primary": "Pre-order YumePad",
+    "secondary": "Talk to us"
+  },
+  "footer": {
+    "tagline": "Sleep technology, made with care.",
+    "rights": "All rights reserved.",
+    "links": {
+      "company": "Company",
+      "products": "Products",
+      "support": "Support",
+      "legal": "Legal",
+      "about": "About SleepTech",
+      "press": "News",
+      "yumepad": "YumePad",
+      "smart_bed": "Smart Bed",
+      "smart_pillow": "Smart Pillow",
+      "help": "Help center",
+      "warranty": "Warranty",
+      "contact": "Contact us",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "compliance": "Compliance"
+    }
+  },
+  "contact": {
+    "title": "Contact us",
+    "intro": "Have a question about YumePad, your order, or our technology? Send us a message and we'll get back to you within 2 business days.",
+    "back_to_home": "← Back to home",
+    "form": {
+      "name": "Your name",
+      "name_placeholder": "Jane Doe",
+      "email": "Your email",
+      "email_placeholder": "you@example.com",
+      "subject": "Subject",
+      "subject_placeholder": "Question about YumePad",
+      "message": "Message",
+      "message_placeholder": "How can we help?",
+      "submit": "Send message",
+      "sending": "Sending…",
+      "captcha_label": "Confirm you're human"
+    },
+    "success": {
+      "title": "Message sent ✓",
+      "body": "Thank you! We'll respond within 2 business days."
+    },
+    "error": {
+      "captcha": "Captcha verification failed. Please try again.",
+      "ratelimit": "Too many submissions. Please try again in an hour.",
+      "generic": "Something went wrong. Please email hi@sleeptech.me directly."
+    }
+  },
+  "news": {
+    "kicker": "News",
+    "title": "Insights from SleepTech",
+    "lead": "Explore the science of AI-powered sleep technology, elderly care innovations, and the future of restorative rest — perspectives from our team and the global sleep research community.",
+    "back_to_index": "← All articles",
+    "back_to_home": "← Back to home",
+    "read_time_suffix": "min read",
+    "categories": {
+      "sleep_tech_ai": "Sleep Tech AI",
+      "sleep_care": "Sleep Care",
+      "elderly_care": "Elderly Care"
+    },
+    "more_articles": "More articles",
+    "published": "Published"
+  },
+  "lang": {
+    "switch": "Language"
+  },
+  "legal": {
+    "last_updated": "Last updated: May 4, 2026",
+    "back_to_home": "← Back to home",
+    "company_name": "SleepTech",
+    "contact_email": "hi@sleeptech.me",
+    "terms": {
+      "title": "Terms of Service",
+      "intro": "These Terms of Service (\"Terms\") govern your access to and use of the SleepTech mobile application, hardware devices (YumePad, Smart Bed, Smart Pillow), websites, and related services (collectively, the \"Service\"), operated by SleepTech (\"we\", \"us\", \"our\"). By creating an account or using the Service, you agree to be bound by these Terms.",
+      "sections": [
+        { "heading": "1. Acceptance of Terms", "body": "By installing, accessing, or using the Service, you confirm that you have read, understood, and agree to these Terms and our Privacy Policy. If you do not agree, do not use the Service." },
+        { "heading": "2. Eligibility", "body": "You must be at least 16 years old (or the age of digital consent in your jurisdiction) to create an account. The Service is intended for personal, non-commercial use by adults and supervised use by minors with parental consent." },
+        { "heading": "3. Your Account", "body": "You are responsible for maintaining the confidentiality of your account credentials and for all activity that occurs under your account. Notify us immediately at hi@sleeptech.me of any unauthorized access. You must provide accurate and current information when registering." },
+        { "heading": "4. License to Use", "body": "Subject to these Terms, we grant you a limited, non-exclusive, non-transferable, revocable license to access and use the Service for your personal, non-commercial purposes. You may not copy, modify, reverse-engineer, distribute, sell, or sublicense any part of the Service." },
+        { "heading": "5. Health and Medical Disclaimer", "body": "SleepTech devices and software are general wellness products designed to monitor sleep patterns and trends. THEY ARE NOT MEDICAL DEVICES. The Service is not intended to diagnose, treat, cure, or prevent any disease, condition, or injury. Any data, alerts, or recommendations are informational only and should not replace professional medical advice. Always consult a qualified healthcare provider for medical concerns. Do not rely on the Service in life-threatening situations." },
+        { "heading": "6. Family Sharing", "body": "You may invite family members to view your sleep data via in-app sharing. By inviting someone, you authorize SleepTech to share your data with that person according to the role you assign. You may revoke access at any time. Recipients must accept their own Terms and Privacy Policy upon registration." },
+        { "heading": "7. Acceptable Use", "body": "You agree not to: (a) use the Service for any unlawful or fraudulent purpose; (b) interfere with or disrupt the Service or servers; (c) attempt to gain unauthorized access; (d) use automated tools to scrape or copy content; (e) impersonate another person; (f) misrepresent health data of yourself or others." },
+        { "heading": "8. User Content", "body": "Any content you provide (account info, device names, family invitations) remains yours. You grant us a worldwide, royalty-free license to host, store, transmit, and process your content solely as needed to operate the Service. You represent that you have the right to provide this content." },
+        { "heading": "9. Intellectual Property", "body": "All Service software, logos, designs, text, and content are owned by SleepTech or its licensors and are protected by copyright, trademark, and other laws. The marks SleepTech, YumePad, Smart Bed, and Smart Pillow are our trademarks." },
+        { "heading": "10. Hardware Warranty", "body": "Hardware devices come with a 12-month limited warranty against manufacturing defects from the date of purchase, subject to normal use. Damage from misuse, modification, water, or accident is excluded. To claim warranty, contact hi@sleeptech.me with proof of purchase." },
+        { "heading": "11. Termination", "body": "You may stop using the Service and delete your account at any time from the app. We may suspend or terminate your account if you breach these Terms or for prolonged inactivity. Upon termination, your right to use the Service ceases immediately, but provisions regarding intellectual property, disclaimers, and liability survive." },
+        { "heading": "12. Disclaimer of Warranties", "body": "THE SERVICE IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR ACCURACY. WE DO NOT WARRANT UNINTERRUPTED OR ERROR-FREE OPERATION." },
+        { "heading": "13. Limitation of Liability", "body": "TO THE MAXIMUM EXTENT PERMITTED BY LAW, SLEEPTECH SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF DATA, REVENUE, OR PROFITS, ARISING FROM YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY FOR DIRECT DAMAGES SHALL NOT EXCEED THE AMOUNT YOU PAID FOR THE SERVICE IN THE PREVIOUS TWELVE MONTHS, OR USD 100, WHICHEVER IS GREATER." },
+        { "heading": "14. Indemnification", "body": "You agree to indemnify and hold harmless SleepTech, its officers, employees, and partners from any claims, damages, losses, or expenses (including legal fees) arising from your breach of these Terms or your misuse of the Service." },
+        { "heading": "15. Modifications to the Service or Terms", "body": "We may modify the Service or these Terms at any time. We will notify you of material changes by email or in-app notice. Continued use after changes constitutes acceptance. The latest version is always available at sleeptech.me/terms." },
+        { "heading": "16. Governing Law and Disputes", "body": "These Terms are governed by the laws of the Socialist Republic of Vietnam, without regard to conflict-of-law principles. Any dispute shall first be addressed in good faith between the parties. If unresolved, disputes shall be submitted to the competent courts of Vietnam." },
+        { "heading": "17. Apple App Store Additional Terms", "body": "If you obtained the Service via the Apple App Store, you acknowledge: these Terms are between you and SleepTech, not Apple; Apple is not responsible for the Service or claims; Apple is a third-party beneficiary entitled to enforce these Terms. You also agree to comply with Apple's Media Services Terms." },
+        { "heading": "18. Contact", "body": "For questions about these Terms: SleepTech, hi@sleeptech.me. We aim to respond within 5 business days." }
+      ]
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "intro": "This Privacy Policy explains how SleepTech (\"we\", \"us\", \"our\") collects, uses, shares, and protects your personal information when you use the SleepTech mobile application, hardware devices, websites, and related services (the \"Service\"). We are committed to safeguarding the sensitive nature of sleep and biometric data.",
+      "sections": [
+        { "heading": "1. Information We Collect", "body": "Account information: email address, encrypted password hash, display name, profile photo (optional). Biometric and sleep data: heart rate variability (HRV), respiration rate, body movement, bed presence, ambient temperature, sleep stages and duration — all measured by your SleepTech devices. Device information: device serial numbers, BLE provisioning credentials, MQTT identifiers, firmware version. Technical data: IP address, mobile OS and version, app version, crash logs, device language. Push notification: Firebase Cloud Messaging (FCM) device token. Family sharing: email addresses of family members you invite, the sharing role you assign them." },
+        { "heading": "2. How We Use Your Information", "body": "We use your information to: (a) provide the Service, including real-time monitoring and family sharing; (b) generate alerts when vital signs deviate from your baseline; (c) authenticate you and secure your account; (d) communicate with you about your account or service issues; (e) improve and develop new features (using aggregated, de-identified data); (f) comply with legal obligations." },
+        { "heading": "3. How We Share Your Information", "body": "We share information only when necessary: (a) with family members you explicitly invite, limited to data they need; (b) with service providers (Cloudflare for delivery and protection, Firebase for push notifications, MXroute for transactional email) under data-protection agreements; (c) when required by law, court order, or to protect rights and safety. WE DO NOT SELL YOUR DATA. WE DO NOT SHARE YOUR DATA WITH ADVERTISERS." },
+        { "heading": "4. Data Retention", "body": "Account and sleep data are retained while your account is active. After you delete your account, we permanently erase or anonymize your data within 30 days, except where law requires longer retention. Aggregated, de-identified data may be retained indefinitely for product improvement." },
+        { "heading": "5. Your Rights", "body": "You have the right to: access a copy of your data; correct inaccurate data; delete your account and data (in-app, Settings → Delete Account); export your sleep data in a machine-readable format (in-app); withdraw consent and object to processing; lodge a complaint with your local data protection authority. To exercise these rights, contact hi@sleeptech.me. We will respond within 30 days." },
+        { "heading": "6. Data Security", "body": "We implement strong security: TLS 1.3 in transit; encrypted database storage; bcrypt password hashing; per-device MQTT credentials with topic-level access control; OTP-based email verification; restricted internal access on a need-to-know basis. No system is 100% secure — please notify us immediately if you suspect compromise." },
+        { "heading": "7. Children's Privacy", "body": "The Service is not directed at children under 16. We do not knowingly collect data from children under 16. If we learn that we have collected such data, we will delete it. Parents who believe we hold data of a child should contact hi@sleeptech.me." },
+        { "heading": "8. International Data Transfers", "body": "Our primary servers are located in Asia-Pacific. If you access the Service from another region, your data may be transferred and processed in jurisdictions with different data-protection laws. We use standard contractual clauses and reasonable safeguards." },
+        { "heading": "9. Cookies and Local Storage", "body": "Our website uses minimal cookies: a session cookie for authentication and a preference cookie for language and theme. We do not use third-party tracking, analytics, or advertising cookies on this site. The mobile app uses local storage for offline cache and authentication tokens only." },
+        { "heading": "10. Third-Party Services", "body": "The Service uses: Cloudflare (CDN and DDoS protection — sees IP and request metadata); Firebase Cloud Messaging by Google (push notification delivery — receives device token and notification payload); MXroute (email delivery for verification and password reset — receives recipient address and message). Each provider has its own privacy policy." },
+        { "heading": "11. Apple App Store Privacy Labels", "body": "Categories disclosed in App Store Connect: Health & Fitness data linked to user identity; Contact Info (email) linked to identity; Identifiers (device ID) linked to identity; Diagnostics (crash logs) not linked to identity. Used for: App Functionality and Product Personalization. Not used for tracking across third-party apps or websites." },
+        { "heading": "12. Changes to This Policy", "body": "We may update this Privacy Policy. Material changes will be communicated by email and in-app notice at least 30 days before they take effect. The \"Last updated\" date at the top reflects the latest revision. Continued use of the Service constitutes acceptance." },
+        { "heading": "13. Contact and Data Protection Officer", "body": "Privacy questions, complaints, or requests: SleepTech, Email: hi@sleeptech.me. EU/UK users may contact our representative at the same email. We respond to all privacy inquiries within 30 days." }
+      ]
+    }
+  }
+}

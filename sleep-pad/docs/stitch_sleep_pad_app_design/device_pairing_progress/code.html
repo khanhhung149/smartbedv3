@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Setup Sleep Pad - Pairing</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#101419",
+                        "surface-container": "#1c2025",
+                        "on-primary-fixed-variant": "#00504c",
+                        "surface-dim": "#101419",
+                        "surface-tint": "#4fdad3",
+                        "on-error-container": "#ffdad6",
+                        "on-surface": "#e0e2ea",
+                        "inverse-on-surface": "#2d3136",
+                        "primary-fixed": "#70f7ef",
+                        "primary-container": "#5ee7df",
+                        "on-secondary-container": "#c5a5ff",
+                        "tertiary-container": "#ffcb64",
+                        "secondary-fixed-dim": "#d4bbff",
+                        "primary": "#a4fff8",
+                        "on-primary-container": "#006661",
+                        "on-error": "#690005",
+                        "on-tertiary-container": "#765500",
+                        "surface-container-lowest": "#0a0e13",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "on-primary": "#003734",
+                        "surface-container-highest": "#31353b",
+                        "surface-bright": "#36393f",
+                        "outline-variant": "#3c4948",
+                        "inverse-primary": "#006a66",
+                        "surface-variant": "#31353b",
+                        "error-container": "#93000a",
+                        "on-secondary-fixed": "#260058",
+                        "on-background": "#e0e2ea",
+                        "inverse-surface": "#e0e2ea",
+                        "surface-container-low": "#181c21",
+                        "secondary-container": "#553291",
+                        "on-tertiary-fixed": "#261900",
+                        "surface-container-high": "#262a30",
+                        "tertiary-fixed-dim": "#f2bf59",
+                        "on-surface-variant": "#bbc9c7",
+                        "on-secondary-fixed-variant": "#553291",
+                        "on-tertiary": "#412d00",
+                        "on-primary-fixed": "#00201e",
+                        "secondary": "#d4bbff",
+                        "background": "#101419",
+                        "secondary-fixed": "#ebdcff",
+                        "primary-fixed-dim": "#4fdad3",
+                        "outline": "#859492",
+                        "tertiary": "#ffedd1",
+                        "error": "#ffb4ab",
+                        "tertiary-fixed": "#ffdea5",
+                        "on-secondary": "#3e1779"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .headline-md {
+                @apply text-xl font-bold leading-tight tracking-tight;
+            }
+            .display-lg {
+                @apply text-4xl font-extrabold leading-tight tracking-tighter;
+            }
+            .label-sm {
+                @apply text-sm font-medium tracking-wide;
+            }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body min-h-screen flex flex-col items-center justify-start antialiased overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container pb-12">
+<!-- TopAppBar from JSON -->
+<header class="fixed top-0 w-full z-50 bg-[#0a0e13]/70 dark:bg-[#0a0e13]/70 backdrop-blur-2xl transition-transform duration-200">
+<div class="flex justify-between items-center px-6 py-4 w-full">
+<button aria-label="Go back" class="text-[#E6EDF3] hover:opacity-80 transition-opacity p-2 -ml-2 rounded-full focus:outline-none focus:ring-2 focus:ring-primary-container">
+<span aria-hidden="true" class="material-symbols-outlined text-2xl" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-['Inter'] headline-md text-[#E6EDF3] tracking-tight">Setup Sleep Pad</h1>
+<span class="text-[#8B96A5] font-medium text-sm">2 of 3</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full max-w-md px-6 pt-32 pb-8 flex-1 flex flex-col relative z-10">
+<!-- Ambient Background Glow -->
+<div class="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-primary-container/5 rounded-full blur-[80px] pointer-events-none"></div>
+<!-- Pairing Visualization -->
+<section class="flex flex-col items-center justify-center mb-16 relative z-10">
+<!-- Progress Ring Container -->
+<div class="relative w-[200px] h-[200px] mb-12 flex items-center justify-center">
+<!-- Background Ring -->
+<svg class="absolute inset-0 w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="stroke-surface-container" cx="50" cy="50" fill="none" r="46" stroke-width="2"></circle>
+</svg>
+<!-- Active Sweep Ring -->
+<svg class="absolute inset-0 w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="stroke-primary-container" cx="50" cy="50" fill="none" r="46" stroke-dasharray="289" stroke-dashoffset="144" stroke-linecap="round" stroke-width="2" style="filter: drop-shadow(0 0 8px rgba(94, 231, 223, 0.4));"></circle>
+</svg>
+<!-- Central Icon -->
+<div class="w-24 h-24 rounded-full bg-surface-container-low flex items-center justify-center shadow-[0_0_40px_rgba(224,226,234,0.06)] border border-outline-variant/15">
+<span class="material-symbols-outlined text-primary-container text-4xl" data-icon="bluetooth_connected" style="font-variation-settings: 'FILL' 0;">bluetooth_connected</span>
+</div>
+</div>
+<!-- Status Headline -->
+<h2 class="display-lg text-primary text-center">Pairing with your device…</h2>
+</section>
+<!-- Connectivity Checklist Container -->
+<section class="bg-surface-container-lowest rounded-xl p-6 border border-outline-variant/15 shadow-[0_0_40px_rgba(224,226,234,0.03)] relative z-10">
+<ul class="flex flex-col space-y-6">
+<!-- Step 1: Completed -->
+<li class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-primary-container/10 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-primary-container text-xl" data-icon="check" style="font-variation-settings: 'wght' 600;">check</span>
+</div>
+<span class="text-on-surface font-medium text-lg tracking-wide">Saved WiFi credentials</span>
+</li>
+<!-- Step 2: Active -->
+<li class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full border-2 border-primary-container flex items-center justify-center flex-shrink-0 shadow-[0_0_12px_rgba(94,231,223,0.3)]">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+</div>
+<span class="text-primary-container font-medium text-lg tracking-wide">Connecting to WiFi</span>
+</li>
+<!-- Step 3: Pending -->
+<li class="flex items-center gap-4 opacity-50">
+<div class="w-8 h-8 rounded-full border-2 border-outline-variant flex items-center justify-center flex-shrink-0">
+</div>
+<span class="text-on-surface font-medium text-lg tracking-wide">Connecting to server</span>
+</li>
+<!-- Step 4: Pending -->
+<li class="flex items-center gap-4 opacity-50">
+<div class="w-8 h-8 rounded-full border-2 border-outline-variant flex items-center justify-center flex-shrink-0">
+</div>
+<span class="text-on-surface font-medium text-lg tracking-wide">Finalizing</span>
+</li>
+</ul>
+</section>
+<!-- Footer Note -->
+<div class="mt-auto pt-12 text-center relative z-10">
+<p class="text-outline label-sm">This usually takes 10–30 seconds</p>
+</div>
+</main>
+</body></html>

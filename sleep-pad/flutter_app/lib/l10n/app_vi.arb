@@ -1,0 +1,203 @@
+{
+  "@@locale": "vi",
+
+  "appName": "Sleep Tech",
+
+  "signIn": "Đăng nhập",
+  "signUp": "Đăng ký",
+  "logIn": "Đăng nhập",
+  "logOut": "Đăng xuất",
+  "createAccount": "Tạo tài khoản",
+  "getStarted": "Bắt đầu",
+  "continueCta": "Tiếp tục",
+  "save": "Lưu",
+  "saveChanges": "Lưu thay đổi",
+  "cancel": "Hủy",
+  "retry": "Thử lại",
+  "accept": "Chấp nhận",
+  "decline": "Từ chối",
+  "send": "Gửi",
+
+  "welcomeBack": "Chào mừng trở lại",
+  "createYourAccount": "Tạo tài khoản của bạn",
+  "newHereSignUp": "Chưa có tài khoản? Đăng ký",
+  "alreadyHaveAccount": "Đã có tài khoản? ",
+  "forgotPassword": "Quên mật khẩu?",
+  "forgotPasswordTitle": "Quên mật khẩu",
+  "forgotPasswordSubtitle": "Nhập email và chúng tôi sẽ gửi mã đặt lại",
+  "sendResetCode": "Gửi mã đặt lại",
+  "backToSignIn": "Quay lại đăng nhập",
+
+  "emailAddress": "Địa chỉ email",
+  "password": "Mật khẩu",
+  "currentPassword": "Mật khẩu hiện tại",
+  "newPassword": "Mật khẩu mới",
+  "confirmPassword": "Xác nhận mật khẩu",
+  "passwordChanged": "Đổi mật khẩu thành công.",
+
+  "checkYourEmail": "Kiểm tra email của bạn",
+  "verifyEmailSubtitle": "Chúng tôi đã gửi mã 6 chữ số đến\n{email}",
+  "@verifyEmailSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+  "verify": "Xác minh",
+  "resendCode": "Gửi lại mã",
+  "resendIn": "Gửi lại sau {seconds}s",
+  "@resendIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+
+  "resetPassword": "Đặt lại mật khẩu",
+  "resetPasswordSubtitle": "Nhập mã đã gửi đến {email}",
+  "@resetPasswordSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "enterValidEmail": "Nhập địa chỉ email hợp lệ.",
+  "passwordTooShort": "Mật khẩu phải có ít nhất 8 ký tự.",
+  "passwordsDoNotMatch": "Mật khẩu không khớp.",
+  "enterSixDigitCode": "Nhập mã 6 chữ số.",
+
+  "settings": "Cài đặt",
+  "account": "Tài khoản",
+  "notifications": "Thông báo",
+  "appearance": "Giao diện",
+  "deviceConnection": "Kết nối thiết bị",
+  "about": "Về ứng dụng",
+  "changePassword": "Đổi mật khẩu",
+  "enablePushNotifications": "Bật thông báo đẩy",
+  "quietHours": "Giờ yên tĩnh",
+  "quietHoursValue": "10pm — 7am",
+  "appVersion": "Phiên bản ứng dụng",
+  "termsOfService": "Điều khoản dịch vụ",
+  "privacyPolicy": "Chính sách bảo mật",
+  "supportEmail": "Email hỗ trợ",
+  "serverUrl": "URL máy chủ",
+  "advanced": "Nâng cao",
+  "savedWifiCredentials": "Thông tin WiFi đã lưu",
+  "invalidUrlFormat": "Định dạng URL không hợp lệ",
+  "language": "Ngôn ngữ",
+
+  "devices": "Thiết bị",
+  "deviceDetails": "Chi tiết thiết bị",
+  "noDevicesPaired": "Chưa có thiết bị nào được ghép.",
+  "addDevice": "Thêm thiết bị",
+  "noDeviceSelected": "Chưa chọn thiết bị.",
+  "deviceIdCopied": "Đã sao chép ID thiết bị",
+  "failedToLoadDevice": "Không thể tải thiết bị: {error}",
+  "@failedToLoadDevice": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "pairedOn": "Đã ghép {date}",
+  "@pairedOn": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "activeAgo": "Hoạt động {time}",
+  "@activeAgo": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "online": "Trực tuyến",
+  "offline": "Ngoại tuyến",
+  "deviceNameHint": "Tên thiết bị",
+  "noDevice": "Không có thiết bị",
+
+  "setupSleepPad": "Cài đặt Sleep Tech",
+  "sleepPadReady": "Sleep Tech đã sẵn sàng",
+  "monitorSleepTagline": "Theo dõi giấc ngủ,\nkhông cần đeo thiết bị",
+  "onboardingSleepSubtitle": "Cảm biến đặt dưới nệm sẽ theo dõi nhịp tim, nhịp thở và chất lượng giấc ngủ một cách êm ái suốt đêm.",
+  "giveWifi": "Kết nối WiFi cho Sleep Tech",
+  "wifiDescription": "Sleep Tech sẽ dùng mạng này để gửi dữ liệu lên đám mây.",
+  "networkName": "Tên mạng (SSID)",
+  "saveAndGoHome": "Lưu và về trang chủ",
+  "pairingWithDevice": "Đang ghép đôi thiết bị...",
+  "pairingDuration": "Thường mất 10–30 giây",
+
+  "sharingTitle": "Chia sẻ sự an tâm",
+  "sharingSubtitle": "Mời thành viên gia đình qua email. Họ sẽ thấy cùng dữ liệu thời gian thực và cảnh báo như bạn.",
+  "sendInvite": "Gửi lời mời",
+  "pendingInvites": "LỜI MỜI CHỜ XỬ LÝ",
+  "noDevicesShared": "Chưa có thiết bị nào được chia sẻ với bạn.",
+  "inviteFrom": "Lời mời từ {email}",
+  "@inviteFrom": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "alerts": "Cảnh báo",
+  "alertDetail": "Chi tiết cảnh báo",
+  "knowIfSomethingOff": "Biết ngay khi có bất thường",
+  "alertsSubtitle": "Đặt ngưỡng cá nhân. Nhận thông báo ngay khi chỉ số sinh hiệu vượt ra ngoài vùng an toàn của bạn.",
+  "activeNotificationsEnabled": "Thông báo đang bật",
+
+  "sleepHistory": "Lịch sử giấc ngủ",
+  "couldNotLoadHistory": "Không thể tải lịch sử",
+  "notEnoughData": "Chưa đủ dữ liệu",
+  "sleepDataWillAppear": "Dữ liệu giấc ngủ sẽ xuất hiện sau khi thiết bị theo dõi.",
+
+  "noDevicePaired": "Chưa có thiết bị được ghép nối",
+  "iAlreadyHaveAccount": "Tôi đã có tài khoản",
+
+  "justNow": "vừa xong",
+  "minutesAgo": "{minutes} phút trước",
+  "@minutesAgo": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "hoursAgo": "{hours}h trước",
+  "@hoursAgo": {
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
+  },
+
+  "networkNameRequired": "Tên mạng là bắt buộc",
+  "somethingWentWrong": "Đã xảy ra lỗi. Vui lòng thử lại.",
+  "inviteFamily": "Mời thành viên gia đình",
+  "inviteFamilyDescription": "Họ sẽ nhận được lời mời qua email. Khi chấp nhận, họ sẽ thấy dữ liệu và cảnh báo theo thời gian thực giống bạn.",
+
+  "addDeviceToGetStarted": "Thêm thiết bị Sleep Tech để bắt đầu.",
+  "reconnectingTo": "Đang kết nối lại với {deviceName}…",
+  "@reconnectingTo": {
+    "placeholders": {
+      "deviceName": { "type": "String" }
+    }
+  },
+
+  "heartRate": "Nhịp tim",
+  "respiration": "Hô hấp",
+  "temperature": "Nhiệt độ",
+  "movement": "Cử động",
+  "snores": "Tiếng ngáy",
+  "sData": "S-Data",
+  "pData": "P-Data",
+
+  "nearbyDevices": "THIẾT BỊ GẦN ĐÂY",
+  "searchingForDevices": "Đang tìm thiết bị lân cận...",
+  "bluetoothPermissionNeeded": "Cần quyền Bluetooth",
+  "bluetoothPermissionDescription": "Sleep Tech cần Bluetooth để tìm thiết bị của bạn. Cấp quyền để tiếp tục.",
+  "openSettings": "Mở cài đặt",
+  "strongSignal": "Tín hiệu mạnh",
+  "moderateSignal": "Tín hiệu vừa",
+  "weakSignal": "Tín hiệu yếu",
+
+  "only24GhzSupported": "Thiết bị dùng WiFi 2.4GHz. Router 2 băng tần (cùng tên mạng) vẫn hoạt động bình thường. Nếu kết nối thất bại, hãy thử chọn mạng 2.4GHz riêng.",
+  "wifiConnectionFailed": "Kết nối WiFi thất bại",
+  "serverUnreachable": "Không thể kết nối máy chủ",
+  "changeWifi": "Đổi WiFi",
+  "changeWifiDescription": "Để đổi WiFi, giữ nút trên thiết bị Sleep Tech 5 giây cho đến khi đèn LED nhấp nháy xanh — thiết bị sẽ khởi động lại ở chế độ cài đặt.",
+  "changeWifiContinue": "Tiếp tục cài đặt"
+}

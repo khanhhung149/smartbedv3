@@ -1,0 +1,22 @@
+# Env files — never commit
+.env
+.env.dev
+.env.prod
+.env.*.local
+# Templates ARE committed — share schema with team
+!.env*.example
+
+# Secrets — mounted into containers
+secrets/
+mosquitto/passwords
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Docker
+docker-compose.override.yml

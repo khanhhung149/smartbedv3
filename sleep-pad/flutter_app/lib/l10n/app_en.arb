@@ -1,0 +1,203 @@
+{
+  "@@locale": "en",
+
+  "appName": "Sleep Tech",
+
+  "signIn": "Sign in",
+  "signUp": "Sign up",
+  "logIn": "Log in",
+  "logOut": "Log out",
+  "createAccount": "Create account",
+  "getStarted": "Get started",
+  "continueCta": "Continue",
+  "save": "Save",
+  "saveChanges": "Save changes",
+  "cancel": "Cancel",
+  "retry": "Retry",
+  "accept": "Accept",
+  "decline": "Decline",
+  "send": "Send",
+
+  "welcomeBack": "Welcome back",
+  "createYourAccount": "Create your account",
+  "newHereSignUp": "New here? Sign up",
+  "alreadyHaveAccount": "Already have an account? ",
+  "forgotPassword": "Forgot password?",
+  "forgotPasswordTitle": "Forgot password",
+  "forgotPasswordSubtitle": "Enter your email and we'll send a reset code",
+  "sendResetCode": "Send reset code",
+  "backToSignIn": "Back to sign in",
+
+  "emailAddress": "Email address",
+  "password": "Password",
+  "currentPassword": "Current password",
+  "newPassword": "New password",
+  "confirmPassword": "Confirm password",
+  "passwordChanged": "Password changed successfully.",
+
+  "checkYourEmail": "Check your email",
+  "verifyEmailSubtitle": "We sent a 6-digit code to\n{email}",
+  "@verifyEmailSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+  "verify": "Verify",
+  "resendCode": "Resend code",
+  "resendIn": "Resend in {seconds}s",
+  "@resendIn": {
+    "placeholders": {
+      "seconds": { "type": "int" }
+    }
+  },
+
+  "resetPassword": "Reset password",
+  "resetPasswordSubtitle": "Enter the code sent to {email}",
+  "@resetPasswordSubtitle": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "enterValidEmail": "Enter a valid email address.",
+  "passwordTooShort": "Password must be at least 8 characters.",
+  "passwordsDoNotMatch": "Passwords do not match.",
+  "enterSixDigitCode": "Enter the 6-digit code.",
+
+  "settings": "Settings",
+  "account": "Account",
+  "notifications": "Notifications",
+  "appearance": "Appearance",
+  "deviceConnection": "Device Connection",
+  "about": "About",
+  "changePassword": "Change password",
+  "enablePushNotifications": "Enable push notifications",
+  "quietHours": "Quiet hours",
+  "quietHoursValue": "10pm — 7am",
+  "appVersion": "App version",
+  "termsOfService": "Terms of Service",
+  "privacyPolicy": "Privacy Policy",
+  "supportEmail": "Support Email",
+  "serverUrl": "Server URL",
+  "advanced": "Advanced",
+  "savedWifiCredentials": "Saved WiFi credentials",
+  "invalidUrlFormat": "Invalid URL format",
+  "language": "Language",
+
+  "devices": "Devices",
+  "deviceDetails": "Device Details",
+  "noDevicesPaired": "No devices paired yet.",
+  "addDevice": "Add device",
+  "noDeviceSelected": "No device selected.",
+  "deviceIdCopied": "Device ID copied",
+  "failedToLoadDevice": "Failed to load device: {error}",
+  "@failedToLoadDevice": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "pairedOn": "Paired {date}",
+  "@pairedOn": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "activeAgo": "Active {time}",
+  "@activeAgo": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "online": "Online",
+  "offline": "Offline",
+  "deviceNameHint": "Device name",
+  "noDevice": "No device",
+
+  "setupSleepPad": "Setup Sleep Tech",
+  "sleepPadReady": "Sleep Tech is ready",
+  "monitorSleepTagline": "Monitor sleep,\nwithout wearables",
+  "onboardingSleepSubtitle": "A sensor under the mattress tracks heart rate, breathing, and sleep quality silently through the night.",
+  "giveWifi": "Give your Sleep Tech WiFi",
+  "wifiDescription": "Your Sleep Tech will use this network to send data to the cloud.",
+  "networkName": "Network Name (SSID)",
+  "saveAndGoHome": "Save and go home",
+  "pairingWithDevice": "Pairing with your device...",
+  "pairingDuration": "This usually takes 10–30 seconds",
+
+  "sharingTitle": "Share peace of mind",
+  "sharingSubtitle": "Invite family members by email. They see the same realtime data and alerts you do.",
+  "sendInvite": "Send invite",
+  "pendingInvites": "PENDING INVITES",
+  "noDevicesShared": "No devices shared with you.",
+  "inviteFrom": "Invite from {email}",
+  "@inviteFrom": {
+    "placeholders": {
+      "email": { "type": "String" }
+    }
+  },
+
+  "alerts": "Alerts",
+  "alertDetail": "Alert Detail",
+  "knowIfSomethingOff": "Know if something's off",
+  "alertsSubtitle": "Set personalized thresholds. Get a notification the moment vitals drift outside your safe range.",
+  "activeNotificationsEnabled": "Active notifications enabled",
+
+  "sleepHistory": "Sleep History",
+  "couldNotLoadHistory": "Could not load history",
+  "notEnoughData": "Not enough data yet",
+  "sleepDataWillAppear": "Sleep data will appear here once your device has been monitoring.",
+
+  "noDevicePaired": "No device paired",
+  "iAlreadyHaveAccount": "I already have an account",
+
+  "justNow": "just now",
+  "minutesAgo": "{minutes} min ago",
+  "@minutesAgo": {
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "hoursAgo": "{hours}h ago",
+  "@hoursAgo": {
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
+  },
+
+  "networkNameRequired": "Network name is required",
+  "somethingWentWrong": "Something went wrong. Try again.",
+  "inviteFamily": "Invite family",
+  "inviteFamilyDescription": "They'll get an email invite. When they accept, they'll see the same realtime data and alerts you do.",
+
+  "addDeviceToGetStarted": "Add a Sleep Tech device to get started.",
+  "reconnectingTo": "Reconnecting to {deviceName}…",
+  "@reconnectingTo": {
+    "placeholders": {
+      "deviceName": { "type": "String" }
+    }
+  },
+
+  "heartRate": "Heart Rate",
+  "respiration": "Respiration",
+  "temperature": "Temperature",
+  "movement": "Movement",
+  "snores": "Snores",
+  "sData": "S-Data",
+  "pData": "P-Data",
+
+  "nearbyDevices": "NEARBY DEVICES",
+  "searchingForDevices": "Searching for nearby devices...",
+  "bluetoothPermissionNeeded": "Bluetooth permission needed",
+  "bluetoothPermissionDescription": "Sleep Tech needs Bluetooth to find your device. Grant permission to continue.",
+  "openSettings": "Open settings",
+  "strongSignal": "Strong signal",
+  "moderateSignal": "Moderate signal",
+  "weakSignal": "Weak signal",
+
+  "only24GhzSupported": "This device uses 2.4GHz WiFi. Dual-band routers (same name for both bands) work fine. If connection fails, try a 2.4GHz-only network.",
+  "wifiConnectionFailed": "WiFi connection failed",
+  "serverUnreachable": "Server unreachable",
+  "changeWifi": "Change WiFi",
+  "changeWifiDescription": "To change WiFi, hold the button on your Sleep Tech device for 5 seconds until the LED blinks blue — it will restart in setup mode.",
+  "changeWifiContinue": "Continue to setup"
+}

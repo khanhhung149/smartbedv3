@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Pad - Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-error-container": "#ffdad6",
+                    "error": "#ffb4ab",
+                    "secondary-container": "#553291",
+                    "inverse-surface": "#e0e2ea",
+                    "surface-bright": "#36393f",
+                    "tertiary-container": "#ffcb64",
+                    "on-primary-fixed": "#00201e",
+                    "on-surface": "#e0e2ea",
+                    "primary-fixed-dim": "#4fdad3",
+                    "on-error": "#690005",
+                    "on-tertiary-fixed-variant": "#5d4200",
+                    "on-secondary-fixed-variant": "#553291",
+                    "on-primary-container": "#006661",
+                    "on-background": "#e0e2ea",
+                    "on-tertiary": "#412d00",
+                    "inverse-primary": "#006a66",
+                    "background": "#101419",
+                    "surface-container-highest": "#31353b",
+                    "tertiary-fixed-dim": "#f2bf59",
+                    "outline": "#859492",
+                    "tertiary-fixed": "#ffdea5",
+                    "surface-container-high": "#262a30",
+                    "surface": "#101419",
+                    "error-container": "#93000a",
+                    "surface-tint": "#4fdad3",
+                    "on-surface-variant": "#bbc9c7",
+                    "on-secondary-container": "#c5a5ff",
+                    "tertiary": "#ffedd1",
+                    "surface-dim": "#101419",
+                    "secondary": "#d4bbff",
+                    "on-secondary-fixed": "#260058",
+                    "surface-container-low": "#181c21",
+                    "surface-container": "#1c2025",
+                    "on-secondary": "#3e1779",
+                    "primary-container": "#5ee7df",
+                    "primary": "#a4fff8",
+                    "outline-variant": "#3c4948",
+                    "on-tertiary-container": "#765500",
+                    "primary-fixed": "#70f7ef",
+                    "secondary-fixed": "#ebdcff",
+                    "inverse-on-surface": "#2d3136",
+                    "on-primary": "#003734",
+                    "surface-variant": "#31353b",
+                    "surface-container-lowest": "#0a0e13",
+                    "on-tertiary-fixed": "#261900",
+                    "secondary-fixed-dim": "#d4bbff",
+                    "on-primary-fixed-variant": "#00504c"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {},
+            "fontFamily": {
+                    "headline": [
+                            "Inter"
+                    ],
+                    "body": [
+                            "Inter"
+                    ],
+                    "label": [
+                            "Inter"
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #101419; /* background token */
+            color: #e0e2ea; /* on-background token */
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col pb-24 font-body">
+<!-- TopAppBar -->
+<header class="docked full-width top-0 sticky z-50 bg-[#101419]/70 backdrop-blur-lg bg-gradient-to-b from-[#101419] to-transparent flat no-border flex justify-between items-center px-6 py-4 w-full md:hidden">
+<button class="text-teal-400 scale-95 active:scale-90 transition-transform hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<div class="text-center">
+<h1 class="font-['Inter'] text-2xl font-semibold tracking-tight text-teal-400">Settings</h1>
+<p class="text-xs text-on-surface-variant font-medium">Grandma's room</p>
+</div>
+<button class="text-teal-400 scale-95 active:scale-90 transition-transform hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow px-6 pt-6 pb-12 space-y-8 max-w-2xl mx-auto w-full">
+<!-- Section 1: Account -->
+<section>
+<h2 class="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3 px-4">Account</h2>
+<div class="bg-surface-container rounded-lg flex flex-col overflow-hidden">
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant/30 flex items-center justify-center">
+<img alt="User Avatar" class="w-full h-full object-cover opacity-90" data-alt="Portrait of an older woman with gentle lighting against a dark neutral background, high resolution, soft cinematic look" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHUJMpUoK_CIlJgGWcqacghCcBJRafgNqNbS5wuAUnFGArD0IXysA2F8EWiOSLW82B2__-Qy3_tAww2A5iGc9GDpQYflb4AD3du8pfbEji76hOwTGfOvH_07fdHMyFwzKMJYOmHGZ6IWFfeAxM0B7eDNRk721kSXOJviMBSdlZPjklsGxL8mto8n6ZqeQEwVQLYiase4L3xw6_RAax7_tbB9wW9YOt9V2JBUGSVyKANO0aYiM-Aft_MXB25zmJ6uLWPf7sOc7UjXc"/>
+</div>
+<div>
+<p class="text-on-surface font-medium">Grandma</p>
+<p class="text-on-surface-variant text-sm">user@example.com</p>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0 hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<span class="text-on-surface font-medium">Change password</span>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+</div>
+</section>
+<!-- Section 2: Notifications -->
+<section>
+<h2 class="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3 px-4">Notifications</h2>
+<div class="bg-surface-container rounded-lg flex flex-col overflow-hidden">
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0">
+<span class="text-on-surface font-medium">Enable push notifications</span>
+<!-- Toggle Switch -->
+<div class="w-12 h-6 bg-primary-container/20 rounded-full relative cursor-pointer border border-primary-container/30">
+<div class="w-5 h-5 bg-primary-container rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0">
+<div class="flex flex-col">
+<span class="text-on-surface font-medium">Quiet hours</span>
+<span class="text-on-surface-variant text-sm">10pm — 7am</span>
+</div>
+<!-- Toggle Switch Off -->
+<div class="w-12 h-6 bg-surface-container-highest rounded-full relative cursor-pointer border border-outline-variant/50">
+<div class="w-5 h-5 bg-on-surface-variant rounded-full absolute left-0.5 top-0.5 shadow-sm"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 3: Appearance -->
+<section>
+<h2 class="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3 px-4">Appearance</h2>
+<div class="bg-surface-container rounded-lg p-5">
+<div class="flex bg-surface-container-highest rounded-full p-1 border border-outline-variant/20">
+<button class="flex-1 text-center py-2 text-sm font-medium text-on-surface-variant rounded-full transition-colors">System</button>
+<button class="flex-1 text-center py-2 text-sm font-medium text-on-surface-variant rounded-full transition-colors">Light</button>
+<button class="flex-1 text-center py-2 text-sm font-medium text-primary-fixed bg-surface-container shadow-sm border border-outline-variant/30 rounded-full transition-colors">Dark</button>
+</div>
+</div>
+</section>
+<!-- Section 4: Device / Server -->
+<section>
+<h2 class="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3 px-4">Device Connection</h2>
+<div class="bg-surface-container rounded-lg flex flex-col overflow-hidden">
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0">
+<div class="flex flex-col">
+<span class="text-on-surface font-medium">Server URL</span>
+<span class="text-on-surface-variant text-sm font-mono mt-1 opacity-80">mqtt.somnus.cloud</span>
+</div>
+<span class="text-xs bg-surface-container-highest text-on-surface-variant px-2 py-1 rounded border border-outline-variant/20">Advanced</span>
+</div>
+</div>
+</section>
+<!-- Section 5: About -->
+<section>
+<h2 class="text-sm font-semibold text-on-surface-variant uppercase tracking-wider mb-3 px-4">About</h2>
+<div class="bg-surface-container rounded-lg flex flex-col overflow-hidden">
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0">
+<span class="text-on-surface font-medium">App version</span>
+<span class="text-on-surface-variant text-sm">v2.4.0</span>
+</div>
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0 hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<span class="text-on-surface font-medium">Terms of Service</span>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0 hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<span class="text-on-surface font-medium">Privacy Policy</span>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</div>
+<div class="flex items-center justify-between p-5 border-b border-white/5 last:border-0 hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<span class="text-on-surface font-medium">Support Email</span>
+<span class="material-symbols-outlined text-on-surface-variant">mail</span>
+</div>
+</div>
+</section>
+<!-- Section 6: Logout -->
+<section class="pt-4">
+<div class="bg-surface-container rounded-lg overflow-hidden border border-error/10 hover:bg-error/5 transition-colors cursor-pointer">
+<div class="flex items-center justify-center p-5">
+<span class="text-[#F06262] font-semibold">Log out</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-[#101419]/70 backdrop-blur-2xl fixed bottom-0 w-full rounded-t-[32px] overflow-hidden border-t border-white/5 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] md:hidden">
+<button class="flex flex-col items-center justify-center text-slate-500 hover:text-teal-300 transition-colors scale-100 active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 hover:text-teal-300 transition-colors scale-100 active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="history">history</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide">History</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 hover:text-teal-300 transition-colors scale-100 active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="notifications_active">notifications_active</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide">Alerts</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-500 hover:text-teal-300 transition-colors scale-100 active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="devices">devices</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide">Devices</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-teal-400/10 text-teal-400 rounded-full py-2 px-4 hover:text-teal-300 transition-colors scale-100 active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1" data-icon="settings" data-weight="fill" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-['Inter'] text-[10px] font-medium tracking-wide">Settings</span>
+</button>
+</nav>
+</body></html>

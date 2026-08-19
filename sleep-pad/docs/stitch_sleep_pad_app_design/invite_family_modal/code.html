@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Pad - Invite Family</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary": "#a4fff8",
+                      "surface-container-lowest": "#0a0e13",
+                      "outline": "#859492",
+                      "on-primary-fixed-variant": "#00504c",
+                      "primary-container": "#5ee7df",
+                      "on-surface-variant": "#bbc9c7",
+                      "on-primary-fixed": "#00201e",
+                      "on-primary-container": "#006661",
+                      "on-tertiary-fixed": "#261900",
+                      "surface": "#101419",
+                      "primary-fixed-dim": "#4fdad3",
+                      "error-container": "#93000a",
+                      "on-tertiary": "#412d00",
+                      "surface-variant": "#31353b",
+                      "surface-dim": "#101419",
+                      "on-secondary": "#3e1779",
+                      "error": "#ffb4ab",
+                      "on-error": "#690005",
+                      "inverse-surface": "#e0e2ea",
+                      "tertiary-fixed-dim": "#f2bf59",
+                      "inverse-primary": "#006a66",
+                      "outline-variant": "#3c4948",
+                      "secondary-fixed": "#ebdcff",
+                      "secondary-container": "#553291",
+                      "surface-container": "#1c2025",
+                      "on-secondary-fixed-variant": "#553291",
+                      "surface-container-highest": "#31353b",
+                      "on-error-container": "#ffdad6",
+                      "tertiary": "#ffedd1",
+                      "surface-tint": "#4fdad3",
+                      "surface-container-high": "#262a30",
+                      "tertiary-fixed": "#ffdea5",
+                      "primary-fixed": "#70f7ef",
+                      "on-background": "#e0e2ea",
+                      "secondary-fixed-dim": "#d4bbff",
+                      "on-tertiary-container": "#765500",
+                      "on-secondary-fixed": "#260058",
+                      "on-primary": "#003734",
+                      "background": "#101419",
+                      "on-tertiary-fixed-variant": "#5d4200",
+                      "tertiary-container": "#ffcb64",
+                      "secondary": "#d4bbff",
+                      "inverse-on-surface": "#2d3136",
+                      "surface-bright": "#36393f",
+                      "on-secondary-container": "#c5a5ff",
+                      "surface-container-low": "#181c21",
+                      "on-surface": "#e0e2ea"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {},
+              "fontFamily": {
+                      "headline": [
+                              "Inter"
+                      ],
+                      "body": [
+                              "Inter"
+                      ],
+                      "label": [
+                              "Inter"
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+      </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body h-screen w-full overflow-hidden flex flex-col antialiased selection:bg-primary-container selection:text-on-primary-container relative">
+<!-- Background Screen (Dimmed) - Alerts Settings Context -->
+<div class="absolute inset-0 flex flex-col opacity-30 pointer-events-none filter blur-[2px]">
+<!-- TopAppBar (Simulated Context) -->
+<header class="flex items-center justify-between px-6 h-16 w-full fixed top-0 z-50 bg-[#101419]/70 backdrop-blur-xl">
+<div class="flex items-center">
+<button class="p-2 -ml-2 text-[#5EE7DF] hover:opacity-80 transition-opacity scale-95 duration-200 focus:outline-none">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+</div>
+<h1 class="text-xl font-bold tracking-widest text-[#5EE7DF] uppercase font-['Inter'] tracking-tight">Sleep Pad</h1>
+<div class="flex items-center">
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-outline-variant/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm text-on-surface-variant" data-icon="person">person</span>
+</div>
+</div>
+</header>
+<!-- Main Content Area (Alerts Settings) -->
+<main class="flex-1 overflow-y-auto pt-24 pb-28 px-6 space-y-6">
+<div class="mb-8">
+<h2 class="text-3xl font-bold text-on-surface font-headline tracking-tight mb-2">Alerts Settings</h2>
+<p class="text-base text-on-surface-variant max-w-md">Manage how and when you receive notifications.</p>
+</div>
+<div class="space-y-4">
+<!-- Mock Settings Item -->
+<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/15 flex items-center justify-between">
+<div>
+<h3 class="text-lg font-medium text-on-surface mb-1">Vitals Anomalies</h3>
+<p class="text-sm text-on-surface-variant">Heart rate or breathing irregularities.</p>
+</div>
+<div class="w-12 h-6 bg-primary-container rounded-full relative">
+<div class="absolute right-1 top-1 w-4 h-4 bg-on-primary-container rounded-full"></div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Simulated Context) -->
+<nav class="flex justify-around items-center h-20 px-4 w-full fixed bottom-0 z-50 rounded-t-[32px] bg-[#101419]/70 backdrop-blur-2xl border-t border-[#E6EDF3]/15 shadow-[0_-4px_40px_rgba(0,0,0,0.4)] md:hidden">
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-5 py-2 hover:text-[#E6EDF3] transition-colors scale-98 active:scale-95 duration-200">
+<span class="material-symbols-outlined mb-1 text-2xl" data-icon="monitor_heart">monitor_heart</span>
+<span class="text-[10px] font-medium tracking-tighter uppercase font-['Inter']">Vitals</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-5 py-2 hover:text-[#E6EDF3] transition-colors scale-98 active:scale-95 duration-200">
+<span class="material-symbols-outlined mb-1 text-2xl" data-icon="history">history</span>
+<span class="text-[10px] font-medium tracking-tighter uppercase font-['Inter']">History</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#5EE7DF] bg-[#5EE7DF]/10 rounded-full px-5 py-2 hover:text-[#E6EDF3] transition-colors scale-98 active:scale-95 duration-200">
+<span class="material-symbols-outlined mb-1 text-2xl" data-icon="notifications" data-weight="fill">notifications</span>
+<span class="text-[10px] font-medium tracking-tighter uppercase font-['Inter']">Alerts</span>
+</button>
+<button class="flex flex-col items-center justify-center text-[#8B96A5] px-5 py-2 hover:text-[#E6EDF3] transition-colors scale-98 active:scale-95 duration-200">
+<span class="material-symbols-outlined mb-1 text-2xl" data-icon="biotech">biotech</span>
+<span class="text-[10px] font-medium tracking-tighter uppercase font-['Inter']">Labs</span>
+</button>
+</nav>
+</div>
+<!-- Scrim Overlay -->
+<div class="absolute inset-0 bg-background/80 z-40"></div>
+<!-- Bottom Sheet Modal -->
+<div class="absolute bottom-0 left-0 w-full bg-[#1A222D] rounded-t-[24px] z-50 flex flex-col shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transform translate-y-0 transition-transform duration-300 h-[55%]">
+<!-- Drag Handle -->
+<div class="w-full flex justify-center pt-3 pb-4">
+<div class="w-12 h-1.5 bg-outline-variant/50 rounded-full"></div>
+</div>
+<!-- Modal Content -->
+<div class="px-6 flex-1 flex flex-col pb-8">
+<h2 class="text-[22px] font-semibold text-on-surface font-headline mb-3">Invite family</h2>
+<p class="text-[16px] text-on-surface-variant leading-relaxed mb-8">
+                They'll get an email invite. When they accept, they'll see the same realtime data and alerts you do.
+            </p>
+<div class="mb-auto">
+<label class="sr-only" for="email">Email address</label>
+<input class="w-full h-[52px] bg-surface-container-lowest text-on-surface rounded-lg px-4 border-none focus:ring-1 focus:ring-[#5EE7DF] focus:outline-none placeholder:text-on-surface-variant/50 text-[16px] transition-shadow" id="email" placeholder="mom@example.com" type="email"/>
+</div>
+<!-- Actions -->
+<div class="mt-8 flex flex-col gap-4">
+<button class="w-full h-14 rounded-full bg-gradient-to-br from-[#a4fff8] to-[#5ee7df] text-[#00201e] font-semibold text-lg hover:scale-[0.98] transition-transform duration-200 active:scale-95 shadow-[0_0_20px_rgba(94,231,223,0.15)] flex items-center justify-center gap-2">
+                    Send invite
+                </button>
+<button class="w-full h-12 rounded-full text-[#8B96A5] font-medium text-base hover:text-on-surface transition-colors hover:scale-[0.98] duration-200 active:scale-95">
+                    Cancel
+                </button>
+</div>
+</div>
+</div>
+</body></html>

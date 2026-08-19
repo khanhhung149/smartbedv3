@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sleep Pad - Onboarding</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#36393f",
+                        "on-tertiary-fixed": "#261900",
+                        "surface-container": "#1c2025",
+                        "on-background": "#e0e2ea",
+                        "inverse-on-surface": "#2d3136",
+                        "tertiary-fixed-dim": "#f2bf59",
+                        "surface-dim": "#101419",
+                        "on-secondary": "#3e1779",
+                        "outline": "#859492",
+                        "on-secondary-container": "#c5a5ff",
+                        "primary-fixed-dim": "#4fdad3",
+                        "on-error": "#690005",
+                        "tertiary-container": "#ffcb64",
+                        "outline-variant": "#3c4948",
+                        "on-surface-variant": "#bbc9c7",
+                        "tertiary": "#ffedd1",
+                        "error-container": "#93000a",
+                        "secondary-container": "#553291",
+                        "on-primary-fixed-variant": "#00504c",
+                        "on-secondary-fixed": "#260058",
+                        "inverse-surface": "#e0e2ea",
+                        "tertiary-fixed": "#ffdea5",
+                        "surface-container-lowest": "#0a0e13",
+                        "on-surface": "#e0e2ea",
+                        "on-tertiary-fixed-variant": "#5d4200",
+                        "secondary": "#d4bbff",
+                        "surface-container-low": "#181c21",
+                        "surface-container-high": "#262a30",
+                        "on-secondary-fixed-variant": "#553291",
+                        "on-primary-container": "#006661",
+                        "primary-container": "#5ee7df",
+                        "on-primary-fixed": "#00201e",
+                        "primary": "#a4fff8",
+                        "background": "#101419",
+                        "secondary-fixed": "#ebdcff",
+                        "on-tertiary-container": "#765500",
+                        "secondary-fixed-dim": "#d4bbff",
+                        "surface-variant": "#31353b",
+                        "on-tertiary": "#412d00",
+                        "on-primary": "#003734",
+                        "surface-container-highest": "#31353b",
+                        "on-error-container": "#ffdad6",
+                        "surface": "#101419",
+                        "surface-tint": "#4fdad3",
+                        "inverse-primary": "#006a66",
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#70f7ef"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {},
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0B0F14; /* Enforcing strict dark background as requested */
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="text-on-background min-h-screen flex flex-col antialiased bg-[#0B0F14]">
+<!-- Full-bleed Illustration Area (Top 60%) -->
+<div class="relative h-[530px] w-full flex-shrink-0">
+<!-- The background image creates the atmospheric, glowing laboratory vibe -->
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0B0F14] z-10 pointer-events-none"></div>
+<img alt="Sleep tracking illustration" class="absolute inset-0 w-full h-full object-cover" data-alt="Premium 3D illustration of an elderly Vietnamese couple sleeping peacefully on a mattress with a visible circular sensor and floating holographic data points (heart rate, respiration, temperature) on a dark background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-669gSGbhakl1GZuGSmHyk6snBgQ6DqkCrWbSV-DDopBVLUGKbgqeBDyRmuJjnaRZ6K2JGUjbZrkmLAPizDicUpkgElBKDYLxfpAyIXHVDYSPUBtSeQ1jOiSbc0qlrbX_jO3tqVM5LYmcGq-9Rg6WJOiqBiuMoqwdrUHp3ojQ8lXJ07nxodq0o8AGIBEaiQeDzT2zJsdZ692iBwvfwSaOBZuVCzBtSBYezQLjsiKNu9_Pc6gxHQfqXTJVHvGPSkaE1wKFRQnFRl8"/>
+</div>
+<!-- Content Area (Bottom 40%) -->
+<div class="relative z-20 flex-1 flex flex-col px-8 pb-10 pt-4 -mt-6 rounded-t-xl bg-[#0B0F14] justify-between">
+<!-- Text Content -->
+<div class="flex flex-col items-center text-center space-y-4">
+<h1 class="font-headline font-bold text-[32px] leading-tight text-primary-container tracking-tight">
+                Monitor sleep,<br/>without wearables
+            </h1>
+<p class="font-body text-[16px] text-secondary leading-relaxed max-w-sm px-4">
+                A sensor under the mattress tracks heart rate, breathing, and sleep quality silently through the night.
+            </p>
+</div>
+<!-- Pagination & Controls -->
+<div class="flex flex-col items-center w-full mt-auto pt-8">
+<!-- Pagination Dots -->
+<div class="flex space-x-3 mb-8">
+<div class="w-2.5 h-2.5 rounded-full bg-primary-container"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-[#1F2833]"></div>
+<div class="w-2.5 h-2.5 rounded-full bg-[#1F2833]"></div>
+</div>
+<!-- Buttons -->
+<div class="w-full space-y-4 flex flex-col items-center max-w-sm">
+<!-- Primary Button -->
+<button class="w-full py-4 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-semibold text-[16px] tracking-wide hover:scale-[0.98] transition-transform active:scale-95 shadow-[0_0_40px_rgba(94,231,223,0.15)]">
+                    Get started
+                </button>
+<!-- Secondary Text Button -->
+<button class="py-3 px-6 text-secondary font-medium text-[15px] hover:text-secondary-fixed transition-colors">
+                    I already have an account
+                </button>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Setup Sleep Pad - You're all set</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-highest": "#31353b",
+                    "error": "#ffb4ab",
+                    "on-primary-fixed-variant": "#00504c",
+                    "primary-fixed-dim": "#4fdad3",
+                    "surface": "#0B0F14",
+                    "primary-container": "#5ee7df",
+                    "surface-tint": "#4fdad3",
+                    "surface-container": "#1c2025",
+                    "surface-bright": "#36393f",
+                    "on-tertiary-fixed-variant": "#5d4200",
+                    "on-error-container": "#ffdad6",
+                    "surface-variant": "#31353b",
+                    "tertiary": "#ffedd1",
+                    "surface-container-low": "#181c21",
+                    "on-primary-fixed": "#00201e",
+                    "inverse-on-surface": "#2d3136",
+                    "error-container": "#93000a",
+                    "inverse-surface": "#e0e2ea",
+                    "outline": "#859492",
+                    "on-primary-container": "#006661",
+                    "background": "#0B0F14",
+                    "outline-variant": "#3c4948",
+                    "surface-container-high": "#262a30",
+                    "secondary-container": "#553291",
+                    "on-secondary-fixed": "#260058",
+                    "on-background": "#e0e2ea",
+                    "on-secondary-fixed-variant": "#553291",
+                    "on-secondary-container": "#c5a5ff",
+                    "on-tertiary": "#412d00",
+                    "surface-container-lowest": "#0a0e13",
+                    "on-surface": "#e0e2ea",
+                    "primary": "#a4fff8",
+                    "tertiary-container": "#ffcb64",
+                    "on-tertiary-fixed": "#261900",
+                    "on-tertiary-container": "#765500",
+                    "on-error": "#690005",
+                    "inverse-primary": "#006a66",
+                    "on-primary": "#003734",
+                    "surface-dim": "#0B0F14",
+                    "secondary-fixed": "#ebdcff",
+                    "tertiary-fixed": "#ffdea5",
+                    "secondary-fixed-dim": "#d4bbff",
+                    "on-surface-variant": "#bbc9c7",
+                    "secondary": "#d4bbff",
+                    "tertiary-fixed-dim": "#f2bf59",
+                    "primary-fixed": "#70f7ef",
+                    "on-secondary": "#3e1779"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {},
+            "fontFamily": {
+                    "headline": [
+                            "Inter"
+                    ],
+                    "body": [
+                            "Inter"
+                    ],
+                    "label": [
+                            "Inter"
+                    ]
+            }
+    },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0B0F14;
+            color: theme('colors.on-background');
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-[#0B0F14] antialiased min-h-screen flex flex-col items-center justify-start overflow-x-hidden pt-16 pb-24">
+<!-- Top Navigation (Transactional intent, simple app bar) -->
+<header class="fixed top-0 w-full z-50 h-16 bg-[#0B0F14]/70 backdrop-blur-2xl bg-gradient-to-b from-[#0B0F14] to-transparent shadow-[0_4px_40px_rgba(230,237,243,0.06)] flex justify-between items-center px-6 max-w-screen-xl mx-auto">
+<div class="flex items-center gap-3">
+<button class="text-[#8B96A5] hover:text-[#a4fff8] transition-colors active:scale-[0.98] transition-all duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">arrow_back</span>
+</button>
+<h1 class="text-[#E6EDF3] font-bold text-lg font-['Inter'] tracking-tight">Setup Sleep Pad</h1>
+</div>
+<div class="text-[#5EE7DF] font-['Inter'] font-semibold tracking-tight text-sm">
+            3 of 3
+        </div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-md px-6 pt-12 flex flex-col items-center justify-center relative">
+<!-- Background Glow -->
+<div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-primary-container/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
+<!-- Success Hero Graphic -->
+<div class="mb-12 relative flex items-center justify-center">
+<div class="w-[120px] h-[120px] rounded-full bg-surface-container-highest flex items-center justify-center shadow-[0_20px_40px_rgba(0,0,0,0.5)] border border-outline-variant/15 relative z-10">
+<div class="w-[100px] h-[100px] rounded-full bg-gradient-to-br from-primary to-primary-container flex items-center justify-center shadow-[0_0_30px_rgba(94,231,223,0.3)]">
+<span class="material-symbols-outlined text-[64px] text-on-primary-fixed" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</div>
+<!-- Ripples -->
+<div class="absolute w-[160px] h-[160px] rounded-full border border-primary/20 animate-[ping_3s_ease-out_infinite] z-0"></div>
+<div class="absolute w-[200px] h-[200px] rounded-full border border-primary/10 animate-[ping_3s_ease-out_infinite_1s] z-0"></div>
+</div>
+<!-- Typography Block -->
+<div class="text-center space-y-4 mb-16 w-full">
+<h2 class="text-4xl font-headline font-bold text-primary tracking-tight">Sleep Pad is ready</h2>
+<div class="inline-flex items-center gap-2 bg-surface-container-lowest px-4 py-2 rounded-full border border-outline-variant/15 shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+<span class="material-symbols-outlined text-primary-container text-sm" style="font-variation-settings: 'FILL' 1;">blur_on</span>
+<p class="text-sm font-label text-on-surface-variant font-medium">Device ID: CNU2000001 <span class="mx-1 text-outline">·</span> <span class="text-primary-fixed-dim">Connected</span></p>
+</div>
+</div>
+<!-- Input Section -->
+<div class="w-full space-y-3 mb-12">
+<label class="block text-sm font-medium text-on-surface-variant ml-2" for="deviceName">Give it a name</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-0 rounded-lg py-4 px-5 text-on-surface font-body text-lg shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)] focus:ring-1 focus:ring-primary/40 focus:outline-none transition-all placeholder:text-outline-variant" id="deviceName" placeholder="e.g., Master Bedroom" type="text" value="Grandma's room"/>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant">edit</span>
+</div>
+</div>
+</main>
+<!-- Bottom Fixed Action -->
+<div class="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-[#0B0F14] via-[#0B0F14]/90 to-transparent z-40 pb-12">
+<button class="w-full max-w-md mx-auto block bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed font-semibold py-4 rounded-full shadow-[0_8px_30px_rgba(94,231,223,0.25)] hover:shadow-[0_8px_40px_rgba(94,231,223,0.4)] active:scale-[0.98] transition-all duration-200 text-lg flex justify-center items-center gap-2 border border-primary/20">
+            Save and go home
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+</button>
+</div>
+</body></html>
