@@ -16,6 +16,15 @@
 // Đây cũng là "topic thiết bị" bạn nhập ở tab "Thiết bị" trong app để nó đọc radar.
 #define DEVICE_TOPIC    "radar_phong_khach"
 
-// OTA — nạp firmware qua WiFi.
+// IP tĩnh — chỉ mở khi mạng không cấp DHCP dùng được (ví dụ Mobile hotspot của Windows:
+// board liên kết được sóng nhưng không bao giờ nhận lease). Bỏ trống ba dòng này thì xin DHCP.
+// #define WIFI_STATIC_IP   "192.168.137.50"
+// #define WIFI_STATIC_GW   "192.168.137.1"
+// #define WIFI_STATIC_MASK "255.255.255.0"
+
+// OTA — nạp firmware qua WiFi (POST /update, xem src/ota.c). OTA_HOSTNAME cũng là tên mDNS
+// (<hostname>.local) và hostname DHCP của board.
 #define OTA_HOSTNAME    "radar-node"
-#define OTA_PASSWORD    "doi-mat-khau-nay"   // trống = ai cùng LAN cũng nạp được
+// Gửi kèm header X-OTA-Password khi nạp. Đi trong LAN qua HTTP thường nên đây là rào chống nhầm
+// tay, không phải chống nghe lén. Trống = ai cùng LAN cũng nạp được.
+#define OTA_PASSWORD    "doi-mat-khau-nay"

@@ -1,0 +1,6 @@
+dependencies:
+  # mDNS: để "radar-node.local" phân giải được trong LAN (nạp OTA + xem GET / mà không cần tra IP
+  # trong trang quản trị router). Component tách khỏi lõi IDF từ 5.0 nên phải khai ở đây.
+  espressif/mdns: "^1.5"
+  idf:
+    version: ">=5.0"

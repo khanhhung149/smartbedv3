@@ -1,0 +1,29 @@
+# Cấu hình ESP-IDF cho radar-node (ESP32-S2, framework = espidf thuần).
+# sdkconfig.<env> sinh ra từ file này mỗi lần build và KHÔNG commit (xem .gitignore).
+
+# Console ra USB CDC gốc của S2. Board S2 Mini không có chip UART-USB nào khác: UART0
+# (GPIO43/44) không đi đâu cả, để mặc định là mất sạch log. Đánh đổi đã biết: cổng
+# TỰ ENUMERATE LẠI mỗi lần reset (ttyACM0 -> ttyACM1) nên usbipd cần --auto-attach,
+# và lần upload đầu hay fail, chạy lại là được (đã ghi trong README).
+CONFIG_ESP_CONSOLE_USB_CDC=y
+
+# Bảng phân vùng 4MB hai khe OTA — xem partitions.csv.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+
+# net.c khai hai máy chủ NTP (pool.ntp.org + time.google.com) nhưng lwip mặc định chỉ nhận 1.
+# Thiếu dòng này esp_netif_sntp_init trả ESP_ERR_INVALID_ARG, ESP_ERROR_CHECK trong app_main
+# abort() và board quay vòng reboot trước cả khi nối WiFi.
+CONFIG_LWIP_SNTP_MAX_SERVERS=2
+
+# Tick 1000Hz: toàn bộ luật presence tính bằng ms (hold 300ms, poll 100ms). Mặc định 100Hz
+# (1 tick = 10ms) làm vTaskDelay ngắn giãn ra và vòng lặp lệch nhịp thấy rõ.
+CONFIG_FREERTOS_HZ=1000
+
+# app_main giữ luôn vòng chính (không đẻ task riêng) và có mấy đệm JSON trên stack.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+
+# KHÔNG bật CONFIG_SPIRAM: bản S2 Mini dùng ở đây không có PSRAM, và firmware này cũng
+# không cần — bật nhầm là boot fail chứ không phải chậm.
