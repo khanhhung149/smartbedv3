@@ -93,3 +93,15 @@ logs.txt
 
 # ── Local scratch (NAS shortcuts, throwaway files) ─────────────────────────
 stuffs/
+
+# ── app/ (Flutter client) ──────────────────────────────────────────────────
+app/build/
+app/.dart_tool/
+app/.flutter-plugins-deps
+app/android/.gradle/
+app/android/local.properties
+app/**/*.iml
+# The dev token is a real 30-day credential, passed via --dart-define or the
+# in-app settings screen — never a file. This is belt-and-braces for the case
+# where someone writes one down anyway.
+*.env
