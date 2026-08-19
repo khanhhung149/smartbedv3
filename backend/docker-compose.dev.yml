@@ -4,6 +4,8 @@
 #
 # Per-machine values come from `.env.dev` (gitignored). Set these if defaults collide:
 #   POSTGRES_HOST_PORT, REDIS_HOST_PORT, FASTAPI_HOST_PORT — host port overrides
+#   MQTT_HOST_PORT, MQTT_WS_HOST_PORT — same, for the broker (1883/9001 collide with
+#                 esp32-presence-ac's `home-mqtt` when both stacks run together)
 #   MQTT_DOMAIN — full broker URL handed to ESP32 via BLE provisioning
 #                 (e.g. tcp://192.168.1.11:1883 — your Mac's LAN IP, NOT mosquitto hostname)
 
@@ -20,12 +22,19 @@ services:
     volumes:
       - ./mosquitto/mosquitto-dev.conf:/mosquitto/config/mosquitto.conf:ro
     ports:
-      - "1883:1883"   # TCP MQTT for ESP32 on LAN
-      - "9001:9001"   # WebSocket MQTT for browser testing
+      # Overridable because a second broker may already own 1883 on this machine
+      # (esp32-presence-ac ships its own `home-mqtt`). FastAPI reaches this broker
+      # over the compose network as `mosquitto:1883`, so the host port only matters
+      # to ESP32 nodes on the LAN — change MQTT_DOMAIN to match when overriding.
+      - "${MQTT_HOST_PORT:-1883}:1883"   # TCP MQTT for ESP32 on LAN
+      - "${MQTT_WS_HOST_PORT:-9001}:9001"   # WebSocket MQTT for browser testing
 
   fastapi:
     ports:
       - "${FASTAPI_HOST_PORT:-8000}:8000"
     volumes:
       - ./app:/app                              # hot-reload source code
+      # Seed/maintenance scripts run in here rather than on the host: the image
+      # already has asyncpg and DATABASE_URL, so no host venv is needed.
+      - ./scripts:/app/scripts:ro
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
