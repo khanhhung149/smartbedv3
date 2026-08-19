@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -20,6 +21,9 @@ type Config struct {
 
 	HTTPAddr string
 	DBPath   string // file SQLite lưu lịch sử event; rỗng = tắt lịch sử
+
+	// PostgresURL nối TimescaleDB cho sleep sessions. Rỗng = tắt /api/sessions*.
+	PostgresURL string
 }
 
 func Load() (Config, error) {
@@ -33,6 +37,7 @@ func Load() (Config, error) {
 		ExitTimeout:  time.Duration(getenvInt("EXIT_TIMEOUT_S", 60)) * time.Second,
 		HTTPAddr:     getenv("HTTP_ADDR", ":8080"),
 		DBPath:       lookupOr("DB_PATH", "/data/home.db"),
+		PostgresURL:  lookupOr("POSTGRES_URL", ""),
 	}
 	if c.MQTTHost == "" || c.MQTTUser == "" || c.MQTTPass == "" {
 		return c, fmt.Errorf("MQTT_HOST, MQTT_USER, MQTT_PASS là bắt buộc")
@@ -101,4 +106,19 @@ func getenvInt(k string, def int) int {
 		}
 	}
 	return def
+}
+
+// RedactedPostgresURL trả DSN đã che mật khẩu, an toàn để ghi log.
+// Log container thường bị gom về nơi khác và giữ lâu hơn tuổi đời của mật khẩu,
+// nên DSN nguyên bản không được xuất hiện ở đó.
+// DSN không parse được thì không đoán: trả một nhãn trống thay vì chuỗi gốc.
+func (c Config) RedactedPostgresURL() string {
+	if c.PostgresURL == "" {
+		return ""
+	}
+	u, err := url.Parse(c.PostgresURL)
+	if err != nil {
+		return "(DSN không phân tích được)"
+	}
+	return u.Redacted()
 }

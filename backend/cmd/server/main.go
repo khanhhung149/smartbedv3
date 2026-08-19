@@ -23,6 +23,7 @@ import (
 	"github.com/hung/home-backend/internal/config"
 	"github.com/hung/home-backend/internal/events"
 	"github.com/hung/home-backend/internal/mqttclient"
+	"github.com/hung/home-backend/internal/sessions"
 	"github.com/hung/home-backend/internal/statemachine"
 	"github.com/hung/home-backend/internal/store"
 )
@@ -62,6 +63,31 @@ func main() {
 		}
 	}
 
+	// Ghi mẫu 10Hz (schema CSV take-home). Lỗi KHÔNG được làm hỏng luồng MQTT — log rồi thôi.
+	recordSample := func(sm events.Sample) {
+		if st == nil {
+			return
+		}
+		if err := st.AppendSample(store.Sample{
+			TS:            sm.TS,
+			Presence:      sm.Presence,
+			HRBpm:         sm.HRBpm,
+			RespAmplitude: sm.RespAmplitude,
+			Motion:        sm.Motion,
+			WeightKg:      sm.WeightKg,
+			Spo2:          sm.Spo2,
+			TempC:         sm.TempC,
+			Humidity:      sm.Humidity,
+			MovingDistCm:  sm.MovingDistCm,
+			MovingEnergy:  sm.MovingEnergy,
+			StillDistCm:   sm.StillDistCm,
+			StillEnergy:   sm.StillEnergy,
+			UARTOK:        sm.UARTOK,
+		}); err != nil {
+			slog.Warn("ghi sample lỗi", "ts", sm.TS, "err", err)
+		}
+	}
+
 	hub := api.NewHub()
 
 	var client *mqttclient.Client
@@ -97,6 +123,8 @@ func main() {
 				machine.OnPresence(p.Present, p.TS, time.Now())
 				broadcastIfChanged()
 			},
+			// Mẫu 10Hz ồn (10 mẫu/giây) nên KHÔNG bắn WS/broadcast — chỉ ghi DB.
+			OnSample: recordSample,
 			// Ghi lịch sử MỌI lệnh AC trên bus, bất kể ai phát (app, voice, ESP32).
 			// UnixMilli chứ không Unix: contract quy định ts là epoch MILI-giây, motion và
 			// presence từ firmware đều theo đó — trộn giây vào là app hiển thị lệch 1000 lần.
@@ -131,14 +159,85 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Retention mẫu: giữ 30 đêm gần nhất (theo mốc UTC nửa đêm), quét mỗi giờ.
+	if st != nil {
+		go func() {
+			retainTicker := time.NewTicker(time.Hour)
+			defer retainTicker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-retainTicker.C:
+					if err := st.RetainNights(30); err != nil {
+						slog.Warn("retention samples", "err", err)
+					}
+				}
+			}
+		}()
+	}
+
 	// HTTP API (Phase 3) — machine thỏa StateProvider, client thỏa Publisher.
-	// ev phải là interface nil THẬT khi không có store: gán thẳng con trỏ nil vào tham số
+	// ev/sl phải là interface nil THẬT khi không có store: gán thẳng con trỏ nil vào tham số
 	// interface sẽ tạo interface non-nil (có type, không có value) → handler check nil hụt.
 	var ev api.EventLister
 	if st != nil {
 		ev = st
 	}
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouter(machine, client, hub, ev)}
+	var sl api.SampleLister
+	if st != nil {
+		sl = st
+	}
+
+	// Sleep sessions (TimescaleDB) — tính năng PHỤ, không phải đường sống của hệ.
+	// DB hỏng KHÔNG chặn khởi động: presence/AC/voice vẫn chạy, chỉ /api/sessions* trả 503.
+	// Goroutine rebuild dùng lại luật rules.go, quét 30 ngày gần nhất, chạy mỗi 60s.
+	var pg *sessions.PGStore
+	var sS api.SessionLister
+	if cfg.PostgresURL != "" {
+		if p, err := sessions.NewPGStore(ctx, cfg.PostgresURL); err != nil {
+			slog.Warn("không mở được Postgres, /api/sessions* tắt", "err", err)
+		} else {
+			pg = p
+			sS = pg
+			defer pg.Close()
+			slog.Info("sleep sessions", "pg", cfg.RedactedPostgresURL())
+			go func() {
+				rebuild := time.NewTicker(60 * time.Second)
+				defer rebuild.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-rebuild.C:
+						rbCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+						devices, err := pg.ActiveDeviceIDs(rbCtx, time.Now().UTC().Add(-30*24*time.Hour))
+						if err != nil {
+							slog.Warn("rebuild sessions: liệt kê thiết bị", "err", err)
+							cancel()
+							continue
+						}
+						now := time.Now().UTC()
+						opts := sessions.BuildOptions{
+							OpenSeconds:  30,
+							CloseSeconds: 1800,
+							MaxMinutes:   1440,
+						}
+						for _, d := range devices {
+							n, err := pg.RebuildDevice(rbCtx, d, time.Now().UTC().Add(-30*24*time.Hour), now, opts)
+							if err != nil {
+								slog.Warn("rebuild sessions", "device", d, "err", err)
+							} else if n > 0 {
+								slog.Info("rebuild sessions", "device", d, "windows", n)
+							}
+						}
+						cancel()
+					}
+				}
+			}()
+		}
+	}
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouterFull(machine, client, hub, ev, sl, sS)}
 	go func() {
 		slog.Info("HTTP API", "addr", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

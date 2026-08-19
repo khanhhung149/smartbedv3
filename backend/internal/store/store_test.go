@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -163,5 +164,90 @@ func TestReopenKeepsData(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].TS != 42 {
 		t.Errorf("dữ liệu không sống qua restart: %+v", got)
+	}
+}
+
+func sampleFixture() Sample {
+	return Sample{
+		TS:            1753000000000,
+		Presence:      true,
+		HRBpm:         0, // radar không đo được -> 0, không bịa số
+		RespAmplitude: 0,
+		Motion:        1,
+		WeightKg:      0,
+		Spo2:          0,
+		TempC:         0,
+		Humidity:      0,
+		MovingDistCm:  120,
+		MovingEnergy:  68,
+		StillDistCm:   0,
+		StillEnergy:   0,
+		UARTOK:        true,
+	}
+}
+
+func TestAppendSampleRoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	in := sampleFixture()
+	if err := s.AppendSample(in); err != nil {
+		t.Fatalf("AppendSample: %v", err)
+	}
+	got, err := s.SamplesBetween(in.TS-1000, in.TS+1000)
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("muốn 1 sample, có %d", len(got))
+	}
+	if got[0].TS != in.TS || !got[0].Presence || !got[0].UARTOK ||
+		got[0].MovingDistCm != in.MovingDistCm || got[0].MovingEnergy != in.MovingEnergy {
+		t.Errorf("sample lệch:\n got  %+v\n muốn %+v", got[0], in)
+	}
+}
+
+func TestSamplesBetweenFiltersByWindow(t *testing.T) {
+	s := newTestStore(t)
+	for _, ts := range []int64{1000, 2000, 3000} {
+		sm := sampleFixture()
+		sm.TS = ts
+		if err := s.AppendSample(sm); err != nil {
+			t.Fatalf("AppendSample %d: %v", ts, err)
+		}
+	}
+	got, err := s.SamplesBetween(1500, 3000) // [1500, 3000) -> chỉ 2000
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 1 || got[0].TS != 2000 {
+		t.Errorf("muốn [1500,3000) trả đúng 2000, có %+v", got)
+	}
+}
+
+func TestRetainNightsKeeps30Nights(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Now().UTC()
+	base := now.Truncate(24 * time.Hour)
+
+	// Mẫu 35 đêm trước: phải bị dọn.
+	oldTS := base.AddDate(0, 0, -35).UnixMilli()
+	// Mẫu 1 ngày trước: phải còn.
+	recentTS := base.AddDate(0, 0, -1).UnixMilli()
+
+	for _, ts := range []int64{oldTS, recentTS} {
+		sm := sampleFixture()
+		sm.TS = ts
+		if err := s.AppendSample(sm); err != nil {
+			t.Fatalf("AppendSample: %v", err)
+		}
+	}
+	if err := s.RetainNights(30); err != nil {
+		t.Fatalf("RetainNights: %v", err)
+	}
+	got, err := s.SamplesBetween(0, now.Add(24*time.Hour).UnixMilli())
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 1 || got[0].TS != recentTS {
+		t.Errorf("retention phải dọn mẫu cũ hơn 30 đêm, chỉ giữ mẫu gần: %+v", got)
 	}
 }

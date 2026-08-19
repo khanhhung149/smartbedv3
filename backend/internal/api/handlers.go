@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -52,6 +53,42 @@ func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": evs})
+}
+
+// GET /api/samples?from_ms=&to_ms= — mẫu 10Hz trong khoảng thời gian (dashboard xem lại đêm).
+// from_ms/to_ms: epoch mili-giây. Vắng từ → 24h trước; vắng tới → bây giờ.
+// Trả gọn theo schema CSV take-home (t, presence, hr_bpm, resp_amplitude, motion, ...) + kênh raw.
+func (a *API) getSamples(w http.ResponseWriter, r *http.Request) {
+	if a.sl == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "mẫu chưa bật (DB_PATH chưa cấu hình)"})
+		return
+	}
+	from := time.Now().Add(-24 * time.Hour).UnixMilli()
+	to := time.Now().UnixMilli()
+	if v := r.URL.Query().Get("from_ms"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			from = n
+		}
+	}
+	if v := r.URL.Query().Get("to_ms"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			to = n
+		}
+	}
+	if to <= from {
+		badRequest(w, "to_ms phải lớn hơn from_ms")
+		return
+	}
+	if to-from > 48*3600*1000 {
+		badRequest(w, "cửa sổ tối đa 48h")
+		return
+	}
+	samples, err := a.sl.SamplesBetween(from, to)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "đọc mẫu lỗi: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"samples": samples})
 }
 
 // atoiParam đọc query param dạng số. Vắng mặt → 0 (store tự áp default/bỏ qua).

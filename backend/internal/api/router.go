@@ -33,17 +33,45 @@ type EventLister interface {
 	List(limit int, before int64) ([]store.Event, error)
 }
 
+// SampleLister — nguồn mẫu 10Hz cho GET /api/samples (dashboard "xem lại một đêm").
+type SampleLister interface {
+	SamplesBetween(fromMs, toMs int64) ([]store.Sample, error)
+}
+
 type API struct {
 	sp  StateProvider
 	pub Publisher
 	ev  EventLister
+	sl  SampleLister
+	sS  SessionLister
 }
 
 func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.Handler {
-	a := &API{sp: sp, pub: pub, ev: ev}
+	return NewRouterSamples(sp, pub, hub, ev, nil)
+}
+
+// NewRouterSamples giống NewRouter + thêm nguồn mẫu 10Hz (dashboard Phase 01).
+// sl=nil thì /api/samples trả 503 thay vì chết.
+func NewRouterSamples(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl SampleLister) http.Handler {
+	return NewRouterFull(sp, pub, hub, ev, sl, nil)
+}
+
+// NewRouterFull là điểm đăng ký đầy đủ: samples + sleep sessions. sS=nil thì
+// các endpoint /api/sessions* trả 503 thay vì chết — radar/AC không phụ thuộc.
+func NewRouterFull(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl SampleLister, sS SessionLister) http.Handler {
+	a := &API{sp: sp, pub: pub, ev: ev, sl: sl, sS: sS}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
+
+	// Dashboard local web (Phase 01): /dashboard — xem realtime + xem lại một đêm.
+	// Serve HTML trực tiếp từ embed để backend tự chứa dashboard, không cần copy tài nguyên.
+	dash, err := dashboardFS()
+	if err != nil {
+		panic(err) // embed hỏng là bug build, fail sớm
+	}
+	r.Handle("/dashboard/*", http.StripPrefix("/dashboard/", http.FileServer(http.FS(dash))))
+	r.Get("/dashboard", http.RedirectHandler("/dashboard/", http.StatusFound).ServeHTTP)
 
 	// pub (Publisher) thỏa mãn voice.ACPublisher vì method set là superset (chỉ cần PublishACCmd).
 	vc := config.LoadVoice()
@@ -59,8 +87,12 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.H
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/state", a.getState)
 		r.Get("/events", a.getEvents)
+		r.Get("/samples", a.getSamples)
 		r.Post("/ac", a.postAC)
 		r.Post("/ac/learn", a.postACLearn)
+		r.Get("/sessions", a.listSessions)
+		r.Get("/sessions/{id}", a.getSession)
+		r.Get("/sessions/{id}/timeline", a.getTimeline)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)
 		// Chỉ đăng ký khi VOICE_RECORD_DIR được set — công cụ thu dữ liệu huấn luyện, không nên
 		// tồn tại trong bản chạy thường (xem voice/record.go).

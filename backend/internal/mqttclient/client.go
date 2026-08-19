@@ -15,6 +15,7 @@ import (
 const (
 	topicMotion   = "home/door/motion"
 	topicPresence = "home/room/presence"
+	topicSample   = "home/room/sample"
 	topicACCmd    = "home/room/ac_cmd"
 	topicACLearn  = "home/room/ac_learn"
 	topicACState  = "home/room/ac_state"
@@ -23,6 +24,8 @@ const (
 type Handlers struct {
 	OnMotion   func(events.Motion)
 	OnPresence func(events.Presence)
+	// OnSample — mẫu 10Hz (schema CSV take-home + kênh raw radar). Tùy chọn: nil thì không subscribe.
+	OnSample func(events.Sample)
 	// OnACCmd — mọi lệnh AC đi qua bus, BẤT KỂ ai phát (app, voice, hay ESP32 sau này).
 	// Backend không còn tự quyết định AC (ESP32 lo), nhưng lịch sử vẫn phải ghi được lệnh
 	// đã xảy ra thật. Nghe topic thì bắt hết; ghi ở chỗ publish thì sót lệnh của người khác.
@@ -64,6 +67,16 @@ func New(host string, port int, user, pass, clientID string, h Handlers) *Client
 			}
 			h.OnPresence(p)
 		})
+		if h.OnSample != nil {
+			c.Subscribe(topicSample, 1, func(_ mqtt.Client, msg mqtt.Message) {
+				var sm events.Sample
+				if err := json.Unmarshal(msg.Payload(), &sm); err != nil {
+					slog.Warn("payload sample sai", "err", err, "raw", string(msg.Payload()))
+					return
+				}
+				h.OnSample(sm)
+			})
+		}
 		// Nghe chính lệnh AC để ghi lịch sử. Nil-check vì handler này tuỳ chọn.
 		if h.OnACCmd != nil {
 			c.Subscribe(topicACCmd, 1, func(_ mqtt.Client, msg mqtt.Message) {
