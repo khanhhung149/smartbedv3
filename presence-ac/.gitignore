@@ -1,0 +1,146 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+dist/
+bin/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# semantic-release
+.nyc_output
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# flutter
+.dart_tool
+build
+GoogleService-Info.plist
+
+repomix-output.xml
+.serena/cache
+# Không neo ở gốc: các thư mục con (firmware/voice-node/plans/…) cũng là nơi sinh plan/report cục
+# bộ. Pattern cũ "plans/**/*" chỉ phủ thư mục gốc nên đã để lọt backend/plans/reports/ vào git.
+**/plans/**
+!plans/templates/*
+# Receipt rỗng do plugin sinh ("no signer configured"), không có giá trị lưu.
+receipts/
+review-receipts/
+# Config override chỉ dùng cục bộ (vd pensyve-plugin.local.md tắt context dump để giảm token).
+*.local.md
+screenshots/*
+docs/screenshots/*
+logs.txt
+test-ck
+__pycache__
+
+# CK meta commands
+prompt.md
+ck.md
+
+# Generated runtime layout for release/install smoke tests
+/.claude/
+# .claude/ trong thư mục CON (vd firmware/voice-node/.claude/agent-memory/) là bộ nhớ agent cục
+# bộ, không phải nguồn. Pattern phải có "*/" ở giữa để KHÔNG khớp .claude/ ở gốc: git không cho
+# phép re-include file khi thư mục cha đã bị loại, nên "**/.claude/" sẽ nuốt luôn ngoại lệ
+# !/.claude/rules/ bên dưới và làm mất rules mà Claude Code đang đọc.
+**/*/.claude/
+# But track repo-level rules that Claude Code reads
+!/.claude/rules/
+
+# Local-only state inside tracked claude source
+claude/agent-memory/
+claude/hooks/.logs/
+claude/session-state/latest.md
+claude/session-state/archive/
+claude/settings.bak.json
+claude/skills/ai-multimodal/assets/demo-*.claude/session-state/*.tmp
+
+# Gemini CLI settings (symlink to staged .claude/.mcp.json)
+.gemini/settings.json
+# Showoff/marketing assets (images, showcases)
+assets/
+# Exception: use-mcp ships a persistent tool catalog at assets/tools.json
+!claude/skills/use-mcp/assets/
+!claude/skills/use-mcp/assets/**
+
+# Firmware secrets — never commit real credentials
+firmware/mqtt/passwd
+firmware/**/config.h
+# Bản sao lưu config khi đổi WiFi/broker cũng chứa mật khẩu. Quy tắc config.h ở trên
+# KHÔNG phủ được tên có đuôi, nên phải khai riêng. config.h.example vẫn track bình thường.
+firmware/**/config.h.bak*
+.pio/
+
+# Sinh ra bởi PlatformIO khi build framework = espidf.
+# managed_components/ là component IDF tải qua component manager (441MB) — vai trò như
+# node_modules, dựng lại được từ dependencies.lock nên KHÔNG commit.
+# sdkconfig.<env> sinh ra từ sdkconfig.defaults mỗi lần build; chỉ commit bản defaults.
+firmware/**/managed_components/
+firmware/**/sdkconfig.*
+!firmware/**/sdkconfig.defaults
+
+# External repos for study/reference
+external/
+
+# Kho mẫu audio train wakeword (mẫu giọng thật, mẫu TTS, hard negative, ambient).
+# Hàng nghìn WAV, dựng lại được từ tarball gốc và script sinh mẫu — không commit.
+datasets/
+
+# Git worktrees (local development only)
+worktrees/
+# Gemini CLI settings (contains user-specific config)
+.gemini/
+
+# Ảnh golden test sinh ra khi test đỏ — không phải nguồn
+app/test/failures/
+
+# Vỏ sò: thiết kế đã bỏ, .scad là nguồn duy nhất cần giữ (STL/PNG dựng lại được, 4.4MB)
+hardware/vo-so-*.stl
+hardware/vo-so-*.png
+# Bản đã lắp chỉ để xem, không in
+hardware/vo-hop-LAP-RAP-xem-thoi.stl
+backend/bin/
+
+# Dữ liệu runtime của backend (SQLite lịch sử event, mẫu seed từ CSV).
+# Sinh ra lúc chạy, không phải nguồn — mỗi máy một bản.
+backend/data/

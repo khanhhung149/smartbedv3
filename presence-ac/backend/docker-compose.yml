@@ -1,0 +1,55 @@
+# Backend presence + AC control.
+# Chạy:  cp .env.example .env  (điền giá trị)  →  docker compose up -d --build
+#
+# Broker Mosquitto chạy riêng (firmware/mqtt/). Backend reach broker qua host:
+#   trong .env đặt MQTT_HOST=host.docker.internal (Docker Desktop) hoặc IP LAN của máy chạy broker.
+services:
+  backend:
+    build: .
+    container_name: home-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Bật thu dữ liệu huấn luyện từ dòng lệnh mà không phải sửa .env:
+      #   VOICE_RECORD_DIR=/records docker compose up -d --no-deps backend
+      # Rỗng (mặc định) = endpoint /api/voice/record không được đăng ký.
+      VOICE_RECORD_DIR: ${VOICE_RECORD_DIR:-}
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Lịch sử event (SQLite). Volume riêng để dữ liệu sống qua recreate container —
+      # state machine giữ trạng thái trong RAM, đây là chỗ duy nhất còn dấu vết đã xảy ra.
+      - home-data:/data
+      # Mẫu audio thu từ mic voice-node để train lại model snore. Named volume vì bộ mẫu phải
+      # sống qua recreate container — chính lúc đổi cấu hình để thu lại là lúc container bị tạo
+      # lại. Chỉ ghi khi VOICE_RECORD_DIR được set (mặc định tắt).
+      - voice-records:/records
+    depends_on:
+      - asr
+
+  # Service ASR self-host (faster-whisper). Không expose port ra host — backend gọi nội bộ
+  # qua network compose (http://asr:9000/transcribe), audio không rời LAN/host.
+  asr:
+    build: ../asr
+    container_name: home-asr
+    restart: unless-stopped
+    environment:
+      ASR_MODEL: ${ASR_MODEL:-small}
+      # Rỗng = KHÔNG lưu mẫu (mặc định khi chạy thường). Bật lúc cần đo:
+      #   ASR_DUMP_DIR=/samples docker compose up -d asr
+      ASR_DUMP_DIR: ${ASR_DUMP_DIR:-}
+    volumes:
+      # Cache model HuggingFace (faster-whisper tải về /root/.cache/huggingface trong container
+      # chạy bằng root) — tránh tải lại model "small" mỗi lần recreate container.
+      - asr-model-cache:/root/.cache/huggingface
+      # Mẫu WAV để chấm điểm model. Named volume chứ KHÔNG bind mount: bộ mẫu phải sống qua
+      # recreate container, vì chính lúc đổi ASR_MODEL để so sánh là lúc container bị tạo lại.
+      - asr-samples:/samples
+
+volumes:
+  asr-model-cache:
+  asr-samples:
+  home-data:
+  voice-records:

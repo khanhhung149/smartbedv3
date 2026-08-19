@@ -1,0 +1,4 @@
+# File `passwd` thật do `mosquitto_passwd` sinh ra, KHÔNG commit (xem .gitignore).
+# Mỗi dòng: <username>:<hash PBKDF2 do mosquitto_passwd tạo>
+# Ví dụ định dạng (KHÔNG dùng hash này — tự sinh bằng lệnh trong README):
+# homeuser:$7$101$abcd...==$efgh...==

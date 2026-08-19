@@ -1,0 +1,15 @@
+# Chép nguyên default_16MB.csv của Arduino core, đặt trong project để bố cục không
+# đổi dưới chân khi platform cập nhật. Dùng bởi env esp32s3_kws qua sdkconfig.defaults
+# (CONFIG_PARTITION_TABLE_CUSTOM). Env esp32s3 vẫn dùng bản của core qua
+# board_build.partitions — hai đường độc lập, cùng bố cục.
+#
+# Giữ otadata + app0 + app1 dù vòng này KHÔNG kiểm OTA: verification 04/08 phát hiện
+# chưa từng có env OTA nào cho S3 (upload_protocol=espota chỉ có ở esp32dev_ota,
+# env của con WROOM đã chết 29/07). Không tự chặn đường OTA về sau.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0x640000,
+app1,     app,  ota_1,   0x650000,0x640000,
+spiffs,   data, spiffs,  0xc90000,0x360000,
+coredump, data, coredump,0xFF0000,0x10000,

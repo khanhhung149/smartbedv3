@@ -1,0 +1,48 @@
+# Cấu hình ESP-IDF cho env esp32s3_kws (framework = arduino, espidf).
+# Env esp32s3 (arduino thuần) KHÔNG đọc file này.
+#
+# Vì sao cần chế độ dual: để kéo được component IDF esp-tflite-micro kèm esp-nn —
+# kernel SIMD của S3 đưa inference wakeword từ ~50ms về <10ms. Framework arduino
+# thuần trong PlatformIO không chạy component manager nên không lấy được.
+
+# Arduino chạy như một component của IDF. Không có dòng này thì setup()/loop()
+# KHÔNG BAO GIỜ được gọi — chương trình vào app_main() rồi thoát, board im lặng.
+CONFIG_AUTOSTART_ARDUINO=y
+
+# Arduino giả định delay(1) == 1ms. IDF mặc định 100Hz (1 tick = 10ms) sẽ làm mọi
+# delay ngắn giãn ra 10x — trong vòng lặp đọc I2S 16ms/nhịp là lệch nhịp thấy rõ.
+CONFIG_FREERTOS_HZ=1000
+
+# Flash 16MB của N16R8. Board trong platform khai theo bản N8.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Bảng phân vùng chép nguyên default_16MB.csv của core, đặt trong project để nó
+# không đổi dưới chân khi platform cập nhật. Giữ otadata + app0 + app1: vòng này
+# KHÔNG kiểm OTA (chưa từng có env OTA cho S3), nhưng đừng tự chặn đường về sau.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Console ra UART0 = cổng TTL (CH340). KHÔNG bật USB-CDC: bật vào là Serial nhảy
+# sang cổng OTG và màn hình serial ở cổng TTL trống trơn.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+
+# PSK ciphersuite của mbedTLS — BẮT BUỘC, dù thiết bị này chỉ nói ws:// và MQTT
+# thuần trong LAN, không dùng TLS ở đâu cả.
+#
+# Lý do: WebSockets 2.7.3 kéo thư viện NetworkClientSecure của Arduino vào vô điều
+# kiện, mà toàn bộ thân ssl_client.cpp bọc trong `#if defined(CONFIG_MBEDTLS_PSK_MODES)`.
+# Thiếu cờ này thì file vẫn "biên dịch thành công" nhưng ra RỖNG, và link chết với
+# một tràng undefined reference (start_ssl_client, send_ssl_data, stop_ssl_socket…).
+# Dấu hiệu nhận ra: giữa log biên dịch có #warning nhắc chạy `idf.py menuconfig`.
+# Đã mất một vòng build 32 phút vì chỗ này.
+CONFIG_MBEDTLS_PSK_MODES=y
+CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
+
+# PSRAM Octal 8MB của N16R8 — cần cho buffer snore detection (main.cpp, plans/260812-...-scaffold/).
+# board_build.arduino.memory_type ở platformio.ini KHÔNG có tác dụng cho framework=arduino,espidf
+# (đã thử 2026-08-12, sdkconfig sinh ra không đổi gì) — phải khai trực tiếp ở đây, đúng bài học cùng
+# dạng với board_build.partitions ở platformio.ini (comment env esp32s3_kws). 80MHz vì 120MHz Octal
+# là experimental (Kconfig cảnh báo có thể crash theo nhiệt độ) — không cần tốc độ cao cho buffer 1s.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y

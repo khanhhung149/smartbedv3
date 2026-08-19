@@ -1,0 +1,8 @@
+dependencies:
+  # Interpreter TFLite Micro + microfrontend (trích đặc trưng âm thanh) của Google, kèm esp-nn
+  # (kernel SIMD của S3, đưa inference wakeword từ ~50ms về <10ms). Lý do dùng lib này thay vì tự
+  # viết FFT/mel-filterbank: pipeline train Python (microWakeWord) gọi CÙNG code microfrontend gốc
+  # qua op AudioMicrofrontend — dùng lại nguyên bản loại bỏ rủi ro lệch tham số giữa train và firmware.
+  espressif/esp-tflite-micro: "*"
+  idf:
+    version: ">=5.0"

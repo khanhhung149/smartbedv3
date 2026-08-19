@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 9+ chặn HTTP thường (cleartext) mặc định. Backend chạy trong LAN nhà, không có
+  TLS và không có tên miền để cấp chứng chỉ → phải cho phép cleartext, nếu không mọi lời
+  gọi API im lặng thất bại.
+
+  Cho phép rộng thay vì liệt kê subnet cụ thể vì user đặt IP backend tay trong Cài đặt và
+  có đổi mạng (đã gặp 192.168.1.x và 192.168.88.x). Ghim subnet sẽ làm app chết mỗi lần
+  đổi router.
+
+  Chấp nhận được vì: chỉ chạy trong LAN, không truyền thông tin nhạy cảm (trạng thái phòng
+  + lệnh bật/tắt điều hoà). Nếu sau này mở ra internet thì PHẢI bỏ cái này và dùng TLS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
