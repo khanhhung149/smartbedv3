@@ -269,11 +269,6 @@ bool mqtt_connect() {
     return true;
 }
 
-void mqtt_loop() {
-    // No-op: esp-mqtt has its own driver task. Function kept for caller
-    // ABI compatibility (main.cpp calls this every loop()).
-}
-
 // --- Publish helpers ---
 
 static constexpr size_t JSON_BUF_BYTES = 384;
@@ -288,31 +283,88 @@ static bool serialize_or_warn(JsonDocument& doc, char* buf, size_t cap, size_t& 
     return true;
 }
 
+// --- Ring buffer chống mất mẫu (yêu cầu framework Phase 01) ---
+//
+// MQTT chưa nối/bận → mẫu KHÔNG bị drop im lặng: xếp vào vòng đệm rồi đẩy lại khi thông.
+// Pad là master đẩy 1Hz (0x85) + 1/min (0x86) nên 64 ô = hơn 1 phút đệm, dư sức cho một
+// lần mất kết nối ngắn. Đầy thì bỏ CŨ nhất (giữ mẫu mới — dữ liệu gần hiện tại quan trọng hơn).
+#define PUB_RB_CAP 64
+#define PUB_RB_TOPIC 64
+#define PUB_RB_PAYLOAD (JSON_BUF_BYTES)
+
+struct PendingMsg {
+    char   topic[PUB_RB_TOPIC];
+    char   payload[PUB_RB_PAYLOAD];
+    size_t len;
+};
+
+static PendingMsg s_pending[PUB_RB_CAP];
+static int        s_pending_head = 0;   // ô ghi kế tiếp
+static int        s_pending_count = 0;
+
+static bool pending_full() { return s_pending_count == PUB_RB_CAP; }
+
+// Đẩy 1 mẩu tin vào hàng đợi. Đầy thì đẩy head (bỏ cũ nhất) rồi ghi vào cuối.
+static void pending_push(const char* topic, const char* payload, size_t len) {
+    if (len >= PUB_RB_PAYLOAD) len = PUB_RB_PAYLOAD - 1;
+    if (pending_full()) {
+        s_pending_head = (s_pending_head + 1) % PUB_RB_CAP;
+        s_pending_count--;
+    }
+    const int idx = (s_pending_head + s_pending_count) % PUB_RB_CAP;
+    strncpy(s_pending[idx].topic, topic, PUB_RB_TOPIC - 1);
+    s_pending[idx].topic[PUB_RB_TOPIC - 1] = '\0';
+    memcpy(s_pending[idx].payload, payload, len);
+    s_pending[idx].payload[len] = '\0';
+    s_pending[idx].len = len;
+    s_pending_count++;
+}
+
+// Đẩy hết hàng đợi ra broker khi đã nối. Rớt kết nối giữa chừng → dừng, mẫu còn lại giữ cho lần sau.
+static void pending_drain() {
+    while (s_pending_count > 0 && s_connected && s_client) {
+        const PendingMsg& m = s_pending[s_pending_head];
+        esp_mqtt_client_publish(s_client, m.topic, m.payload, (int)m.len, /*qos=*/0, /*retain=*/0);
+        s_pending_head = (s_pending_head + 1) % PUB_RB_CAP;
+        s_pending_count--;
+    }
+}
+
+void mqtt_loop() {
+    // Đẩy mẫu tồn đọng khi MQTT đã thông (esp-mqtt chạy task riêng; publish là không-block).
+    pending_drain();
+}
+
 void mqtt_publish_sec(const SleepPadSecData& d) {
-    if (!s_connected || !s_client) return;
+    if (!s_client) return;
 
     JsonDocument doc;
     doc["device_id"]  = s_device_id;
-    doc["ts"]         = d.timestamp;
+    // ts = epoch giây do chính MCU gắn (NTP sync lúc boot) — timestamp tại thiết bị, không phải
+    // ở Linux. Pad tự đẩy 1Hz (master) nên firmware KHÔNG tự sinh nhịp; ts_pad là mốc pad báo.
+    doc["ts"]         = (int64_t)time(nullptr);
+    doc["ts_pad"]     = d.timestamp;
     doc["status"]     = d.status;
-    doc["heart_rate"] = d.heart_rate;
+    doc["heart_rate"] = d.heart_rate;   // 0 = sensor dropout (pad báo) — đánh dấu lỗi tường minh
     doc["resp_rate"]  = serialized(String(d.resp_rate, 1));
     doc["sdata"]      = d.sdata;
     doc["pdata"]      = d.pdata;
+    // Cờ lỗi: uart_ok = nhận được khung hợp lệ từ pad; heartbeat mất sẽ tự dừng callback.
+    doc["uart_ok"]    = true;
 
     char buf[JSON_BUF_BYTES];
     size_t n;
     if (!serialize_or_warn(doc, buf, sizeof(buf), n)) return;
-    esp_mqtt_client_publish(s_client, s_topic_sec.c_str(), buf, (int)n,
-                            /*qos=*/0, /*retain=*/0);
+    pending_push(s_topic_sec.c_str(), buf, n);
 }
 
 void mqtt_publish_min(const SleepPadMinData& d) {
-    if (!s_connected || !s_client) return;
+    if (!s_client) return;
 
     JsonDocument doc;
     doc["device_id"]     = s_device_id;
-    doc["ts"]            = d.timestamp;
+    doc["ts"]            = (int64_t)time(nullptr);
+    doc["ts_pad"]        = d.timestamp;
     doc["status"]        = d.status;
     doc["heart_rate"]    = d.heart_rate;
     doc["resp_rate"]     = serialized(String(d.resp_rate, 1));
@@ -323,12 +375,12 @@ void mqtt_publish_min(const SleepPadMinData& d) {
     // Protocol stores temp as °C × 10; publish actual °C so backend Pydantic
     // bound (le=60) accepts and the app displays readable numbers.
     doc["temp"]          = serialized(String(d.temp / 10.0, 1));
+    doc["uart_ok"]       = true;
 
     char buf[JSON_BUF_BYTES];
     size_t n;
     if (!serialize_or_warn(doc, buf, sizeof(buf), n)) return;
-    esp_mqtt_client_publish(s_client, s_topic_min.c_str(), buf, (int)n,
-                            /*qos=*/0, /*retain=*/0);
+    pending_push(s_topic_min.c_str(), buf, n);
 }
 
 bool mqtt_connected() {

@@ -298,25 +298,44 @@ void setup() {
 }
 
 void loop() {
+    // ── Vòng lặp 10Hz cố định, không jitter (yêu cầu framework Phase 01) ──
+    // Bám mốc tuyệt đối thay vì `delay(100)` để tổng thời gian thực hiện không dịch chuyển
+    // (delay nhồi vào thời gian THỰC HIỆN, còn mốc tuyệt đối giữ đều nhịp). Trong mỗi tick:
+    //  1) rút UART pad (nhịp thật do pad quyết định — pad là master 1Hz, firmware không tự sinh)
+    //  2) mqtt_loop(): đẩy mẫu tồn đọng ra broker khi MQTT thông (ring buffer)
+    //  3) heartbeat 0x08 60s cho pad
+    static uint32_t last_tick_ms = 0;
+    static uint32_t next_tick_ms = 0;
+    const uint32_t now = millis();
+
+    if (now - last_tick_ms >= 100UL) {   // tick 10Hz
+        last_tick_ms = now;
+        next_tick_ms = now + 100UL;
+
 #ifndef MOCK_SLEEPPAD
-    // Drain UART bytes into parser (production path)
-    while (SLEEPPAD_UART.available()) {
-        parser.feed(static_cast<uint8_t>(SLEEPPAD_UART.read()));
-    }
+        // Drain UART bytes into parser (production path)
+        while (SLEEPPAD_UART.available()) {
+            parser.feed(static_cast<uint8_t>(SLEEPPAD_UART.read()));
+        }
 #else
-    // Mock path — generate synthetic frame bytes and feed the parser
-    mock_tick(mock_feed_parser);
+        // Mock path — generate synthetic frame bytes and feed the parser
+        mock_tick(mock_feed_parser);
 #endif
 
-    // PubSubClient state machine + auto-reconnect
-    mqtt_loop();
+        // PubSubClient state machine + auto-reconnect + drain ring buffer
+        mqtt_loop();
 
-    // 0x08 heartbeat every 60 s (device restarts WiFi stack if silent for >5 min)
-    unsigned long now = millis();
-    if (now - last_heartbeat_ms >= 60000UL) {
-        last_heartbeat_ms = now;
-        send_heartbeat();
+        // 0x08 heartbeat every 60 s (device restarts WiFi stack if silent for >5 min)
+        if (now - last_heartbeat_ms >= 60000UL) {
+            last_heartbeat_ms = now;
+            send_heartbeat();
+        }
     }
 
-    delay(1); // yield to FreeRTOS / WiFi stack
+    // Giữ nhịp 10Hz: ngủ tới mốc tick kế tiếp (không phải delay(100) trần).
+    if (millis() < next_tick_ms) {
+        delay(next_tick_ms - millis());
+    } else {
+        delay(1);   // lỡ mốc (hiếm) — không bù, để mốc tuyệt đối tự bắt kịp nhịp
+    }
 }
