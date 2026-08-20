@@ -193,52 +193,22 @@ func main() {
 
 	// Sleep sessions (TimescaleDB) — tính năng PHỤ, không phải đường sống của hệ.
 	// DB hỏng KHÔNG chặn khởi động: presence/AC/voice vẫn chạy, chỉ /api/sessions* trả 503.
-	// Goroutine rebuild dùng lại luật rules.go, quét 30 ngày gần nhất, chạy mỗi 60s.
-	var pg *sessions.PGStore
+	//
+	// Backend này chỉ ĐỌC bảng sleep_sessions. Việc dựng phiên từ sec_data do
+	// builder Python trong backend sleep-pad-ai đảm nhiệm; chạy thêm một builder
+	// ở đây sẽ khiến hai tiến trình cùng upsert (device_id, started_at) trên cùng
+	// database và ghi đè kết quả của nhau.
 	var sS api.SessionLister
 	if cfg.PostgresURL != "" {
 		if p, err := sessions.NewPGStore(ctx, cfg.PostgresURL); err != nil {
 			slog.Warn("không mở được Postgres, /api/sessions* tắt", "err", err)
 		} else {
-			pg = p
-			sS = pg
-			defer pg.Close()
+			sS = p
+			defer p.Close()
 			slog.Info("sleep sessions", "pg", cfg.RedactedPostgresURL())
-			go func() {
-				rebuild := time.NewTicker(60 * time.Second)
-				defer rebuild.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-rebuild.C:
-						rbCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-						devices, err := pg.ActiveDeviceIDs(rbCtx, time.Now().UTC().Add(-30*24*time.Hour))
-						if err != nil {
-							slog.Warn("rebuild sessions: liệt kê thiết bị", "err", err)
-							cancel()
-							continue
-						}
-						now := time.Now().UTC()
-						opts := sessions.BuildOptions{
-							OpenSeconds:  30,
-							CloseSeconds: 1800,
-							MaxMinutes:   1440,
-						}
-						for _, d := range devices {
-							n, err := pg.RebuildDevice(rbCtx, d, time.Now().UTC().Add(-30*24*time.Hour), now, opts)
-							if err != nil {
-								slog.Warn("rebuild sessions", "device", d, "err", err)
-							} else if n > 0 {
-								slog.Info("rebuild sessions", "device", d, "windows", n)
-							}
-						}
-						cancel()
-					}
-				}
-			}()
 		}
 	}
+
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouterFull(machine, client, hub, ev, sl, sS)}
 	go func() {
 		slog.Info("HTTP API", "addr", cfg.HTTPAddr)
