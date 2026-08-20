@@ -11,7 +11,13 @@ import 'services/ws_client.dart';
 
 /// URL backend presence/AC. Máy Android không dùng được localhost → phải là IP LAN
 /// của máy chạy backend. Giá trị này user sửa trong màn Cài đặt.
-const kDefaultBaseUrl = 'http://192.168.1.120:8080';
+///
+/// Nạp được từ `--dart-define=RADAR_BASE_URL=...` lúc build để một bản APK phát cho người
+/// test là chạy được ngay, không phải gõ tay IP trong Cài đặt. Không đặt thì giữ mặc định cũ.
+const kDefaultBaseUrl = String.fromEnvironment(
+  'RADAR_BASE_URL',
+  defaultValue: 'http://192.168.1.120:8080',
+);
 const _prefsKeyBaseUrl = 'radar.base_url';
 
 /// Nạp SharedPreferences 1 lần lúc khởi động (override ở main.dart).
