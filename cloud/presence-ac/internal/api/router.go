@@ -93,6 +93,7 @@ func NewRouterFull(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl
 		r.Get("/sessions", a.listSessions)
 		r.Get("/sessions/{id}", a.getSession)
 		r.Get("/sessions/{id}/timeline", a.getTimeline)
+		r.Get("/realtime", a.getRealtime)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)
 		// Chỉ đăng ký khi VOICE_RECORD_DIR được set — công cụ thu dữ liệu huấn luyện, không nên
 		// tồn tại trong bản chạy thường (xem voice/record.go).

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -249,5 +250,181 @@ func TestRetainNightsKeeps30Nights(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].TS != recentTS {
 		t.Errorf("retention phải dọn mẫu cũ hơn 30 đêm, chỉ giữ mẫu gần: %+v", got)
+	}
+}
+
+// ---- seq/boot: truy nguyên nhân mất mẫu ----
+
+func u32p(v uint32) *uint32 { return &v }
+
+func TestAppendSampleRoundTripsSeqAndBoot(t *testing.T) {
+	s := newTestStore(t)
+	in := sampleFixture()
+	in.Seq = u32p(7)
+	in.Boot = u32p(2)
+	if err := s.AppendSample(in); err != nil {
+		t.Fatalf("AppendSample: %v", err)
+	}
+	got, err := s.SamplesBetween(in.TS-1000, in.TS+1000)
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("muốn 1 sample, có %d", len(got))
+	}
+	if got[0].Seq == nil || *got[0].Seq != 7 {
+		t.Errorf("seq: có %v, muốn 7", got[0].Seq)
+	}
+	if got[0].Boot == nil || *got[0].Boot != 2 {
+		t.Errorf("boot: có %v, muốn 2", got[0].Boot)
+	}
+}
+
+// Phân biệt "firmware chưa gửi seq" với "mẫu đầu tiên sau boot, seq=0" là toàn bộ lý do
+// hai cột này nullable. Gộp hai trạng thái thành 0 làm hỏng phép đếm mất mẫu.
+func TestAppendSampleKeepsNilSeqDistinctFromZero(t *testing.T) {
+	s := newTestStore(t)
+	old := sampleFixture()
+	old.TS = 1753000000000
+	fresh := sampleFixture()
+	fresh.TS = 1753000000100
+	fresh.Seq = u32p(0)
+	fresh.Boot = u32p(0)
+	for _, sm := range []Sample{old, fresh} {
+		if err := s.AppendSample(sm); err != nil {
+			t.Fatalf("AppendSample: %v", err)
+		}
+	}
+	got, err := s.SamplesBetween(1753000000000, 1753000001000)
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("muốn 2 sample, có %d", len(got))
+	}
+	if got[0].Seq != nil {
+		t.Errorf("mẫu firmware cũ phải có seq=NULL, có %v", *got[0].Seq)
+	}
+	if got[1].Seq == nil || *got[1].Seq != 0 {
+		t.Errorf("mẫu đầu sau boot phải có seq=0 (không phải NULL), có %v", got[1].Seq)
+	}
+}
+
+func TestMigrationAddsSeqBootToExistingDb(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	// Dựng DB theo schema cũ (không có seq/boot) rồi để Open migrate.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE samples (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL,
+		presence INTEGER NOT NULL DEFAULT 0, hr_bpm INTEGER NOT NULL DEFAULT 0,
+		resp_amp REAL NOT NULL DEFAULT 0, motion INTEGER NOT NULL DEFAULT 0,
+		weight_kg REAL NOT NULL DEFAULT 0, spo2 INTEGER NOT NULL DEFAULT 0,
+		temp_c REAL NOT NULL DEFAULT 0, humidity REAL NOT NULL DEFAULT 0,
+		moving_dist INTEGER NOT NULL DEFAULT 0, moving_eng INTEGER NOT NULL DEFAULT 0,
+		still_dist INTEGER NOT NULL DEFAULT 0, still_eng INTEGER NOT NULL DEFAULT 0,
+		uart_ok INTEGER NOT NULL DEFAULT 0)`); err != nil {
+		t.Fatalf("dựng schema cũ: %v", err)
+	}
+	raw.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open trên DB cũ: %v", err)
+	}
+	defer s.Close()
+
+	in := sampleFixture()
+	in.Seq = u32p(11)
+	if err := s.AppendSample(in); err != nil {
+		t.Fatalf("AppendSample sau migrate: %v", err)
+	}
+	got, err := s.SamplesBetween(in.TS-1000, in.TS+1000)
+	if err != nil {
+		t.Fatalf("SamplesBetween: %v", err)
+	}
+	if len(got) != 1 || got[0].Seq == nil || *got[0].Seq != 11 {
+		t.Errorf("migrate không thêm được cột: %+v", got)
+	}
+}
+
+func TestOpenTwiceDoesNotDuplicateColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "twice.db")
+	s1, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open lần 1: %v", err)
+	}
+	s1.Close()
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open lần 2 (migrate phải idempotent): %v", err)
+	}
+	s2.Close()
+}
+
+// ---- độ bền ghi ở 10Hz ----
+
+func TestOpenEnablesWAL(t *testing.T) {
+	s := newTestStore(t)
+	var mode string
+	if err := s.db.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatalf("PRAGMA journal_mode: %v", err)
+	}
+	if mode != "wal" {
+		t.Errorf("journal_mode=%q, muốn \"wal\" — rollback journal fsync mỗi commit, không theo kịp 10Hz", mode)
+	}
+}
+
+func TestOpenSetsSynchronousNormal(t *testing.T) {
+	s := newTestStore(t)
+	var sync int
+	if err := s.db.QueryRow(`PRAGMA synchronous`).Scan(&sync); err != nil {
+		t.Fatalf("PRAGMA synchronous: %v", err)
+	}
+	if sync != 1 {
+		t.Errorf("synchronous=%d, muốn 1 (NORMAL)", sync)
+	}
+}
+
+func TestAppendSampleEnforcesCapAfterTrimInterval(t *testing.T) {
+	s := newTestStore(t)
+	s.maxSamples, s.trimInterval = 50, 10
+	for i := 0; i < 200; i++ {
+		sm := sampleFixture()
+		sm.TS += int64(i)
+		if err := s.AppendSample(sm); err != nil {
+			t.Fatalf("AppendSample %d: %v", i, err)
+		}
+	}
+	var n int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM samples`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	// Giãn câu cắt nghĩa là vượt trần tối đa trimInterval dòng — không phải bỏ trần.
+	if n > s.maxSamples+s.trimInterval {
+		t.Errorf("có %d mẫu, trần %d + giãn %d", n, s.maxSamples, s.trimInterval)
+	}
+}
+
+// Chứng minh câu DELETE thật sự đã được giãn: trần bằng 1 mà 10 mẫu vẫn còn nguyên
+// vì chưa tới kỳ cắt. Nếu DELETE còn chạy mỗi insert thì chỉ còn 1 dòng.
+func TestAppendSampleDoesNotTrimEveryInsert(t *testing.T) {
+	s := newTestStore(t)
+	s.maxSamples, s.trimInterval = 1, 100
+	for i := 0; i < 10; i++ {
+		sm := sampleFixture()
+		sm.TS += int64(i)
+		if err := s.AppendSample(sm); err != nil {
+			t.Fatalf("AppendSample %d: %v", i, err)
+		}
+	}
+	var n int64
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM samples`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 10 {
+		t.Errorf("có %d mẫu, muốn 10 — DELETE vẫn đang chạy mỗi insert", n)
 	}
 }

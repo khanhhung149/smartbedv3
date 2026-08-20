@@ -44,16 +44,40 @@ const (
 type Store struct {
 	db *sql.DB
 	mu sync.Mutex // SQLite ghi 1 writer; giữ Append tuần tự thay vì để driver trả SQLITE_BUSY
+
+	// Trần mẫu và nhịp cắt. Là field chứ không phải hằng để test hạ ngưỡng xuống —
+	// không thể chèn 11 triệu dòng trong một bài test.
+	maxSamples   int64
+	trimInterval int64
+	sinceTrim    int64
 }
 
 // Open mở (hoặc tạo) DB tại path và migrate schema.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	// WAL + synchronous=NORMAL: đường ghi mẫu chạy 10Hz liên tục cả đêm. Rollback journal
+	// với synchronous=FULL bắt fsync mỗi commit — không theo kịp, và mẫu mất vì backend
+	// chậm sẽ lẫn vào đúng con số tỷ lệ mất mẫu đang cần đo.
+	// Đánh đổi: mất điện đột ngột có thể mất các transaction chưa checkpoint. Process crash
+	// không mất gì. Chấp nhận được — mất điện giữa đêm làm hỏng bài đo dù cấu hình nào.
+	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("mở sqlite %q: %w", path, err)
 	}
 	// 1 connection: tránh "database is locked" khi MQTT callback và HTTP handler ghi/đọc cùng lúc.
 	db.SetMaxOpenConns(1)
+
+	// Xác nhận WAL bật thật. Chạy tiếp im lặng ở chế độ chậm là kiểu hỏng khó tìm nhất:
+	// mọi thứ vẫn "chạy", chỉ là mất mẫu.
+	var journalMode string
+	if err := db.QueryRow(`PRAGMA journal_mode`).Scan(&journalMode); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("đọc journal_mode %q: %w", path, err)
+	}
+	if journalMode != "wal" {
+		db.Close()
+		return nil, fmt.Errorf("journal_mode của %q là %q, cần \"wal\"", path, journalMode)
+	}
 
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS events (
@@ -84,18 +108,70 @@ func Open(path string) (*Store, error) {
 			moving_eng  INTEGER NOT NULL DEFAULT 0,
 			still_dist  INTEGER NOT NULL DEFAULT 0,
 			still_eng   INTEGER NOT NULL DEFAULT 0,
-			uart_ok     INTEGER NOT NULL DEFAULT 0
+			uart_ok     INTEGER NOT NULL DEFAULT 0,
+			-- seq/boot NULL nghĩa là node gửi mẫu này chạy firmware chưa có bộ đếm.
+			-- Nullable chứ không DEFAULT 0: seq=0 là mẫu đầu tiên sau khi khởi động,
+			-- gộp hai trạng thái lại làm hỏng phép đếm mất mẫu.
+			seq         INTEGER,
+			boot        INTEGER
 		);
 		CREATE INDEX IF NOT EXISTS idx_samples_ts ON samples(ts DESC);
 	`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	return &Store{db: db}, nil
+
+	// DB dựng trước khi có seq/boot không được CREATE TABLE IF NOT EXISTS đụng tới.
+	if err := addMissingSampleColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return &Store{db: db, maxSamples: defaultMaxSamples, trimInterval: defaultTrimInterval}, nil
 }
 
-// maxSamples — trần mẫu giữ lại. 30 đêm × 10Hz × 3600s = 10.8M mẫu; SQLite dư sức chứa.
-const maxSamples = 11_000_000
+// addMissingSampleColumns thêm cột còn thiếu vào bảng samples đã tồn tại.
+// Hỏi table_info trước thay vì ALTER rồi nuốt lỗi: nuốt lỗi giấu luôn cả lỗi thật.
+func addMissingSampleColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(samples)`)
+	if err != nil {
+		return fmt.Errorf("đọc cột bảng samples: %w", err)
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notNull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan cột bảng samples: %w", err)
+		}
+		have[name] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("đọc cột bảng samples: %w", err)
+	}
+
+	for _, col := range []string{"seq", "boot"} {
+		if have[col] {
+			continue
+		}
+		if _, err := db.Exec(`ALTER TABLE samples ADD COLUMN ` + col + ` INTEGER`); err != nil {
+			return fmt.Errorf("thêm cột samples.%s: %w", col, err)
+		}
+	}
+	return nil
+}
+
+// defaultMaxSamples — trần mẫu giữ lại. 30 đêm × 10Hz × 3600s = 10.8M mẫu; SQLite dư sức chứa.
+const defaultMaxSamples = 11_000_000
+
+// defaultTrimInterval — số mẫu giữa hai lần chạy câu cắt trần. Chạy sau MỖI insert nghĩa là
+// nhân đôi số transaction ở 10Hz cho một câu DELETE gần như luôn xoá 0 dòng (trần chỉ chạm
+// tới sau ~30 đêm). Giãn ra làm DB vượt trần tối đa từng này dòng — không đáng kể.
+const defaultTrimInterval = 10_000
 
 // Append ghi 1 event rồi cắt bớt phần vượt maxRows.
 // Lỗi ở đây KHÔNG được làm sập luồng MQTT — caller chỉ log rồi đi tiếp.
@@ -184,6 +260,13 @@ type Sample struct {
 	StillDistCm   int     `json:"still_dist_cm"`
 	StillEnergy   int     `json:"still_energy"`
 	UARTOK        bool    `json:"uart_ok"`
+
+	// Seq tăng 1 mỗi mẫu MCU dựng; Boot tăng 1 mỗi lần MCU khởi động. Hai trường này tách
+	// bạch ba nguyên nhân mất mẫu: seq thủng lỗ với ts liền mạch = mất trên đường; seq liền
+	// với ts nhảy quãng = MCU trượt nhịp; boot tăng = MCU reset.
+	// nil = firmware chưa có bộ đếm (phân biệt với 0 = mẫu đầu tiên sau khởi động).
+	Seq  *uint32 `json:"seq,omitempty"`
+	Boot *uint32 `json:"boot,omitempty"`
 }
 
 // AppendSample ghi 1 mẫu 10Hz. Lỗi KHÔNG được làm sập luồng MQTT — caller log rồi đi tiếp.
@@ -195,16 +278,24 @@ func (s *Store) AppendSample(sm Sample) error {
 	if _, err := s.db.Exec(
 		`INSERT INTO samples
 		   (ts, presence, hr_bpm, resp_amp, motion, weight_kg, spo2, temp_c, humidity,
-		    moving_dist, moving_eng, still_dist, still_eng, uart_ok)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		    moving_dist, moving_eng, still_dist, still_eng, uart_ok, seq, boot)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		sm.TS, boolInt(sm.Presence), sm.HRBpm, sm.RespAmplitude, sm.Motion,
 		sm.WeightKg, sm.Spo2, sm.TempC, sm.Humidity,
 		sm.MovingDistCm, sm.MovingEnergy, sm.StillDistCm, sm.StillEnergy, boolInt(sm.UARTOK),
+		u32Arg(sm.Seq), u32Arg(sm.Boot),
 	); err != nil {
 		return fmt.Errorf("insert sample: %w", err)
 	}
+
+	// Cắt trần theo nhịp, không phải mỗi insert — xem defaultTrimInterval.
+	s.sinceTrim++
+	if s.sinceTrim < s.trimInterval {
+		return nil
+	}
+	s.sinceTrim = 0
 	if _, err := s.db.Exec(
-		`DELETE FROM samples WHERE id <= (SELECT MAX(id) FROM samples) - ?`, maxSamples,
+		`DELETE FROM samples WHERE id <= (SELECT MAX(id) FROM samples) - ?`, s.maxSamples,
 	); err != nil {
 		return fmt.Errorf("cắt bớt sample cũ: %w", err)
 	}
@@ -226,7 +317,7 @@ func (s *Store) RetainNights(nights int) error {
 func (s *Store) SamplesBetween(fromMs, toMs int64) ([]Sample, error) {
 	rows, err := s.db.Query(
 		`SELECT id, ts, presence, hr_bpm, resp_amp, motion, weight_kg, spo2, temp_c, humidity,
-		        moving_dist, moving_eng, still_dist, still_eng, uart_ok
+		        moving_dist, moving_eng, still_dist, still_eng, uart_ok, seq, boot
 		 FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts`,
 		fromMs, toMs,
 	)
@@ -239,13 +330,17 @@ func (s *Store) SamplesBetween(fromMs, toMs int64) ([]Sample, error) {
 	for rows.Next() {
 		var sm Sample
 		var presence, uartOK int
+		var seq, boot sql.NullInt64
 		if err := rows.Scan(&sm.ID, &sm.TS, &presence, &sm.HRBpm, &sm.RespAmplitude, &sm.Motion,
 			&sm.WeightKg, &sm.Spo2, &sm.TempC, &sm.Humidity,
-			&sm.MovingDistCm, &sm.MovingEnergy, &sm.StillDistCm, &sm.StillEnergy, &uartOK); err != nil {
+			&sm.MovingDistCm, &sm.MovingEnergy, &sm.StillDistCm, &sm.StillEnergy, &uartOK,
+			&seq, &boot); err != nil {
 			return nil, fmt.Errorf("scan sample: %w", err)
 		}
 		sm.Presence = presence != 0
 		sm.UARTOK = uartOK != 0
+		sm.Seq = nullU32(seq)
+		sm.Boot = nullU32(boot)
 		out = append(out, sm)
 	}
 	return out, rows.Err()
@@ -256,4 +351,20 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// u32Arg trả nil (ghi NULL) khi con trỏ rỗng, giữ 0 là một giá trị thật.
+func u32Arg(v *uint32) any {
+	if v == nil {
+		return nil
+	}
+	return int64(*v)
+}
+
+func nullU32(v sql.NullInt64) *uint32 {
+	if !v.Valid {
+		return nil
+	}
+	u := uint32(v.Int64)
+	return &u
 }

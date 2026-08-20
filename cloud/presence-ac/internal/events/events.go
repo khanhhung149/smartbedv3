@@ -42,4 +42,14 @@ type Sample struct {
 	// Cờ lỗi: uart_ok=false = UART radar chết/không có khung hợp lệ (dropout).
 	// presence vẫn đáng tin nếu chân OUT OK; các kênh số liệu còn lại KHÔNG đáng tin.
 	UARTOK bool `json:"uart_ok"`
+
+	// Seq tăng 1 mỗi mẫu MCU dựng; Boot tăng 1 mỗi lần MCU khởi động (lưu NVS).
+	// Không có hai trường này thì tỷ lệ mất mẫu vẫn tính được nhưng không truy được
+	// nguyên nhân: seq thủng lỗ với t liền mạch = mất trên đường; seq liền với t nhảy
+	// quãng = MCU trượt nhịp; boot tăng = MCU reset.
+	//
+	// Con trỏ chứ không phải giá trị: nil = firmware chưa có bộ đếm, khác hẳn 0 = mẫu
+	// đầu tiên sau khi khởi động.
+	Seq  *uint32 `json:"seq"`
+	Boot *uint32 `json:"boot"`
 }

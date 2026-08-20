@@ -83,6 +83,8 @@ func main() {
 			StillDistCm:   sm.StillDistCm,
 			StillEnergy:   sm.StillEnergy,
 			UARTOK:        sm.UARTOK,
+			Seq:           sm.Seq,
+			Boot:          sm.Boot,
 		}); err != nil {
 			slog.Warn("ghi sample lỗi", "ts", sm.TS, "err", err)
 		}
