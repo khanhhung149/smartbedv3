@@ -1,8 +1,9 @@
 #include "uart-parser.h"
+#include <string.h>
 
 SleepPadParser::SleepPadParser()
     : onSecData(nullptr), onMinData(nullptr), onIdle(nullptr),
-      _state(ParserState::WAIT_HEADER), _len(0) {}
+      _state(ParserState::WAIT_HEADER), _len(0), _histLen(0) {}
 
 void SleepPadParser::feed(uint8_t byte) {
     switch (_state) {
@@ -129,4 +130,55 @@ const char* SleepPadParser::statusToString(uint8_t code) {
         case 0x08: return "WEAK_BREATHING";
         default:   return "UNKNOWN";
     }
+}
+
+// ---------------------------------------------------------------------------
+// Đường LSM-800-T (lệnh ASCII TAOSG). Khối 66 byte, 1 Hz:
+//   [Odata](5) + 25×int16 áp điện (50) + áp lực int16 (2) + [Bdata](5) + 4 byte
+// Bốn byte sau [Bdata]: serial(0-59), trạng thái, nhịp tim, nhịp thở/10.
+// LƯU Ý theo tài liệu, không suy đoán:
+//   - trạng thái 0 = ĐANG NẰM trên giường; 1 = đã rời giường.
+//   - nhịp tim/nhịp thở chỉ có giá trị sau 25 giây nằm yên liên tục, nên bằng 0
+//     trong 25 giây đầu là đúng chứ không phải lỗi đọc.
+//   - sdata: tài liệu không định nghĩa một giá trị đơn, đây là 25 mẫu áp điện.
+//     Lấy biên độ tuyệt đối lớn nhất trong 25 mẫu làm đại diện mức dao động —
+//     đây là DIỄN GIẢI, không phải định nghĩa của hãng.
+void SleepPadParser::feedTaos(uint8_t byte) {
+    static const uint8_t TAG[5] = {0x42, 0x64, 0x61, 0x74, 0x61}; // "Bdata"
+
+    if (_histLen >= TAOS_HIST) {
+        memmove(_hist, _hist + _histLen - TAOS_KEEP, TAOS_KEEP);
+        _histLen = TAOS_KEEP;
+    }
+    _hist[_histLen++] = byte;
+    if (_histLen < 9) return;
+
+    const size_t p = _histLen - 9;              // vị trí byte 'B' nếu đây là khung
+    if (memcmp(&_hist[p], TAG, 5) != 0) return;
+
+    SleepPadSecData d = {};
+    const uint8_t* v = &_hist[p + 5];
+    d.serial      = v[0];
+    d.status      = v[1];
+    d.heart_rate  = v[2];
+    d.resp_rate   = v[3] / 10.0f;
+    d.timestamp   = 0;   // chế độ TAOSG không gửi epoch; ts thật do MCU gắn lúc publish
+
+    if (p >= 57) {   // đủ [Odata]+áp điện+áp lực phía trước => khung đầy đủ
+        const size_t press = p - 2;
+        d.pdata = (uint16_t)(_hist[press] | (_hist[press + 1] << 8));
+
+        const size_t piezo = p - 52;
+        int16_t peak = 0;
+        for (int i = 0; i < 25; i++) {
+            const int16_t sample =
+                (int16_t)(_hist[piezo + i * 2] | (_hist[piezo + i * 2 + 1] << 8));
+            const int16_t mag = sample < 0 ? (int16_t)-sample : sample;
+            if (mag > peak) peak = mag;
+        }
+        d.sdata = (uint16_t)peak;
+    }
+
+    if (onSecData) onSecData(d);
+    _histLen = 0;
 }

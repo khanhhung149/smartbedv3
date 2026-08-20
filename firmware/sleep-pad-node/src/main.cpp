@@ -51,14 +51,22 @@ static void send_command(uint8_t frame_type, const uint8_t* content, size_t len)
     SLEEPPAD_UART.flush();
 }
 
-static void start_monitor_mode() {
-    Serial.println("[CMD] 0x04 — start server monitor mode");
-    uint8_t mode = 0x20;
-    send_command(0x04, &mode, 1);
+// LSM-800-T nhận lệnh ASCII, KHÔNG phải khung 0x7D. Tài liệu mục 4: mỗi lệnh phải
+// gửi liền một cụm, không tách. TAOSG = phát 66 byte/giây (đầy đủ áp điện + kết quả).
+static void sp_send_taos(const char* cmd) {
+    SLEEPPAD_UART.write((const uint8_t*)cmd, strlen(cmd));
+    SLEEPPAD_UART.flush();
 }
 
+static void start_monitor_mode() {
+    Serial.println("[CMD] TAOSG — bat che do phat 66 byte/giay");
+    sp_send_taos("TAOSG");
+}
+
+// Không có lệnh heartbeat riêng trong bộ lệnh TAOS. Phát lại TAOSG vừa giữ nhịp
+// vừa tự khôi phục nếu pad đã rơi về chế độ chờ.
 static void send_heartbeat() {
-    send_command(0x08, nullptr, 0);
+    sp_send_taos("TAOSG");
 }
 
 // --- Parser callbacks (forward declarations) ---
@@ -119,6 +127,13 @@ static bool wifi_connect_once(const String& ssid, const String& pass,
     WiFi.disconnect(true, true);   // erase NVS-cached creds + flush driver
     delay(200);
     WiFi.mode(WIFI_STA);
+    // Tắt power save. Mặc định Arduino-ESP32 là WIFI_PS_MIN_MODEM: modem ngủ giữa các
+    // beacon. Trên link yếu (C3 Super Mini dùng ăng-ten gốm trên bo) nó làm mất beacon,
+    // hỏng ARP và TCP không mở nổi — quan sát được là MISSING_ACKS, sock_errno=113
+    // (EHOSTUNREACH) rồi tls_err=0x8004 (FAILED_CONNECT_TO_HOST), trong khi cùng lúc
+    // broker vẫn nhận được kết nối từ máy khác. Node này cắm nguồn liên tục nên không
+    // có lý do tiết kiệm điện.
+    WiFi.setSleep(false);
     WiFi.begin(ssid.c_str(), pass.c_str());
 
     unsigned long start = millis();
@@ -315,7 +330,15 @@ void loop() {
 #ifndef MOCK_SLEEPPAD
         // Drain UART bytes into parser (production path)
         while (SLEEPPAD_UART.available()) {
-            parser.feed(static_cast<uint8_t>(SLEEPPAD_UART.read()));
+            const uint8_t b = static_cast<uint8_t>(SLEEPPAD_UART.read());
+            parser.feedTaos(b);   // đường LSM-800-T (tag [Bdata])
+#ifdef UART_RAW_DUMP
+            // Chan doan tam: parser vut im moi byte khac 0x7D, nen "khong co log"
+            // KHONG chung minh "khong co byte". Dump tho de phan biet day cam
+            // voi day co tin hieu nhung sai baud/khung.
+            Serial.printf("%02X ", b);
+#endif
+            parser.feed(b);
         }
 #else
         // Mock path — generate synthetic frame bytes and feed the parser

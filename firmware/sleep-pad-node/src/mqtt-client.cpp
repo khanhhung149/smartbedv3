@@ -191,10 +191,15 @@ void mqtt_setup(const char* device_id,
     // ESP-IDF 5.x renamed these to nested broker/credentials/session/network.
     // Toolchain detection via ESP_IDF_VERSION_MAJOR keeps this source compiling
     // on both arduino-esp32 2.x machines (anh thời's HN setup) and 3.x machines.
+    // Chỉ gắn chứng chỉ khi transport THẬT SỰ là TLS. esp_mqtt_client_init trả NULL nếu
+    // có certificate trên URI mqtt:// hoặc ws:// — broker LAN thuần tcp vì thế không dựng
+    // nổi client, dù URI hoàn toàn hợp lệ.
+    const bool tls = s_uri.startsWith("wss://") || s_uri.startsWith("mqtts://");
+
     esp_mqtt_client_config_t cfg = {};
 #if defined(ESP_IDF_VERSION_MAJOR) && ESP_IDF_VERSION_MAJOR >= 5
     cfg.broker.address.uri = s_uri.c_str();
-    cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
+    if (tls) cfg.broker.verification.certificate = ISRG_ROOT_X1_PEM;
     cfg.credentials.client_id = s_device_id.c_str();
     if (s_user.length() > 0) {
         cfg.credentials.username = s_user.c_str();
@@ -214,7 +219,7 @@ void mqtt_setup(const char* device_id,
     cfg.network.reconnect_timeout_ms = 10000;
 #else
     cfg.uri = s_uri.c_str();
-    cfg.cert_pem = ISRG_ROOT_X1_PEM;
+    if (tls) cfg.cert_pem = ISRG_ROOT_X1_PEM;
     cfg.client_id = s_device_id.c_str();
     if (s_user.length() > 0) {
         cfg.username = s_user.c_str();
@@ -324,7 +329,10 @@ static void pending_push(const char* topic, const char* payload, size_t len) {
 static void pending_drain() {
     while (s_pending_count > 0 && s_connected && s_client) {
         const PendingMsg& m = s_pending[s_pending_head];
-        esp_mqtt_client_publish(s_client, m.topic, m.payload, (int)m.len, /*qos=*/0, /*retain=*/0);
+        const int rc = esp_mqtt_client_publish(s_client, m.topic, m.payload, (int)m.len, /*qos=*/0, /*retain=*/0);
+        if (rc < 0) {
+            Serial.printf("[MQTT] publish LOI rc=%d topic=%s len=%u\n", rc, m.topic, (unsigned)m.len);
+        }
         s_pending_head = (s_pending_head + 1) % PUB_RB_CAP;
         s_pending_count--;
     }
