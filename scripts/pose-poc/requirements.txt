@@ -1,6 +1,12 @@
-# PoC MediaPipe Pose Landmarker — laptop x86_64. KHÔNG dùng cho Jetson aarch64:
-# mediapipe không có wheel aarch64 chính thức trên PyPI (xem mục rủi ro vision
-# pipeline trong docs/system-architecture.md).
+# PoC MediaPipe Pose Landmarker — ban đầu viết cho laptop x86_64.
+#
+# CHẠY ĐƯỢC TRÊN JETSON (aarch64) — verify thật 26/08: `pip install mediapipe` có sẵn
+# wheel `manylinux_2_28_aarch64` trên JetPack R36.4/Orin, không cần build nguồn. Dùng
+# venv riêng (không cài vào Python hệ thống) — opencv-contrib-python mà mediapipe kéo
+# về đòi numpy>=2, còn matplotlib hệ thống của JetPack build cho numpy<2, hai cái đụng
+# nhau nếu cài chung site-packages. 5 phút chạy thật trên esp32cam-stream: 3474 frame,
+# 0 lỗi đọc, ~10-17 fps (thấp hơn baseline laptop 22.8fps, chấp nhận được cho demo —
+# xem plans/260826-1627-port-esp32cam-pose-poc-jetson/).
 #
 # mediapipe >=1.0 là BẮT BUỘC, không phải sở thích. Từ 1.0.0 toàn bộ `mp.solutions`
 # (drawing_utils, POSE_CONNECTIONS, landmark_pb2) đã bị gỡ khỏi package — top-level
