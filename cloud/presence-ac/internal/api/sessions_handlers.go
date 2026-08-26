@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -14,6 +15,8 @@ type SessionLister interface {
 	ListSessions(ctx context.Context, deviceID string, start, end *time.Time, limit int) ([]sessions.SessionRow, error)
 	GetSession(ctx context.Context, id string) (*sessions.SessionRow, error)
 	GetTimeline(ctx context.Context, deviceID string, start time.Time, end *time.Time, interval string) ([]sessions.TimelinePoint, error)
+	GetLatestSec(ctx context.Context, deviceID string) (*sessions.LatestSec, error)
+	MorningReport(ctx context.Context, deviceID string, from, to time.Time) (*sessions.MorningReport, error)
 }
 
 // timeline interval is a server-owned constant, never a query-string value.
@@ -49,12 +52,18 @@ func (a *API) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	sessions, err := a.sS.ListSessions(ctx, deviceID, start, end, limit)
+	rows, err := a.sS.ListSessions(ctx, deviceID, start, end, limit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, sessions)
+	// Slice nil trong Go encode ra `null`, không phải `[]`. Client nào ép thẳng
+	// sang mảng sẽ nổ khi thiết bị chưa có phiên nào — đã xảy ra với app Flutter.
+	// Danh sách rỗng của một API JSON phải là `[]`.
+	if rows == nil {
+		rows = []sessions.SessionRow{}
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 func (a *API) getSession(w http.ResponseWriter, r *http.Request) {
@@ -101,4 +110,85 @@ func (a *API) getTimeline(w http.ResponseWriter, r *http.Request) {
 		"bucket":     "1m",
 		"points":     points,
 	})
+}
+
+// getMorningReport trả tóm tắt giấc ngủ v0 (không AHI/apnea) cho 1 device_id
+// trong 1 khoảng thời gian. from/to bắt buộc RFC3339 UTC — endpoint không tự
+// đoán timezone, tránh lặp lại nhầm lẫn giờ UTC/local đã gặp trong lúc vận hành.
+func (a *API) getMorningReport(w http.ResponseWriter, r *http.Request) {
+	if a.sS == nil {
+		http.Error(w, `{"error":"sleep sessions chưa được bật (thiếu POSTGRES_URL)"}`, http.StatusServiceUnavailable)
+		return
+	}
+	if a.snore == nil {
+		http.Error(w, `{"error":"bảng ngáy chưa sẵn sàng"}`, http.StatusServiceUnavailable)
+		return
+	}
+	q := r.URL.Query()
+	deviceID := q.Get("device_id")
+	if deviceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "thiếu device_id"})
+		return
+	}
+	from, err := time.Parse(time.RFC3339, q.Get("from"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "thiếu/sai from (RFC3339 UTC)"})
+		return
+	}
+	to, err := time.Parse(time.RFC3339, q.Get("to"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "thiếu/sai to (RFC3339 UTC)"})
+		return
+	}
+
+	ctx := r.Context()
+	report, err := a.sS.MorningReport(ctx, deviceID, from, to)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	snoreCount, err := a.snore.CountBetween(ctx, from, to)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"on_bed_seconds":      report.OnBedSeconds,
+		"off_bed_transitions": report.OffBedTransitions,
+		"avg_heart_rate":      report.AvgHeartRate,
+		"avg_resp_rate":       report.AvgRespRate,
+		"snore_count":         snoreCount,
+		"disclaimer":          report.Disclaimer,
+	})
+}
+
+// getRealtime trả mẫu mới nhất của thiết bị cho màn xem trực tiếp.
+//
+// Không có auth: backend này chỉ chạy trong LAN, giống mọi endpoint còn lại
+// (xem docs/sleep-session-api-contract.md). Client tự quyết định mẫu cũ bao nhiêu
+// thì coi là mất tín hiệu — server không đoán hộ vì ngưỡng đó phụ thuộc cách hiển thị.
+func (a *API) getRealtime(w http.ResponseWriter, r *http.Request) {
+	if a.sS == nil {
+		http.Error(w, `{"error":"sleep sessions chưa được bật (thiếu POSTGRES_URL)"}`, http.StatusServiceUnavailable)
+		return
+	}
+	deviceID := r.URL.Query().Get("device_id")
+	if deviceID == "" {
+		http.Error(w, `{"error":"thiếu device_id"}`, http.StatusBadRequest)
+		return
+	}
+	row, err := a.sS.GetLatestSec(r.Context(), deviceID)
+	if err != nil {
+		http.Error(w, `{"error":"truy vấn thất bại"}`, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if row == nil {
+		// Thiết bị hợp lệ nhưng chưa có mẫu nào — khác lỗi, nên trả 200 với null
+		// để client phân biệt "chưa có dữ liệu" với "gọi hỏng".
+		_, _ = w.Write([]byte("null"))
+		return
+	}
+	_ = json.NewEncoder(w).Encode(row)
 }

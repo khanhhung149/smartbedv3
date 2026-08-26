@@ -135,160 +135,11 @@ func (s *PGStore) GetSession(ctx context.Context, id string) (*SessionRow, error
 	return &r, nil
 }
 
-// LoadSamples reads per-second rows in [start, end) ordered by time.
-func (s *PGStore) LoadSamples(ctx context.Context, deviceID string, start, end time.Time) ([]Sample, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT time, heart_rate, resp_rate, status
-		FROM sec_data
-		WHERE device_id = $1 AND time >= $2 AND time < $3
-		ORDER BY time`,
-		deviceID, start, end)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []Sample
-	for rows.Next() {
-		var sm Sample
-		var hr sql.NullInt64
-		var rr sql.NullFloat64
-		var st sql.NullInt64
-		if err := rows.Scan(&sm.T, &hr, &rr, &st); err != nil {
-			return nil, err
-		}
-		if hr.Valid {
-			v := int32(hr.Int64)
-			sm.HR = &v
-		}
-		if rr.Valid {
-			v := rr.Float64
-			sm.RR = &v
-		}
-		if st.Valid {
-			v := int32(st.Int64)
-			sm.Status = &v
-		}
-		out = append(out, sm)
-	}
-	return out, rows.Err()
-}
-
-// summarizeRow carries the aggregated metrics for one window.
-type summarizeRow struct {
-	HRAvg             *float64
-	HRMin             *int64
-	HRMax             *int64
-	RRAvg             *float64
-	MovementTotal     *int64
-	SnoreTotal        *int64
-	RespDisorderTotal *int64
-}
-
-// Summarize aggregates min_data over one session window. FILTER (WHERE ... > 0)
-// is mandatory, not cosmetic: p.4 2.4.1 says the pad reports 0 when it cannot
-// measure, so averaging those in would drag every night's heart rate toward
-// zero in proportion to time spent out of bed.
-func (s *PGStore) Summarize(ctx context.Context, deviceID string, start, end time.Time) (*summarizeRow, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr_avg,
-		       MIN(heart_rate) FILTER (WHERE heart_rate > 0)         AS hr_min,
-		       MAX(heart_rate) FILTER (WHERE heart_rate > 0)         AS hr_max,
-		       (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real  AS rr_avg,
-		       SUM(movement)::int      AS movement_total,
-		       SUM(snore_count)::int   AS snore_total,
-		       SUM(resp_disorder)::int AS resp_disorder_total
-		FROM min_data
-		WHERE device_id = $1 AND time >= $2 AND time < $3`,
-		deviceID, start, end)
-	var r summarizeRow
-	if err := row.Scan(
-		&r.HRAvg, &r.HRMin, &r.HRMax, &r.RRAvg,
-		&r.MovementTotal, &r.SnoreTotal, &r.RespDisorderTotal,
-	); err != nil {
-		return nil, err
-	}
-	return &r, nil
-}
-
-// Upsert writes or updates one session idempotently on (device_id, started_at).
-func (s *PGStore) Upsert(ctx context.Context, deviceID string, w SessionWindow, sm *summarizeRow, end time.Time) error {
-	var duration *int64
-	if w.EndedAt != nil {
-		d := int64(w.EndedAt.Sub(w.StartedAt).Seconds())
-		duration = &d
-	}
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sleep_sessions
-		  (device_id, started_at, ended_at, duration_s,
-		   hr_avg, hr_min, hr_max, rr_avg,
-		   movement_total, snore_total, resp_disorder_total,
-		   sit_up_count, wake_count, computed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
-		ON CONFLICT (device_id, started_at) DO UPDATE SET
-		  ended_at            = EXCLUDED.ended_at,
-		  duration_s          = EXCLUDED.duration_s,
-		  hr_avg              = EXCLUDED.hr_avg,
-		  hr_min              = EXCLUDED.hr_min,
-		  hr_max              = EXCLUDED.hr_max,
-		  rr_avg              = EXCLUDED.rr_avg,
-		  movement_total      = EXCLUDED.movement_total,
-		  snore_total         = EXCLUDED.snore_total,
-		  resp_disorder_total = EXCLUDED.resp_disorder_total,
-		  sit_up_count        = EXCLUDED.sit_up_count,
-		  wake_count          = EXCLUDED.wake_count,
-		  computed_at         = now()`,
-		deviceID, w.StartedAt, w.EndedAt, duration,
-		sm.HRAvg, sm.HRMin, sm.HRMax, sm.RRAvg,
-		sm.MovementTotal, sm.SnoreTotal, sm.RespDisorderTotal,
-		int64(w.SitUpCount), int64(w.WakeCount))
-	return err
-}
-
-// RebuildDevice recomputes this device's sessions over [since, now] and upserts
-// them. Returns how many windows were written.
-func (s *PGStore) RebuildDevice(ctx context.Context, deviceID string, since, now time.Time, opts BuildOptions) (int, error) {
-	samples, err := s.LoadSamples(ctx, deviceID, since, now)
-	if err != nil {
-		return 0, err
-	}
-	if len(samples) == 0 {
-		return 0, nil
-	}
-	windows := BuildSessions(samples, opts)
-	for _, w := range windows {
-		end := now
-		if w.EndedAt != nil {
-			end = *w.EndedAt
-		}
-		sm, err := s.Summarize(ctx, deviceID, w.StartedAt, end)
-		if err != nil {
-			return 0, err
-		}
-		if err := s.Upsert(ctx, deviceID, w, sm, end); err != nil {
-			return 0, err
-		}
-	}
-	return len(windows), nil
-}
-
-// ActiveDeviceIDs lists devices that produced data since `since`.
-func (s *PGStore) ActiveDeviceIDs(ctx context.Context, since time.Time) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT DISTINCT device_id FROM sec_data WHERE time >= $1`, since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out = append(out, id)
-	}
-	return out, rows.Err()
+// IsOnBed implements p.4 §2.4.1: heart rate and respiration both read 0 once
+// the bed is empty. GetTimeline derives bed_state from it, which is why the
+// rule stays here after the session-building state machine moved out.
+func IsOnBed(hr *int32, rr *float64) bool {
+	return (hr != nil && *hr > 0) || (rr != nil && *rr > 0)
 }
 
 // GetTimeline builds the bucketed series for one night. `interval` is a
@@ -307,8 +158,6 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 
 	minuteRows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT time_bucket('%s', time) AS t,
-		       (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr,
-		       (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real AS rr,
 		       SUM(movement)::int      AS movement,
 		       SUM(snore_count)::int   AS snore,
 		       SUM(resp_disorder)::int AS resp_disorder
@@ -321,7 +170,6 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 	defer minuteRows.Close()
 
 	type mrow struct {
-		HR, RR       *float64
 		Movement     *int64
 		Snore        *int64
 		RespDisorder *int64
@@ -331,7 +179,7 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 	for minuteRows.Next() {
 		var t time.Time
 		var m mrow
-		if err := minuteRows.Scan(&t, &m.HR, &m.RR, &m.Movement, &m.Snore, &m.RespDisorder); err != nil {
+		if err := minuteRows.Scan(&t, &m.Movement, &m.Snore, &m.RespDisorder); err != nil {
 			return nil, err
 		}
 		byT[t] = m
@@ -347,6 +195,8 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 		SELECT time_bucket('%s', time) AS t,
 		       MAX(heart_rate) AS hr_max,
 		       MAX(resp_rate)  AS rr_max,
+		       (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr,
+		       (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real AS rr,
 		       array_agg(DISTINCT status) FILTER (WHERE status IS NOT NULL) AS events
 		FROM sec_data
 		WHERE device_id = $1 AND time >= $2 AND time < $3
@@ -359,13 +209,14 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 	type srow struct {
 		HRMax  *int64
 		RRMax  *float64
+		HR, RR *float64
 		Events []int
 	}
 	secByT := map[time.Time]srow{}
 	for secRows.Next() {
 		var t time.Time
 		var sr srow
-		if err := secRows.Scan(&t, &sr.HRMax, &sr.RRMax, pqArray(&sr.Events)); err != nil {
+		if err := secRows.Scan(&t, &sr.HRMax, &sr.RRMax, &sr.HR, &sr.RR, pqArray(&sr.Events)); err != nil {
 			return nil, err
 		}
 		secByT[t] = sr
@@ -394,10 +245,13 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 		sr, hasSec := secByT[t]
 		p := TimelinePoint{T: t}
 		if hasMin {
-			p.HR, p.RR = m.HR, m.RR
 			p.Movement, p.Snore, p.RespDisorder = m.Movement, m.Snore, m.RespDisorder
 		}
 		if hasSec {
+			// hr/rr lấy từ sec_data (1 Hz), không phải min_data: pad LSM-800-T nói
+			// giao thức TAOSG và không phát khung phút, nên min_data rỗng vĩnh viễn
+			// và biểu đồ nhịp tim của một đêm sẽ trống trơn.
+			p.HR, p.RR = sr.HR, sr.RR
 			// bed_state comes from the same hr/rr rule the session builder
 			// uses, not from `status` — no status code means "in bed".
 			onBed := IsOnBed(toI32Ptr(sr.HRMax), sr.RRMax)
@@ -411,6 +265,102 @@ func (s *PGStore) GetTimeline(ctx context.Context, deviceID string, start time.T
 		points = append(points, p)
 	}
 	return points, nil
+}
+
+// MorningReport is the v0 sleep summary: no AHI/apnea, just what sec_data and
+// the room snore table already give us for real (Michael: ship LD2410C-era
+// data first, don't wait on min_data/piezo/SpO2).
+type MorningReport struct {
+	OnBedSeconds      int64    `json:"on_bed_seconds"`
+	OffBedTransitions int      `json:"off_bed_transitions"`
+	AvgHeartRate      *float64 `json:"avg_heart_rate"`
+	AvgRespRate       *float64 `json:"avg_resp_rate"`
+	Disclaimer        string   `json:"disclaimer"`
+}
+
+// MorningReport aggregates sec_data over [from, to) into on-bed time and
+// off-bed transition count. It walks rows in Go rather than a SQL window
+// function: a night is at most tens of thousands of 1Hz rows, so the loop
+// cost is negligible and the logic stays readable (YAGNI).
+//
+// A large gap between consecutive rows (node dropout) is treated as "still in
+// the previous bed state" until the next row — accepted imprecision for v0,
+// see plan Validation Log.
+func (s *PGStore) MorningReport(ctx context.Context, deviceID string, from, to time.Time) (*MorningReport, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT time, heart_rate, resp_rate
+		FROM sec_data
+		WHERE device_id = $1 AND time >= $2 AND time < $3
+		ORDER BY time`, deviceID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := &MorningReport{
+		Disclaimer: "Tóm tắt giấc ngủ, không phải chẩn đoán y tế (không có AHI/apnea).",
+	}
+
+	var prevT time.Time
+	var havePrev bool
+	var wasOnBed bool
+	var hrSum, rrSum float64
+	var hrCount, rrCount int64
+
+	for rows.Next() {
+		var t time.Time
+		var hr sql.NullInt64
+		var rr sql.NullFloat64
+		if err := rows.Scan(&t, &hr, &rr); err != nil {
+			return nil, err
+		}
+
+		var hr32 *int32
+		if hr.Valid {
+			v := int32(hr.Int64)
+			hr32 = &v
+			if v > 0 {
+				hrSum += float64(v)
+				hrCount++
+			}
+		}
+		var rrPtr *float64
+		if rr.Valid {
+			v := rr.Float64
+			rrPtr = &v
+			if v > 0 {
+				rrSum += v
+				rrCount++
+			}
+		}
+		onBed := IsOnBed(hr32, rrPtr)
+
+		if havePrev {
+			delta := t.Sub(prevT)
+			if wasOnBed {
+				out.OnBedSeconds += int64(delta.Seconds())
+			}
+			if wasOnBed && !onBed {
+				out.OffBedTransitions++
+			}
+		}
+		prevT = t
+		wasOnBed = onBed
+		havePrev = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if hrCount > 0 {
+		v := hrSum / float64(hrCount)
+		out.AvgHeartRate = &v
+	}
+	if rrCount > 0 {
+		v := rrSum / float64(rrCount)
+		out.AvgRespRate = &v
+	}
+	return out, nil
 }
 
 // pqArray adapts a *[]int to a scanner for a Postgres integer array.
@@ -479,4 +429,60 @@ func sortTimes(ts []time.Time) {
 			ts[j], ts[j-1] = ts[j-1], ts[j]
 		}
 	}
+}
+
+// LatestSec là dòng sec_data mới nhất của một thiết bị — nguồn cho màn xem trực tiếp.
+// Khác Sample (dùng để dựng phiên): giữ nguyên sdata/pdata vì màn realtime hiển thị
+// chúng, còn luật dựng phiên không dùng tới.
+type LatestSec struct {
+	T      time.Time `json:"t"`
+	Status *int32    `json:"status"`
+	HR     *int32    `json:"heart_rate"`
+	RR     *float64  `json:"resp_rate"`
+	SData  *int32    `json:"sdata"`
+	PData  *int32    `json:"pdata"`
+}
+
+// GetLatestSec trả dòng mới nhất, hoặc nil nếu thiết bị chưa gửi mẫu nào.
+// Không lọc theo thời gian: màn realtime tự quyết định số cũ bao nhiêu thì coi là mất tín hiệu,
+// vì chỉ nó biết ngưỡng hợp lý cho người xem.
+func (s *PGStore) GetLatestSec(ctx context.Context, deviceID string) (*LatestSec, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT time, status, heart_rate, resp_rate, sdata, pdata
+		FROM sec_data
+		WHERE device_id = $1
+		ORDER BY time DESC
+		LIMIT 1`, deviceID)
+
+	var out LatestSec
+	var st, hr, sd, pd sql.NullInt64
+	var rr sql.NullFloat64
+	switch err := row.Scan(&out.T, &st, &hr, &rr, &sd, &pd); err {
+	case nil:
+	case sql.ErrNoRows:
+		return nil, nil
+	default:
+		return nil, err
+	}
+	if st.Valid {
+		v := int32(st.Int64)
+		out.Status = &v
+	}
+	if hr.Valid {
+		v := int32(hr.Int64)
+		out.HR = &v
+	}
+	if rr.Valid {
+		v := rr.Float64
+		out.RR = &v
+	}
+	if sd.Valid {
+		v := int32(sd.Int64)
+		out.SData = &v
+	}
+	if pd.Valid {
+		v := int32(pd.Int64)
+		out.PData = &v
+	}
+	return &out, nil
 }

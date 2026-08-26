@@ -24,6 +24,7 @@ import (
 	"github.com/hung/home-backend/internal/events"
 	"github.com/hung/home-backend/internal/mqttclient"
 	"github.com/hung/home-backend/internal/sessions"
+	"github.com/hung/home-backend/internal/snore"
 	"github.com/hung/home-backend/internal/statemachine"
 	"github.com/hung/home-backend/internal/store"
 )
@@ -83,12 +84,58 @@ func main() {
 			StillDistCm:   sm.StillDistCm,
 			StillEnergy:   sm.StillEnergy,
 			UARTOK:        sm.UARTOK,
+			Seq:           sm.Seq,
+			Boot:          sm.Boot,
 		}); err != nil {
 			slog.Warn("ghi sample lỗi", "ts", sm.TS, "err", err)
 		}
 	}
 
 	hub := api.NewHub()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Sleep sessions (TimescaleDB) — CHỈ ĐỌC. Bên ghi duy nhất là builder FastAPI
+	// (cloud/sleeppad/app/sessions/). Trước đây cả hai cùng upsert lên khóa
+	// (device_id, started_at) với tham số luật khác nhau, nên ended_at của phiên
+	// đang mở lật giữa có giờ và NULL theo bên nào tick sau.
+	// DB hỏng KHÔNG chặn khởi động: presence/AC/voice vẫn chạy, chỉ /api/sessions* trả 503.
+	var pg *sessions.PGStore
+	var sS api.SessionLister
+	if cfg.PostgresURL != "" {
+		if p, err := sessions.NewPGStore(ctx, cfg.PostgresURL); err != nil {
+			slog.Warn("không mở được Postgres, /api/sessions* tắt", "err", err)
+		} else {
+			pg = p
+			sS = pg
+			defer pg.Close()
+			slog.Info("sleep sessions", "pg", cfg.RedactedPostgresURL())
+		}
+	}
+
+	var recordSnore func(events.SnoreEvent)
+	var snoreReader api.SnoreCounter
+	if pg != nil {
+		if ss, err := snore.Open(pg.DB()); err != nil {
+			slog.Warn("không mở được bảng ngáy, bỏ qua ghi ngáy", "err", err)
+		} else {
+			snoreReader = ss
+			recordSnore = func(s events.SnoreEvent) {
+				ms := int64(s.TS)
+				ev := snore.Event{
+					T:          time.Now().UTC(),
+					DeviceMS:   &ms,
+					Confidence: s.Confidence,
+					DurationMS: int(s.DurationMS),
+					Source:     "voice-node",
+				}
+				if err := ss.Append(context.Background(), ev); err != nil {
+					slog.Warn("ghi ngáy lỗi", "err", err)
+				}
+			}
+		}
+	}
 
 	var client *mqttclient.Client
 
@@ -123,6 +170,7 @@ func main() {
 				machine.OnPresence(p.Present, p.TS, time.Now())
 				broadcastIfChanged()
 			},
+			OnSnore: recordSnore,
 			// Mẫu 10Hz ồn (10 mẫu/giây) nên KHÔNG bắn WS/broadcast — chỉ ghi DB.
 			OnSample: recordSample,
 			// Ghi lịch sử MỌI lệnh AC trên bus, bất kể ai phát (app, voice, ESP32).
@@ -156,9 +204,6 @@ func main() {
 	client.Connect(5 * time.Second) // không block nếu broker chưa sẵn; retry ở nền
 	defer client.Disconnect()
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	// Retention mẫu: giữ 30 đêm gần nhất (theo mốc UTC nửa đêm), quét mỗi giờ.
 	if st != nil {
 		go func() {
@@ -189,55 +234,7 @@ func main() {
 		sl = st
 	}
 
-	// Sleep sessions (TimescaleDB) — tính năng PHỤ, không phải đường sống của hệ.
-	// DB hỏng KHÔNG chặn khởi động: presence/AC/voice vẫn chạy, chỉ /api/sessions* trả 503.
-	// Goroutine rebuild dùng lại luật rules.go, quét 30 ngày gần nhất, chạy mỗi 60s.
-	var pg *sessions.PGStore
-	var sS api.SessionLister
-	if cfg.PostgresURL != "" {
-		if p, err := sessions.NewPGStore(ctx, cfg.PostgresURL); err != nil {
-			slog.Warn("không mở được Postgres, /api/sessions* tắt", "err", err)
-		} else {
-			pg = p
-			sS = pg
-			defer pg.Close()
-			slog.Info("sleep sessions", "pg", cfg.RedactedPostgresURL())
-			go func() {
-				rebuild := time.NewTicker(60 * time.Second)
-				defer rebuild.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-rebuild.C:
-						rbCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-						devices, err := pg.ActiveDeviceIDs(rbCtx, time.Now().UTC().Add(-30*24*time.Hour))
-						if err != nil {
-							slog.Warn("rebuild sessions: liệt kê thiết bị", "err", err)
-							cancel()
-							continue
-						}
-						now := time.Now().UTC()
-						opts := sessions.BuildOptions{
-							OpenSeconds:  30,
-							CloseSeconds: 1800,
-							MaxMinutes:   1440,
-						}
-						for _, d := range devices {
-							n, err := pg.RebuildDevice(rbCtx, d, time.Now().UTC().Add(-30*24*time.Hour), now, opts)
-							if err != nil {
-								slog.Warn("rebuild sessions", "device", d, "err", err)
-							} else if n > 0 {
-								slog.Info("rebuild sessions", "device", d, "windows", n)
-							}
-						}
-						cancel()
-					}
-				}
-			}()
-		}
-	}
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouterFull(machine, client, hub, ev, sl, sS)}
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: api.NewRouterFull(machine, client, hub, ev, sl, sS, snoreReader)}
 	go func() {
 		slog.Info("HTTP API", "addr", cfg.HTTPAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

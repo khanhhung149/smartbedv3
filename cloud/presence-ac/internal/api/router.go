@@ -2,7 +2,9 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -38,12 +40,20 @@ type SampleLister interface {
 	SamplesBetween(fromMs, toMs int64) ([]store.Sample, error)
 }
 
+// SnoreCounter cung cấp số lần ngáy đã ghi nhận trong 1 khoảng thời gian
+// (snore.Store thỏa mãn). Cho phép nil: /api/sessions/morning-report trả 503
+// thay vì chết nếu bảng ngáy chưa mở được.
+type SnoreCounter interface {
+	CountBetween(ctx context.Context, from, to time.Time) (int, error)
+}
+
 type API struct {
-	sp  StateProvider
-	pub Publisher
-	ev  EventLister
-	sl  SampleLister
-	sS  SessionLister
+	sp    StateProvider
+	pub   Publisher
+	ev    EventLister
+	sl    SampleLister
+	sS    SessionLister
+	snore SnoreCounter
 }
 
 func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.Handler {
@@ -53,13 +63,14 @@ func NewRouter(sp StateProvider, pub Publisher, hub *Hub, ev EventLister) http.H
 // NewRouterSamples giống NewRouter + thêm nguồn mẫu 10Hz (dashboard Phase 01).
 // sl=nil thì /api/samples trả 503 thay vì chết.
 func NewRouterSamples(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl SampleLister) http.Handler {
-	return NewRouterFull(sp, pub, hub, ev, sl, nil)
+	return NewRouterFull(sp, pub, hub, ev, sl, nil, nil)
 }
 
-// NewRouterFull là điểm đăng ký đầy đủ: samples + sleep sessions. sS=nil thì
-// các endpoint /api/sessions* trả 503 thay vì chết — radar/AC không phụ thuộc.
-func NewRouterFull(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl SampleLister, sS SessionLister) http.Handler {
-	a := &API{sp: sp, pub: pub, ev: ev, sl: sl, sS: sS}
+// NewRouterFull là điểm đăng ký đầy đủ: samples + sleep sessions + morning
+// report. sS=nil thì các endpoint /api/sessions* trả 503 thay vì chết —
+// radar/AC không phụ thuộc. snoreReader=nil thì morning-report trả 503.
+func NewRouterFull(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl SampleLister, sS SessionLister, snoreReader SnoreCounter) http.Handler {
+	a := &API{sp: sp, pub: pub, ev: ev, sl: sl, sS: sS, snore: snoreReader}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
@@ -93,6 +104,8 @@ func NewRouterFull(sp StateProvider, pub Publisher, hub *Hub, ev EventLister, sl
 		r.Get("/sessions", a.listSessions)
 		r.Get("/sessions/{id}", a.getSession)
 		r.Get("/sessions/{id}/timeline", a.getTimeline)
+		r.Get("/sessions/morning-report", a.getMorningReport)
+		r.Get("/realtime", a.getRealtime)
 		r.Get("/voice/stream", voiceHandler.ServeHTTP)
 		// Chỉ đăng ký khi VOICE_RECORD_DIR được set — công cụ thu dữ liệu huấn luyện, không nên
 		// tồn tại trong bản chạy thường (xem voice/record.go).
