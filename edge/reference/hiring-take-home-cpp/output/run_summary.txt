@@ -1,0 +1,38 @@
+Processed 6000 samples
+Wrote: output/processed_timeline.csv
+Wrote: output/state_segments.csv
+Wrote: output/events.log
+Wrote: output/state_timeline.svg, chest_disp.svg, resp_rate.svg
+
+Key events:
+    0.00s | STATE        | START -> LYING_STILL
+   15.10s | RESP_RATE    | RR=14.6 bpm, amp=1.82044
+   20.10s | RESP_RATE    | RR=14.1 bpm, amp=1.84012
+   25.10s | RESP_RATE    | RR=14.0 bpm, amp=1.84397
+   30.10s | RESP_RATE    | RR=14.1 bpm, amp=1.86222
+   35.10s | RESP_RATE    | RR=14.1 bpm, amp=1.85239
+   40.10s | RESP_RATE    | RR=14.3 bpm, amp=1.84151
+   45.10s | RESP_RATE    | RR=14.1 bpm, amp=1.83311
+   50.10s | RESP_RATE    | RR=14.0 bpm, amp=1.85093
+   55.10s | RESP_RATE    | RR=14.1 bpm, amp=1.83079
+   60.10s | RESP_RATE    | RR=14.3 bpm, amp=1.83067
+   65.20s | RESP_RATE    | RR=14.3 bpm, amp=1.84657
+   70.20s | RESP_RATE    | RR=14.1 bpm, amp=1.83888
+   75.20s | RESP_RATE    | RR=14.3 bpm, amp=1.83358
+   80.20s | RESP_RATE    | RR=14.1 bpm, amp=1.87440
+   85.20s | RESP_RATE    | RR=14.0 bpm, amp=1.87744
+   90.20s | RESP_RATE    | RR=14.0 bpm, amp=1.87335
+   95.20s | RESP_RATE    | RR=14.3 bpm, amp=1.88084
+  100.20s | RESP_RATE    | RR=14.1 bpm, amp=1.85864
+  105.20s | RESP_RATE    | RR=14.0 bpm, amp=1.84459
+  110.20s | RESP_RATE    | RR=14.1 bpm, amp=1.86253
+  115.20s | RESP_RATE    | RR=14.3 bpm, amp=1.86426
+  120.20s | RESP_RATE    | RR=14.3 bpm, amp=1.86199
+  125.20s | RESP_RATE    | RR=14.3 bpm, amp=1.88130
+  130.30s | RESP_RATE    | RR=14.1 bpm, amp=1.87966
+  135.30s | RESP_RATE    | RR=14.0 bpm, amp=1.87998
+  140.30s | RESP_RATE    | RR=14.0 bpm, amp=1.87209
+  145.30s | RESP_RATE    | RR=14.3 bpm, amp=1.87176
+  150.30s | RESP_RATE    | RR=14.3 bpm, amp=1.87104
+  155.30s | RESP_RATE    | RR=14.3 bpm, amp=1.86983
+... 64 more events in events.log

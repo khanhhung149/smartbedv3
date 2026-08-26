@@ -1,4 +1,4 @@
-    # Phase 02 — Thuật toán giấc ngủ + phát hiện ngưng thở
+        # Phase 02 — Thuật toán giấc ngủ + phát hiện ngưng thở
 
 - **Ưu tiên:** P0
 - **Trạng thái:** chưa bắt đầu
@@ -14,7 +14,12 @@ Giá trị lâm sàng cao nhất trong toàn bộ spec nằm ở đây: **phát 
 
 ## Vì sao làm ngay sau Phase 01
 
-Đã có sẵn ground-truth harness: bộ take-home tuyển dụng (`projects/mkt/plans/reports/hiring-smartbed-v3-260624-1555/`) có dataset giả lập 600s @10Hz với các sự kiện đã biết trước (apnea 300-325s, LEAVING 420-435s, dropout hr_bpm=0). Dùng lại nguyên bộ đó làm test suite. Không phải xây từ đầu.
+Đã có sẵn ground-truth harness VÀ thuật toán tham chiếu đã chạy pass: `edge/reference/hiring-take-home-cpp/` (copy nguyên vẹn ngày 2026-08-26 từ bài take-home tuyển dụng cũ) — dataset giả lập 600s@10Hz + code C++ (`src/smartbed_stream_processor.cpp`, 995 dòng) đã verify:
+- Apnea: bắt được 304.6s→325.2s (ground-truth 300-325s).
+- LEAVING vs EMPTY: phân biệt đúng tại 435.0s→437.6s (ground-truth 420-435s).
+- RR ổn định 13.6-14.6 bpm (yêu cầu 12-16 bpm).
+
+**Không cần viết thuật toán mới cho dataset giả lập — đã xong.** Nhưng thuật toán này KHÔNG cắm được vào phần cứng thật ngay: input chính là `chest_disp` (waveform dịch chuyển ngực liên tục, lọc Butterworth + đếm đỉnh) và `spo2` (bằng chứng phụ giảm báo động giả) — LD2410C không xuất waveform này qua firmware hiện tại, sleep-pad Legact V2 không có SpO2. Việc thật của phase này là quyết định port sang input thật nào (ứng viên duy nhất: `resp_rate`/`heart_rate` mà sleep-pad tính sẵn theo giây, không phải waveform thô — phải viết lại phần ước lượng biên độ, không tái dùng được đoạn lọc Butterworth).
 
 ## Chức năng
 
@@ -52,7 +57,7 @@ Fusion nhiều kênh, không dựa vào một cảm biến:
 
 ## Định nghĩa hoàn thành
 
-- [ ] Chạy đúng 100% trên dataset ground-truth của take-home (apnea 300-325s, LEAVING 420-435s, nhịp thở 12-16 brpm)
+- [x] Chạy đúng 100% trên dataset ground-truth của take-home (apnea 300-325s, LEAVING 420-435s, nhịp thở 12-16 brpm) — verify 2026-08-26, xem `edge/reference/hiring-take-home-cpp/output/`.
 - [ ] Trên 5 đêm thật đã gán nhãn: bắt được ít nhất 80% sự kiện apnea, dưới 1 báo động giả mỗi đêm
 - [ ] Xử lý dropout đàng hoàng, verify bằng cách cố tình chèn dropout
 - [ ] Báo cáo buổi sáng hiện trên dashboard

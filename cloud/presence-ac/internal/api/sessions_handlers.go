@@ -153,12 +153,18 @@ func (a *API) getMorningReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apneaEvents := report.ApneaEvents
+	if apneaEvents == nil {
+		apneaEvents = []sessions.ApneaEvent{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"on_bed_seconds":      report.OnBedSeconds,
 		"off_bed_transitions": report.OffBedTransitions,
 		"avg_heart_rate":      report.AvgHeartRate,
 		"avg_resp_rate":       report.AvgRespRate,
 		"snore_count":         snoreCount,
+		"apnea_events":        apneaEvents,
+		"apnea_count":         report.ApneaCount,
 		"disclaimer":          report.Disclaimer,
 	})
 }
