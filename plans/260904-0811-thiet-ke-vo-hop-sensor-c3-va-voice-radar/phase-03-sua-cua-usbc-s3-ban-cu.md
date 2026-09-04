@@ -1,14 +1,20 @@
 ---
 phase: 3
 title: "Sửa/verify cửa USB-C S3 trong vo-hop-modular.scad (bản cũ)"
-status: pending
+status: superseded
 priority: P1
 dependencies: []
 ---
 
 # Phase 3: Sửa cửa USB-C S3 trong bản cũ
 
-## Overview
+## ⚠️ SUPERSEDED (04/09, đảo ngược lần 2) — KHÔNG LÀM PHASE NÀY
+User quyết định trực tiếp quay lại `vo-hop-voice-radar.scad` làm bản chính thức (xem `plan.md`
+mục "Quyết định đảo ngược lần 2" + `phase-04-van-trang-tri-mic-huong-in-that.md`). `vo-hop-modular.scad`
+không còn là đường đi sản xuất — phase này giữ lại làm lịch sử, chỉ cân nhắc lại nếu sau này
+`vo-hop-voice-radar.scad` gặp vấn đề không sửa được (chưa xảy ra, chưa có lý do quay lại).
+
+## Overview (nội dung gốc — ĐÃ SUPERSEDED, giữ tham khảo)
 Đảo ngược quyết định Phase 2 (04/09) — quay lại dùng `vo-hop-modular.scad` làm vỏ chính cho voice-node+radar-node (đã có 2 board độc lập, mỗi board 1 nguồn riêng, đã in ướm phần lớn). Chỉ còn 1 việc thật: verify/sửa cửa USB-C của S3 trên tấm `face()` — số hiện tại (`s3_usb_pitch=12.5`, `s3_usb_open_w=24.5`) là ước tính, chưa đo tay, chưa in ướm (tự file ghi chú rõ).
 
 ## Requirements

@@ -1,14 +1,22 @@
 ---
 phase: 2
 title: "Vỏ B — voice-node + radar-node chung (2 khoang độc lập)"
-status: superseded
+status: completed
 priority: P2
 dependencies: []
 ---
 
 # Phase 2: Vỏ B — voice-node + radar-node chung
 
-## ⚠️ QUYẾT ĐỊNH ĐẢO NGƯỢC 04/09 — ĐỌC TRƯỚC KHI DÙNG PHASE NÀY
+## ⚠️ ĐẢO NGƯỢC LẦN 2 (04/09, cùng ngày) — `vo-hop-voice-radar.scad` LÀ BẢN CHÍNH THỨC TRỞ LẠI
+User quyết định trực tiếp: tiếp tục dùng file này (không quay lại `vo-hop-modular.scad` như cảnh
+báo bên dưới nữa). Việc còn lại chuyển sang `phase-04-van-trang-tri-mic-huong-in-that.md` (vân
+trang trí, chỉ dấu chiều mic, in ướm thật, in sản xuất). **Ghi chú quan trọng**: mục "Ghi chú bổ
+sung" bên dưới nói "Mic CHƯA được thêm vào thiết kế này" — **SAI**, đọc lại code (`module lid()`,
+dòng 300-322) xác nhận bệ đỡ mic (boss) + hốc (`mic_pocket_d`) + khe thoát dây **đã có sẵn**. Cái
+thật sự còn thiếu là **chỉ dấu chiều lắp** (gờ/vát định hướng) — xem phase-04.
+
+## ⚠️ CẢNH BÁO CŨ (04/09 buổi sáng, ĐÃ BỊ ĐẢO NGƯỢC LẦN 2 Ở TRÊN) — chỉ giữ làm lịch sử
 Toàn bộ overview/architecture dưới đây dựa trên 1 nhận định SAI: cho rằng `vo-hop-modular.scad`
 "dồn radar+mic+IR lên 1 board S2 duy nhất, đã lỗi thời". **Đọc lại code thật, đây là sai** —
 `vo-hop-modular.scad` **đã có S3-CAM và S2 Mini là 2 board tách biệt, mỗi board 1 cổng USB-C
@@ -69,10 +77,10 @@ Xem `plan.md` mục "Kiến trúc chung". Cấu trúc:
 - [x] Checker CGAL pass: `assembly`/`base`/`lid`/`test-s3`/`test-s2`/`test-radar` đều `Simple: yes`.
 - [x] `base() ∩ ghost_*()` cho cả 4 linh kiện (S3, IR, S2, radar) đều rỗng sau khi verify — 2 facet ban đầu xác nhận là chạm biên vô hại (board tựa đúng đỉnh trụ đỡ), không phải va chạm thật (co ghost 0.1mm → rỗng hoàn toàn).
 - [x] STL test-print xuất được cho cả 3 miếng ướm (test-s3, test-s2, test-radar), 2-manifold.
-- [ ] Cửa mic có chỉ dấu chiều lắp — **CHƯA LÀM**, mic chưa được thêm vào thiết kế này (xem Ghi chú bổ sung).
+- [ ] Cửa mic có chỉ dấu chiều lắp — **CHƯA LÀM** (mic đã có bệ đỡ+hốc, chỉ thiếu gờ/vát định hướng — xem Ghi chú bổ sung + phase-04).
 
 ## Ghi chú bổ sung (không có trong dự tính ban đầu)
-- **Mic CHƯA được thêm vào `vo-hop-voice-radar.scad`** — phiên làm việc 04/09 tập trung xử lý lỗi hình học nghiêm trọng hơn (xem dưới) và hết ngân sách thời gian trước khi kịp thêm cụm mic (hốc dưới nắp, giống cách `vo-hop-modular.scad` làm). Đây là việc còn thiếu thật, không phải quên ghi — cần làm ở lượt sau.
+- ~~**Mic CHƯA được thêm vào `vo-hop-voice-radar.scad`**~~ — **SAI, đã sửa (đảo ngược lần 2)**: đọc lại code xác nhận bệ đỡ (boss) + hốc (`mic_pocket_d`) + khe thoát dây cho mic **đã có sẵn** trong `module lid()` (dòng 300-322), không rõ được thêm lúc nào giữa lúc viết ghi chú này và commit thật, nhưng code hiện tại (commit `528efe8`/`882d603`) đã có đủ. Việc thật còn thiếu chỉ là **chỉ dấu chiều lắp** (gờ/vát định hướng) — xem phase-04.
 - **Phát hiện lỗi CGAL quan trọng, áp dụng cho MỌI file .scad trong thư mục dùng trụ tiếp tuyến**: cylinder tiếp tuyến TUYỆT ĐỐI (chạm khít 0mm dư) với mặt phẳng vách làm `union()` ra `Simple: no` (không phải manifold hợp lệ) dù render nhìn vẫn đúng. Tái hiện tối giản: `cube([3,20,10]) + cylinder(d=8)` tiếp tuyến tại mép XA của cube → lỗi; lệch dù chỉ 0.01mm → hết lỗi. Sửa bằng cách cho trụ LẤN thêm `post_ov=0.15mm` vào vách thay vì tiếp tuyến khít — xem comment đầy đủ trong file. **Đáng chú ý: `vo-hop-sleeppad-c3.scad` (Phase 1) KHÔNG dính lỗi này** vì trụ ở đó tiếp tuyến đúng tại mép NGOÀI cùng (x=0), trùng với góc thật của khối hộp — chỉ tiếp tuyến tại mép XA (giữa 2 mặt song song của 1 vách) mới lỗi. Nếu sau này sửa `vo-hop-sleeppad-c3.scad` mà thêm trụ kiểu tương tự, cần áp dụng cùng cách sửa.
 - **Bố cục IR+S3 đổi khác dự tính ban đầu**: bản đầu định "IR chồng vùng trước, lệch 1 bên" trong khoang hẹp — kiểm CGAL phát hiện đây là va chạm thật (IR đè lên vùng board S3 và cả 2 đè lên trụ góc). Sửa: **IR và S3 xếp CẠNH NHAU theo trục X** (không chồng), khoang A rộng ra `65.5mm` (từ dự tính 34.5mm ban đầu) để đủ chỗ. Khoang B cũng rộng ra `41.4mm` (từ 33.4mm) vì margin trụ góc ban đầu tính thiếu.
 

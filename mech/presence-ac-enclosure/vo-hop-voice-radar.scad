@@ -30,7 +30,11 @@ s3_usb_pitch = 12.5;               // tâm-tâm 2 cổng USB-C (TTL trái, OTG p
 s3_usb_w = 10;
 s3_usb_plug_clear = 2;             // dùng số đã nghiệm thu ở vo-hop-sleeppad.scad (2, không phải
                                     // 1 như bản modular gốc — 1 từng gây thiếu hở, xem file đó)
-s3_usb_open_w = s3_usb_pitch + s3_usb_w + 2*s3_usb_plug_clear;   // = 24.5
+s3_usb_open_w = s3_usb_pitch + s3_usb_w + 2*s3_usb_plug_clear;   // = 26.5 (comment cũ ghi 24.5,
+                                                                  // lệch từ hồi s3_usb_plug_clear
+                                                                  // còn =1 — sửa lại cho khớp số
+                                                                  // thật, phát hiện lúc thêm vân
+                                                                  // trang trí 04/09 phase-04)
 s3_usb_open_h = 8;
 s3_hole_pitch = 23;
 s3_hole_tol = 0.5;
@@ -48,6 +52,20 @@ mic_dia = 10;
 mic_liner = 1.5;
 mic_shelf = 1.5;
 mic_boss_h = 7.5;
+// Chỉ dấu chiều lắp mic — hazard "Mic Orientation" thật (docs/presence-ac/system-wiring.md mục
+// 5): board tròn Ø10, lắp NGƯỢC MẶT (mặt hàn chân phải hướng LÊN áp trần vỏ, khớp lỗ cổng âm; mặt
+// chip MEMS hướng XUỐNG khoang trong) khiến mic chỉ nghe âm trong khoang kín, không phải phòng
+// thật — lỗi không thấy được bằng mắt sau khi lắp kín. ĐÃ TRA public specs INMP441 (Digi-Key,
+// components101, easyelecmodule) — không có tài liệu nào mô tả layout biến thể board TRÒN Ø10 cụ
+// thể (khác breakout 6-chân chữ nhật phổ biến). Quan trọng hơn: hazard là lỗi LẬT MẶT (flip quanh
+// 1 trục nằm trong mặt phẳng board), KHÔNG PHẢI lỗi xoay quanh trục Z — nên 1 khoá cơ khí kiểu
+// D-cut/keyway (chặn xoay) KHÔNG giải quyết được hazard này dù đặt đúng vị trí, vì không ngăn
+// được việc lật úp/ngửa. Do đó chọn giải pháp khắc dấu NGOÀI + quy trình lắp ráp, không phải khoá
+// cơ khí — xem module mic_huong_khac() và lắp ráp: MẶT CÓ IN CHỮ/HÀN CHÂN đặt ÚP LÊN TRẦN vỏ
+// (khớp dấu khắc + lỗ cổng âm Ø4), mặt chip MEMS trần xuống khoang trong.
+mic_mark_off  = 5;      // khoảng cách tâm dấu khắc tới tâm mic, theo trục +X
+mic_mark_w    = 3;
+mic_mark_deep = 0.5;
 
 /* ================= S2 Mini (radar-node) — chép nguyên văn ================= */
 s2_w = 25.4;  s2_l = 34.3;
@@ -55,6 +73,11 @@ s2_pitch = 20;
 s2_pitch_tol = 0.5;
 s2_hole_to_usb = 30;
 s2_usb_gap = 1;
+s2_usb_door_off = 6;   // lệch từ tâm s2_x+s2_w/2 tới mép trái cửa USB-C-S2
+s2_usb_door_w = 12;    // bề rộng cửa USB-C-S2 — dùng chung cho cutout thật + probe + keepout vân
+                        // LƯU Ý: keepout vân (van_keepout_sau) giả định cửa đối xứng quanh tâm
+                        // (door_off == door_w/2, đúng với 6==12/2 hiện tại) — nếu sau này đổi
+                        // door_w mà không giữ đối xứng, phải sửa lại công thức van_keepout_sau.
 s2_stand = 6;
 
 /* ================= Radar LD2410C — chép nguyên văn ================= */
@@ -105,6 +128,17 @@ bam_dai = 10;
 bam_vao_deg = 30;
 bam_giu_deg = 45;
 bay_w = 15;  bay_d = 1.5;  bay_h = 3;
+
+/* ================= Vân trang trí (port từ vo-hop-sleeppad-c3.scad, cả 4 vách) =================
+   Vách hông (x=0/out_w): port verbatim van_hong() gốc — không cửa nào chắn, chạy dọc Y.
+   Vách trước/sau (y=0/out_l): module MỚI van_truoc_sau() — đây là 2 mặt DÀI NHẤT của vỏ này
+   (out_w≈115.9 > out_l≈87, ngược tỉ lệ bản C3), chạy dọc X, né lỗ IR thật + 2 cửa USB-C bằng
+   van_doan_ho(). Xem plan 260904-0811 phase-04 cho toàn bộ phép tính/verify. */
+van_on = true;
+van_sau = 0.8;                      // giữ nguyên bản C3
+van_lo  = 0.5;                      // giữ nguyên bản C3
+van_zs  = [9, 16, 23];              // 3 mức thay 2 của bản C3 — deck_h=30 cao hơn deck_h=22
+van_nho = van_sau + van_lo;
 
 $fn = 48;
 
@@ -162,6 +196,30 @@ radar_pocket_x0 = radar_cx - (radar_w + radar_fit)/2;
 // khoảng y = out_l-wall-s2_usb_gap): PHẢI ≥5mm, verify bằng số trong echo() khi render.
 radar_to_usbc_gap = (out_l - wall - s2_usb_gap) - (radar_cy + radar_l/2);
 echo(str("Khoảng cách radar tới USB-C (yêu cầu >=5mm): ", radar_to_usbc_gap, "mm"));
+
+/* --- Vân trang trí: toạ độ suy ra --- */
+van_y0 = post_d + 1;                // vách hông: né góc bo tròn, giống bản C3
+van_y1 = out_l - post_d - 1;
+van_margin_goc = post_d + 1;        // vách trước/sau: né góc bo tròn
+van_margin_cua = 2;                 // đệm thêm quanh mỗi cửa/lỗ, tránh khắc sượt mép
+
+ir_hole_cx = ir_x + ir_w/2;         // tâm lỗ IR thật (trùng "Lỗ LED IR xuyên vách trước" ở base())
+ir_hole_d  = 6.5;                   // đúng đường kính lỗ khoét thật — KHÔNG dùng ir_w (bề rộng cả
+                                     // module IR, 20mm) làm keepout: vân nằm trên MẶT NGOÀI vách,
+                                     // module nằm sâu bên trong không chiếm diện tích mặt ngoài;
+                                     // dùng ir_w sẽ nuốt gần hết nửa trái vách trước (verify thật
+                                     // lúc lập plan: chỉ còn 1 đoạn vân duy nhất, mất đối xứng).
+
+// Vùng né vách TRƯỚC (y=0): lỗ IR thật + cửa USB-C-S3.
+van_keepout_truoc = [
+    [ir_hole_cx - ir_hole_d/2 - van_margin_cua, ir_hole_cx + ir_hole_d/2 + van_margin_cua],
+    [box_a_cx - s3_usb_open_w/2 - van_margin_cua, box_a_cx + s3_usb_open_w/2 + van_margin_cua],
+];
+// Vùng né vách SAU (y=out_l): cửa USB-C-S2 — dùng chung s2_usb_door_off/w với cutout thật (base())
+// và probe("usbc-b"), không lặp lại số -6/12 riêng (tránh lệch nếu cửa đổi kích thước sau này).
+van_keepout_sau = [
+    [s2_x + s2_w/2 - s2_usb_door_off - van_margin_cua, s2_x + s2_w/2 + s2_usb_door_off + van_margin_cua],
+];
 
 /* ================= tiện ích ================= */
 // (post_ov định nghĩa sớm hơn ở phần Khung — xem giải thích đầy đủ ở đó. Dùng lại tại đây cho
@@ -222,6 +280,59 @@ module khac_bay() {
         cube([bay_w, bay_d + 1, bay_h + 1]);
 }
 
+// Vân trang trí vách hông (x=0/out_w) — port VERBATIM van_hong() gốc từ vo-hop-sleeppad-c3.scad,
+// không cửa nào chắn ở đây nên không cần logic né.
+module van_hong() {
+    for (z = van_zs)
+        for (m = [[0, 1], [out_w, -1]])
+            translate([m[0], van_y0, z])
+                rotate([-90, 0, 0])
+                    linear_extrude(van_y1 - van_y0)
+                        polygon([[-m[1]*van_lo, -van_nho],
+                                 [ m[1]*van_sau, 0      ],
+                                 [-m[1]*van_lo,  van_nho]]);
+}
+
+// Cắt [x0,x1] thành các đoạn HỞ (bỏ phần giao với keepout). Đúng cả khi keepouts chồng nhau/không
+// sort (đã hand-trace + review xác nhận) — chỉ 1 input suy biến thật sự phá hàm: keepout có
+// x0>=x1 (lỗi upstream), lúc đó assert() chặn lại thay vì âm thầm ra vân sai (OpenSCAD không có
+// exception, sai kiểu này sẽ không crash, chỉ lặng lẽ cắt sai/thiếu — assert() ép nó báo lỗi to).
+function van_doan_ho(x0, x1, keepouts, i=0) =
+    i >= len(keepouts) ? [[x0, x1]] :
+    assert(keepouts[i][0] < keepouts[i][1],
+           str("van_doan_ho: keepout suy biến (x0>=x1) tại i=", i, ": ", keepouts[i]))
+    (keepouts[i][1] <= x0 || keepouts[i][0] >= x1) ? van_doan_ho(x0, x1, keepouts, i+1) :
+    concat(
+        keepouts[i][0] > x0 ? van_doan_ho(x0, keepouts[i][0], keepouts, i+1) : [],
+        keepouts[i][1] < x1 ? van_doan_ho(keepouts[i][1], x1, keepouts, i+1) : []
+    );
+
+// Vân trang trí vách trước/sau (y=0/out_l) — mặt DÀI NHẤT của vỏ này (ngược tỉ lệ bản C3). Đổi
+// trục quay so với van_hong() (rotate([0,90,0]) thay vì rotate([-90,0,0])) vì cần chạy dọc X, cắt
+// vào theo Y thay vì chạy dọc Y cắt vào theo X. Né cửa bằng van_doan_ho().
+module van_truoc_sau() {
+    for (z = van_zs)
+        for (w = [[0, 1, van_keepout_truoc], [out_l, -1, van_keepout_sau]])
+            for (seg = van_doan_ho(van_margin_goc, out_w - van_margin_goc, w[2]))
+                if (seg[1] - seg[0] > 1)   // bỏ đoạn quá ngắn (mảnh vụn do phép trừ khoảng)
+                    translate([seg[0], w[0], z])
+                        rotate([0, 90, 0])
+                            linear_extrude(seg[1] - seg[0])
+                                polygon([[-van_nho, -w[1]*van_lo],
+                                         [0,          w[1]*van_sau],
+                                         [ van_nho, -w[1]*van_lo]]);
+}
+
+// Dấu khắc chiều lắp mic — tam giác nông khắc trên MẶT NGOÀI lid() (z=lid_t), lệch +X so với tâm
+// mic (offset đủ để không chồng lỗ cổng âm Ø4). Xem giải thích đầy đủ tại khai báo mic_mark_*.
+module mic_huong_khac() {
+    translate([mic_cx + mic_mark_off, mic_cy, lid_t - mic_mark_deep])
+        linear_extrude(mic_mark_deep + 0.1)
+            polygon([[mic_mark_w/2, -mic_mark_w/2],
+                     [mic_mark_w/2,  mic_mark_w/2],
+                     [-mic_mark_w/2, 0]]);   // mũi nhọn chỉ về phía tâm mic (-X)
+}
+
 module base() {
     difference() {
         union() {
@@ -268,17 +379,19 @@ module base() {
                         translate([sx, 0, 0]) cylinder(d = m25_pilot, h = 7);
         // Lỗ LED IR xuyên vách trước
         translate([ir_x + ir_w/2, -1, floor_t + ir_axis_h]) rotate([-90, 0, 0])
-            cylinder(d = 6.5, h = wall + 2);
+            cylinder(d = ir_hole_d, h = wall + 2);
 
         // CỬA USB-C khoang B (radar-node) — vách SAU
-        translate([s2_x + s2_w/2 - 6, out_l - wall - 1, floor_t + s2_stand - 1])
-            cube([12, wall + 2, 9]);
+        translate([s2_x + s2_w/2 - s2_usb_door_off, out_l - wall - 1, floor_t + s2_stand - 1])
+            cube([s2_usb_door_w, wall + 2, 9]);
         // Lỗ mồi vít M2 (rãnh dài theo x)
         translate([0, 0, floor_t + s2_stand - 5])
             for (dx = [-s2_pitch/2, s2_pitch/2])
                 translate([s2_x + s2_w/2 + dx, s2_hole_y, 0])
                     hull() for (sx = [-s2_pitch_tol, s2_pitch_tol])
                         translate([sx, 0, 0]) cylinder(d = 1.7, h = 7);
+
+        if (van_on) { van_hong(); van_truoc_sau(); }
 
         if (!vit_on) ranh_bam();
 
@@ -320,6 +433,7 @@ module lid() {
         translate([mic_cx - mic_pocket_d/2 - 4, mic_cy - 2, -mic_shelf - 2.5])
             cube([6, 4, 2.5]);
         translate([mic_cx, mic_cy, -mic_boss_h-2]) cylinder(d = 4, h = mic_boss_h + lid_t + 4);
+        mic_huong_khac();
 
         // Bo góc
         bo_goc_dung(-lip_h_ben() - 1, lid_t + 1);
@@ -359,8 +473,8 @@ module probe(which) {
         translate([box_a_cx - s3_usb_open_w/2 + 1, -1, s3_usb_z - s3_usb_open_h/2 + 1])
             cube([s3_usb_open_w - 2, wall + 2, s3_usb_open_h - 2]);
     else if (which == "usbc-b")
-        translate([s2_x + s2_w/2 - 6 + 1, out_l - wall - 1, floor_t + s2_stand - 1 + 1])
-            cube([12 - 2, wall + 2, 9 - 2]);
+        translate([s2_x + s2_w/2 - s2_usb_door_off + 1, out_l - wall - 1, floor_t + s2_stand - 1 + 1])
+            cube([s2_usb_door_w - 2, wall + 2, 9 - 2]);
     else if (which == "ir-hole")
         translate([ir_x + ir_w/2, -1, floor_t + ir_axis_h]) rotate([-90, 0, 0])
             cylinder(d = 4, h = wall + 2);
@@ -400,6 +514,9 @@ module test_radar() {
             cube([40, 36, lid_t + lid_lip_h + 4]);
     }
 }
+
+echo(str("Vân vách trước - đoạn hở: ", van_doan_ho(van_margin_goc, out_w - van_margin_goc, van_keepout_truoc)));
+echo(str("Vân vách sau - đoạn hở: ", van_doan_ho(van_margin_goc, out_w - van_margin_goc, van_keepout_sau)));
 
 if      (part == "base")      base();
 else if (part == "lid")       lid();
