@@ -1,14 +1,32 @@
 ---
 phase: 2
 title: "Vỏ B — voice-node + radar-node chung (2 khoang độc lập)"
-status: in-progress
+status: superseded
 priority: P2
 dependencies: []
 ---
 
 # Phase 2: Vỏ B — voice-node + radar-node chung
 
-## Overview
+## ⚠️ QUYẾT ĐỊNH ĐẢO NGƯỢC 04/09 — ĐỌC TRƯỚC KHI DÙNG PHASE NÀY
+Toàn bộ overview/architecture dưới đây dựa trên 1 nhận định SAI: cho rằng `vo-hop-modular.scad`
+"dồn radar+mic+IR lên 1 board S2 duy nhất, đã lỗi thời". **Đọc lại code thật, đây là sai** —
+`vo-hop-modular.scad` **đã có S3-CAM và S2 Mini là 2 board tách biệt, mỗi board 1 cổng USB-C
+riêng** từ 31/07 (S3 qua tấm face — 2 cổng TTL/OTG, S2 qua vách sau — 1 cổng). Nguyên tắc
+"2 board độc lập, không share nguồn" đã có sẵn trong bản cũ, không cần viết lại.
+
+**Vấn đề thật duy nhất trong bản cũ** (tự bản đó ghi chú): cửa USB-C của S3 trên tấm `face()`
+(`s3_usb_pitch=12.5`, `s3_usb_open_w=24.5`) là **số ƯỚC, CHƯA ĐO BẰNG THƯỚC, CHƯA IN ƯỚM**.
+
+**Quyết định mới (04/09)**: quay lại dùng `vo-hop-modular.scad`, chỉ thêm miếng ướm test riêng
+cho cửa USB-C của `face()` để verify/sửa số đo đó. **KHÔNG dùng `vo-hop-voice-radar.scad`** nữa
+làm bản chính thức — file đó vẫn giữ lại làm tham khảo (đã build+verify CGAL sạch, nhưng chưa in
+ướm thật lần nào, khác `vo-hop-modular.scad` đã in ướm phần lớn). Xem chi tiết ở
+`phase-03-sua-cua-usbc-s3-ban-cu.md`.
+
+---
+
+## Overview (nội dung gốc — ĐÃ LỖI THỜI, giữ lại tham khảo)
 Viết `mech/presence-ac-enclosure/vo-hop-voice-radar.scad` thay `vo-hop-modular.scad` (thiết kế cũ gộp 1 board S2, đã lỗi thời) — 2 khoang điện độc lập (voice-node S3-CAM, radar-node S2+LD2410C) trong 1 vỏ chung, 1 nắp snap-fit.
 
 ## Requirements

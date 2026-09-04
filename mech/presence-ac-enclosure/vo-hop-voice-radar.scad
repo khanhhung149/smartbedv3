@@ -383,10 +383,22 @@ module test_s3() {
 module test_s2() {
     intersection() { base(); translate([0, out_l - 40, 0]) cube([out_w, 40, 26]); }
 }
-module test_radar() {
-    // Mặt cắt x LÙI VÀO 1mm so với comp_b_x0 (mép trong vách ngăn) — cắt đúng mép sẵn có sinh
-    // mặt dày 0, mất 2-manifold (bài học đã ghi trong vo-hop-modular.scad, gặp lại ở đây 04/09).
+// ⚠️ SỬA 04/09: bản đầu "test_radar()" cắt từ base() ở y:0-40 — nhưng hốc radar (pocket + cửa
+// sổ màng + rãnh dây) nằm hoàn toàn trong module lid() (radar treo dưới nắp), KHÔNG nằm trong
+// base(). Cắt từ base() không hề chứa chi tiết radar nào — chỉ là 1 đoạn vách trống. Đổi tên
+// module cũ, thêm module MỚI cắt đúng vùng radar trong lid().
+module test_radar_base_wall() {   // đoạn vách/trụ đế quanh khoang radar — KHÔNG có hốc radar
     intersection() { base(); translate([comp_b_x0 - 1, 0, 0]) cube([comp_b_inner_w + part_wall_t + 1, 40, 32]); }
+}
+// Miếng ướm THẬT cho radar: cắt từ lid(), quanh radar_cx/radar_cy — chứa hốc + cửa sổ màng +
+// rãnh thoát dây. Toạ độ lid() tính từ gốc riêng của nó (mặt trên nắp ở z=0, hốc thõng xuống
+// z âm) nên cube phải trùm cả z âm.
+module test_radar() {
+    intersection() {
+        lid();
+        translate([radar_cx - 20, radar_cy - 18, -lid_lip_h - 2])
+            cube([40, 36, lid_t + lid_lip_h + 4]);
+    }
 }
 
 if      (part == "base")      base();
@@ -394,5 +406,6 @@ else if (part == "lid")       lid();
 else if (part == "test-s3")   test_s3();
 else if (part == "test-s2")   test_s2();
 else if (part == "test-radar") test_radar();
+else if (part == "test-radar-base-wall") test_radar_base_wall();
 else if (part == "layout")    { base(); ghosts(); }
 else                          assembly();

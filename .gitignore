@@ -139,3 +139,5 @@ app/**/test/failures/
 mech/presence-ac-enclosure/vo-so-*.stl
 mech/presence-ac-enclosure/vo-so-*.png
 mech/presence-ac-enclosure/vo-hop-LAP-RAP-xem-thoi.stl
+mech/presence-ac-enclosure/stl/
+firmware/**/dev-config.h

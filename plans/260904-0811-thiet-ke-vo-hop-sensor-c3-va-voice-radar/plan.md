@@ -12,12 +12,12 @@ blocks: []
 Xem đầy đủ: `plans/reports/brainstorm-260902-1552-thiet-ke-lai-vo-hop-sleeppad-c3-mini-report.md` (đã cập nhật 04/09, gồm cả Vỏ A và Vỏ B).
 
 - **Vỏ A**: `vo-hop-sleeppad.scad` (S3-CAM) → viết mới `vo-hop-sleeppad-c3.scad` (C3 Super Mini) — firmware đã đổi sang C3 từ 24/08, cơ khí chưa theo kịp.
-- **Vỏ B**: `vo-hop-modular.scad` (1 board S2 gộp radar+mic+IR, đã lỗi thời) → viết mới `vo-hop-voice-radar.scad` (2 board độc lập: voice-node S3-CAM + radar-node S2 Mini, 2 khoang điện riêng trong 1 vỏ chung).
+- **Vỏ B**: **ĐẢO NGƯỢC quyết định 04/09** — `vo-hop-modular.scad` (bản cũ) **ĐÃ CÓ** 2 board độc lập S3-CAM+S2 Mini, mỗi board 1 nguồn USB-C riêng (nhận định ban đầu "1 board S2 gộp hết, đã lỗi thời" là SAI, xem `phase-02`). Chỉ cần sửa/verify cửa USB-C của S3 trên `face()` (xem `phase-03`). File `vo-hop-voice-radar.scad` viết thêm vẫn giữ làm tham khảo, không dùng chính thức.
 
 ## Mục tiêu (Definition of Done)
-- [ ] `vo-hop-sleeppad-c3.scad` render được (`part="assembly"`), qua hết checker AABB + CGAL volume (giống mức độ nghiêm ngặt của bản S3).
-- [ ] `vo-hop-voice-radar.scad` render được, 2 khoang điện tách biệt (không khối nào bắc cầu giữa 2 khoang), qua checker.
-- [ ] Cả 2 file đều xuất STL test-print (miếng ướm từng phần) trước khi in toàn bộ, giống quy trình `test_usba()`/`test_s3()` của bản cũ.
+- [x] `vo-hop-sleeppad-c3.scad` render được (`part="assembly"`), qua hết checker AABB + CGAL volume.
+- [x] ~~`vo-hop-voice-radar.scad` render được...~~ — LÀM RỒI nhưng KHÔNG dùng chính thức (xem phase-02 đảo ngược 04/09).
+- [ ] Vỏ B: `face()` của `vo-hop-modular.scad` in ướm thật, cửa USB-C S3 verify vừa (xem phase-03).
 - [ ] Không sửa đè `vo-hop-sleeppad.scad`/`vo-hop-modular.scad` — giữ nguyên làm tài liệu lịch sử.
 
 ## Ngoài phạm vi
@@ -29,8 +29,9 @@ Xem đầy đủ: `plans/reports/brainstorm-260902-1552-thiet-ke-lai-vo-hop-slee
 Cả 2 file dùng lại đúng khung tham số + module (`corner_centers`, `bo_goc_dung`, `van_hong`, `go_bam`/`ranh_bam`, `khac_bay`) từ `vo-hop-sleeppad.scad` — chỉ thay khối linh kiện chính (`s3_*` → `c3_*` cho Vỏ A; thêm vách ngăn 2 khoang cho Vỏ B).
 
 ## Phases
-1. `phase-01-vo-a-sleeppad-c3.md` — đo thật C3 Super Mini, viết SCAD, kiểm.
-2. `phase-02-vo-b-voice-radar-chung.md` — viết SCAD (tái dùng số đo S3-CAM/radar cũ), kiểm.
+1. `phase-01-vo-a-sleeppad-c3.md` — đo thật C3 Super Mini, viết SCAD, kiểm. **completed.**
+2. `phase-02-vo-b-voice-radar-chung.md` — viết SCAD mới cho Vỏ B. **superseded 04/09** — nhận định ban đầu sai, xem phase-03.
+3. `phase-03-sua-cua-usbc-s3-ban-cu.md` — quay lại `vo-hop-modular.scad`, verify/sửa cửa USB-C S3. **việc thật còn lại cho Vỏ B.**
 
 ## Rủi ro
 - Số đo C3 Super Mini web (22.5×18mm) chưa xác nhận thật — Phase 1 bắt đầu bằng đo tay, không parametrize trước.
