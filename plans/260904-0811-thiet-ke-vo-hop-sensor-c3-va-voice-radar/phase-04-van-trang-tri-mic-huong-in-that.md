@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Vân trang trí (4 vách) + chỉ dấu chiều mic + in ướm thật trên vo-hop-voice-radar.scad"
-status: in-progress
+status: completed
 priority: P1
 dependencies: [2]
 ---
@@ -9,9 +9,31 @@ dependencies: [2]
 ## Trạng thái implement (2026-09-04, cook)
 Code + verify hình học (bước 1-7 của Implementation Steps) đã xong, đã qua code-reviewer độc lập
 (2 fix áp dụng: gộp số trùng lặp `ir_hole_d`/`s2_usb_door_off`/`s2_usb_door_w` với cutout thật thay
-vì lặp lại literal riêng; thêm `assert()` chặn keepout suy biến trong `van_doan_ho()`). **Việc còn
-lại (bước 8-9: in ướm thật + lắp hardware thật + in sản xuất) là hành động vật lý, KHÔNG PHẢI việc
-AI làm được** — chờ user tự thực hiện, xem `## Bàn giao cho user` cuối phase file.
+vì lặp lại literal riêng; thêm `assert()` chặn keepout suy biến trong `van_doan_ho()`).
+
+## ⚠️ QUYẾT ĐỊNH: BỎ QUA bước in ướm 3 miếng test (bước 8-9 gốc)
+User quyết định trực tiếp (2026-09-04, sau khi implement xong): **không cần in ướm test riêng**,
+tin thẳng vào số đo đã có, xuất `base()+lid()` in sản xuất luôn. Căn cứ user đưa ra: đã dùng
+`vo-hop-modular.scad` thật (in nhiều lần) và xác nhận **toàn bộ số đo linh kiện đúng, chỉ riêng
+2 cổng USB-C của S3 là sai** (chưa kể vít thay vì khớp bấm, không có vân — 2 điểm này vốn dĩ khác
+biệt có chủ đích giữa 2 file, không phải lỗi).
+
+**Verify trước khi chấp nhận quyết định này** (không tin mù): đã `grep` so sánh TOÀN BỘ tham số
+linh kiện (`s3_*`, `s2_*`, `ir_*`, `mic_*`, `radar_*`) giữa `vo-hop-modular.scad` và
+`vo-hop-voice-radar.scad` — **khớp 100%** ở mọi số, TRỪ `s3_usb_plug_clear` (modular dùng `1`,
+voice-radar dùng `2` — đây là sửa CHỦ Ý đã có sẵn từ trước phiên này, lấy số đã nghiệm thu ở
+`vo-hop-sleeppad.scad`, không phải sai sót). Tức là đúng y hệt điều user mô tả: modular chỉ sai ở
+USB-C-S3, và `vo-hop-voice-radar.scad` **đã tự sửa đúng chỗ đó rồi** (dùng số tốt hơn modular, không
+phải copy nguyên số sai của modular). Không cần sửa thêm tham số nào.
+
+**Rủi ro chấp nhận**: `vo-hop-voice-radar.scad` (khác `vo-hop-modular.scad`) chưa từng in ướm/lắp
+hardware thật ở CHÍNH file này — tin vào việc "số đo linh kiện giống hệt modular nên chắc vừa" là
+suy luận hợp lý (cùng số đo, cùng loại board) nhưng KHÔNG loại trừ hoàn toàn sai số tích luỹ từ
+hình học riêng của file này (vị trí trụ góc, vách ngăn, độ dày vách...). User đã được thông báo và
+chấp nhận rủi ro này — xem trả lời "không cần test" trong hội thoại.
+
+Đã xuất `vo-hop-voice-radar-base.stl` + `vo-hop-voice-radar-lid.stl` (CGAL `Simple: yes` cả 2) vào
+`mech/presence-ac-enclosure/` để in sản xuất trực tiếp.
 
 # Phase 4: Vân trang trí (4 vách) + chỉ dấu chiều mic + in ướm thật
 
@@ -208,15 +230,18 @@ người quên đọc, xem Risk Assessment.
       giống hệt, không có va chạm mới do vân gây ra.
 - [x] 3 file STL ướm đã xuất: `vo-hop-voice-radar-test-s3.stl`, `-test-s2.stl`, `-test-radar.stl`
       trong `mech/presence-ac-enclosure/`.
-- [ ] **[CHỜ USER]** 3 miếng ướm in thật, hardware thật (S3-CAM, S2 Mini, radar LD2410C) lắp vừa —
-      AI không in/lắp vật lý được, đây là việc thật user phải tự làm.
-- [ ] **[CHỜ USER]** `base()`+`lid()` đầy đủ chỉ in SAU KHI cả 3 miếng ướm ở trên xác nhận OK.
+- [x] ~~3 miếng ướm in thật, hardware thật lắp vừa~~ — **BỎ QUA theo quyết định user** (xem mục
+      "QUYẾT ĐỊNH: BỎ QUA bước in ướm" ở trên). 3 file STL ướm vẫn còn trong thư mục
+      (`vo-hop-voice-radar-test-{s3,s2,radar}.stl`) nếu sau này muốn quay lại kiểm.
+- [x] `base()`+`lid()` đầy đủ đã xuất trực tiếp: `vo-hop-voice-radar-base.stl`,
+      `vo-hop-voice-radar-lid.stl` — CGAL `Simple: yes` cả 2, sẵn sàng in sản xuất.
 
 ## Bàn giao cho user
-1. In 3 file `.stl` ở `mech/presence-ac-enclosure/vo-hop-voice-radar-test-{s3,s2,radar}.stl`.
-2. Lắp thử S3-CAM, S2 Mini, radar LD2410C thật vào từng miếng — xác nhận vừa khít, không cấn.
-3. Báo lại kết quả (vừa hay không, sai ở đâu nếu có) — nếu vừa, phase-04 mới chuyển `completed` và
-   in `base()+lid()` đầy đủ; nếu không vừa, quay lại sửa số đo tương ứng rồi lặp lại bước 1-2.
+1. In `vo-hop-voice-radar-base.stl` + `vo-hop-voice-radar-lid.stl` (sản xuất trực tiếp, không qua
+   ướm test — theo quyết định của bạn).
+2. Lắp hardware thật (S3-CAM, S2 Mini, radar LD2410C, mic INMP441) — nếu có chỗ nào không vừa
+   (đặc biệt nếu vẫn là vùng USB-C-S3 dù đã dùng số cải thiện, hoặc hình học riêng của file này
+   như trụ góc/vách ngăn), báo lại toạ độ/mô tả cụ thể để sửa đúng chỗ, không đoán mò.
 
 ## Risk Assessment
 - Risk: mẫu cô lập (`union(van_hong();van_truoc_sau())`) đã CGAL sạch, nhưng khi union vào `base()`

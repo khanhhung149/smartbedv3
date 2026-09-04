@@ -18,8 +18,8 @@ Xem đầy đủ: `plans/reports/brainstorm-260902-1552-thiet-ke-lai-vo-hop-slee
 ## Mục tiêu (Definition of Done)
 - [x] `vo-hop-sleeppad-c3.scad` render được (`part="assembly"`), qua hết checker AABB + CGAL volume.
 - [x] `vo-hop-voice-radar.scad` render được (`part="assembly"`), qua CGAL — **VÀ LÀ BẢN CHÍNH THỨC** (đảo ngược lần 2, xem trên).
-- [x] `vo-hop-voice-radar.scad`: code vân trang trí (4 vách) + chỉ dấu chiều mic — xong, qua CGAL + code-review, đã xuất 3 STL ướm.
-- [ ] **[CHỜ USER]** In ướm thật 3 miếng (test-s3/test-s2/test-radar), lắp hardware thật, sau đó in `base()+lid()` đầy đủ (xem `phase-04` mục "Bàn giao cho user").
+- [x] `vo-hop-voice-radar.scad`: code vân trang trí (4 vách) + chỉ dấu chiều mic — xong, qua CGAL + code-review.
+- [x] `base()+lid()` sản xuất đã xuất (`vo-hop-voice-radar-base.stl`, `-lid.stl`) — user quyết định bỏ qua bước in ướm test, tin vào số đo đã verify khớp `vo-hop-modular.scad` (xem `phase-04`). Chờ user in thật + báo kết quả lắp ráp.
 - [ ] ~~Vỏ B: `face()` của `vo-hop-modular.scad`...~~ — DỪNG, xem đảo ngược lần 2. `vo-hop-modular.scad` giữ nguyên làm tài liệu lịch sử.
 - [ ] Không sửa đè `vo-hop-sleeppad.scad`/`vo-hop-modular.scad` — giữ nguyên làm tài liệu lịch sử.
 
@@ -35,7 +35,7 @@ Cả 2 file dùng lại đúng khung tham số + module (`corner_centers`, `bo_g
 1. `phase-01-vo-a-sleeppad-c3.md` — đo thật C3 Super Mini, viết SCAD, kiểm. **completed.**
 2. `phase-02-vo-b-voice-radar-chung.md` — viết SCAD mới cho Vỏ B (`vo-hop-voice-radar.scad`). **completed** — cơ khí 2 khoang + mic đã có sẵn trong code (nhận định "mic thiếu" trong ghi chú gốc là sai, xem sửa ở trên). Được **phục hồi làm bản chính thức** bởi đảo ngược lần 2.
 3. `phase-03-sua-cua-usbc-s3-ban-cu.md` — quay lại `vo-hop-modular.scad`, verify/sửa cửa USB-C S3. **superseded 04/09 (đảo ngược lần 2)** — không dùng `vo-hop-modular.scad` làm bản chính thức nữa, xem phase-04.
-4. `phase-04-van-trang-tri-mic-huong-in-that.md` — vân trang trí **cả 4 vách** (trước/sau + hông) + dấu khắc chiều mic trên `vo-hop-voice-radar.scad`. **in-progress**: code+CGAL+code-review xong; chờ user in ướm thật 3 miếng + lắp hardware trước khi in `base()+lid()` đầy đủ.
+4. `phase-04-van-trang-tri-mic-huong-in-that.md` — vân trang trí **cả 4 vách** (trước/sau + hông) + dấu khắc chiều mic trên `vo-hop-voice-radar.scad`. **completed**: code+CGAL+code-review xong; user quyết định bỏ qua ướm test (số đo linh kiện đã verify khớp 100% `vo-hop-modular.scad` trừ USB-C-S3 đã cải thiện sẵn) — `base()+lid()` sản xuất đã xuất, chờ user in thật.
 
 ## Rủi ro
 - Số đo C3 Super Mini web (22.5×18mm) chưa xác nhận thật — Phase 1 bắt đầu bằng đo tay, không parametrize trước.
@@ -92,3 +92,8 @@ Cả 2 file dùng lại đúng khung tham số + module (`corner_centers`, `bo_g
 - Re-verify sau fix: toàn bộ CGAL vẫn `Simple: yes`, echo vẫn đúng, đã xuất lại 3 STL ướm (byte-identical với trước fix — fix chỉ đổi tên biến, không đổi số).
 - Đã xuất 3 STL ướm vào `mech/presence-ac-enclosure/`: `vo-hop-voice-radar-test-{s3,s2,radar}.stl`.
 - **Việc còn lại KHÔNG PHẢI AI làm được**: in ướm thật 3 miếng + lắp hardware thật (S3-CAM, S2 Mini, radar LD2410C) — chờ user, xem `phase-04` mục "Bàn giao cho user". `phase-04` giữ `status: in-progress`, không đánh `completed`.
+
+### Quyết định bỏ qua ướm test (2026-09-04, sau cook)
+User quyết định trực tiếp: không cần in ướm 3 miếng test, xuất thẳng `base()+lid()` sản xuất — căn cứ đã dùng `vo-hop-modular.scad` thật nhiều lần và xác nhận toàn bộ số đo linh kiện đúng, chỉ riêng cổng USB-C-S3 là sai (không tính vít/vân — 2 điểm khác biệt có chủ đích, không phải lỗi).
+**Verify trước khi chấp nhận**: `grep` so sánh toàn bộ tham số `s3_*`/`s2_*`/`ir_*`/`mic_*`/`radar_*` giữa `vo-hop-modular.scad` và `vo-hop-voice-radar.scad` — khớp 100%, TRỪ `s3_usb_plug_clear` (modular=1, voice-radar=2 — sửa chủ ý có sẵn từ trước, lấy số đã nghiệm thu ở `vo-hop-sleeppad.scad`, không phải sai sót cần sửa thêm). Không có tham số nào cần đổi.
+Đã xuất `vo-hop-voice-radar-base.stl` + `vo-hop-voice-radar-lid.stl` (CGAL `Simple: yes` cả 2). `phase-04` chuyển `status: completed`. Rủi ro còn lại (chưa in ướm CHÍNH file này, dù số đo linh kiện giống modular) đã thông báo cho user, user chấp nhận.
