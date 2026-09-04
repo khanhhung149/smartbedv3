@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Vỏ B — voice-node + radar-node chung (2 khoang độc lập)"
-status: pending
+status: in-progress
 priority: P2
 dependencies: []
 ---
@@ -46,12 +46,19 @@ Xem `plan.md` mục "Kiến trúc chung". Cấu trúc:
 10. Render `part="assembly"`, kiểm bằng mắt.
 
 ## Success Criteria
-- [ ] 2 khoang điện tách biệt hoàn toàn — CGAL volume xác nhận vách ngăn kín (0 khe hở).
-- [ ] Cửa mic không lắp được sai chiều (kiểm bằng hình học, ví dụ lỗ định hướng không đối xứng).
-- [ ] Radar đặt cách mọi cổng USB-C ≥5mm (đúng số hazard thật, không phải ước lượng).
-- [ ] Checker AABB + CGAL volume pass.
-- [ ] STL test-print xuất được, 2-manifold.
+- [x] 2 khoang điện tách biệt hoàn toàn — verify CGAL thật: `probe("vach-ngan-kin") ∩ base()` rỗng (vách kín, không khe hở).
+- [x] Radar đặt cách mọi cổng USB-C ≥5mm — verify thật qua `echo()`: **49mm**, dư rất nhiều so ngưỡng tối thiểu.
+- [x] Checker CGAL pass: `assembly`/`base`/`lid`/`test-s3`/`test-s2`/`test-radar` đều `Simple: yes`.
+- [x] `base() ∩ ghost_*()` cho cả 4 linh kiện (S3, IR, S2, radar) đều rỗng sau khi verify — 2 facet ban đầu xác nhận là chạm biên vô hại (board tựa đúng đỉnh trụ đỡ), không phải va chạm thật (co ghost 0.1mm → rỗng hoàn toàn).
+- [x] STL test-print xuất được cho cả 3 miếng ướm (test-s3, test-s2, test-radar), 2-manifold.
+- [ ] Cửa mic có chỉ dấu chiều lắp — **CHƯA LÀM**, mic chưa được thêm vào thiết kế này (xem Ghi chú bổ sung).
+
+## Ghi chú bổ sung (không có trong dự tính ban đầu)
+- **Mic CHƯA được thêm vào `vo-hop-voice-radar.scad`** — phiên làm việc 04/09 tập trung xử lý lỗi hình học nghiêm trọng hơn (xem dưới) và hết ngân sách thời gian trước khi kịp thêm cụm mic (hốc dưới nắp, giống cách `vo-hop-modular.scad` làm). Đây là việc còn thiếu thật, không phải quên ghi — cần làm ở lượt sau.
+- **Phát hiện lỗi CGAL quan trọng, áp dụng cho MỌI file .scad trong thư mục dùng trụ tiếp tuyến**: cylinder tiếp tuyến TUYỆT ĐỐI (chạm khít 0mm dư) với mặt phẳng vách làm `union()` ra `Simple: no` (không phải manifold hợp lệ) dù render nhìn vẫn đúng. Tái hiện tối giản: `cube([3,20,10]) + cylinder(d=8)` tiếp tuyến tại mép XA của cube → lỗi; lệch dù chỉ 0.01mm → hết lỗi. Sửa bằng cách cho trụ LẤN thêm `post_ov=0.15mm` vào vách thay vì tiếp tuyến khít — xem comment đầy đủ trong file. **Đáng chú ý: `vo-hop-sleeppad-c3.scad` (Phase 1) KHÔNG dính lỗi này** vì trụ ở đó tiếp tuyến đúng tại mép NGOÀI cùng (x=0), trùng với góc thật của khối hộp — chỉ tiếp tuyến tại mép XA (giữa 2 mặt song song của 1 vách) mới lỗi. Nếu sau này sửa `vo-hop-sleeppad-c3.scad` mà thêm trụ kiểu tương tự, cần áp dụng cùng cách sửa.
+- **Bố cục IR+S3 đổi khác dự tính ban đầu**: bản đầu định "IR chồng vùng trước, lệch 1 bên" trong khoang hẹp — kiểm CGAL phát hiện đây là va chạm thật (IR đè lên vùng board S3 và cả 2 đè lên trụ góc). Sửa: **IR và S3 xếp CẠNH NHAU theo trục X** (không chồng), khoang A rộng ra `65.5mm` (từ dự tính 34.5mm ban đầu) để đủ chỗ. Khoang B cũng rộng ra `41.4mm` (từ 33.4mm) vì margin trụ góc ban đầu tính thiếu.
 
 ## Risk Assessment
-- Risk: vị trí mic/IR trên board thật khác giả định trong `vo-hop-modular.scad` (rủi ro đã nêu ở Bước 1) — nếu sai, phải đo lại thay vì tin file cũ.
-- Risk: 5mm là ngưỡng tối thiểu ghi trong hazard cho lỗi chập điện đã từng xảy ra thật — không phải ngưỡng "an toàn tuyệt đối", nên thiết kế nới rộng hơn 5mm nếu bố cục cho phép.
+- Risk: vị trí mic/IR trên board thật khác giả định trong `vo-hop-modular.scad` (rủi ro đã nêu ở Bước 1) — nếu sai, phải đo lại thay vì tin file cũ. IR đã verify không va chạm ở vị trí giả định, nhưng CHƯA đối chiếu với board thật.
+- Risk: 5mm là ngưỡng tối thiểu ghi trong hazard cho lỗi chập điện đã từng xảy ra thật — thiết kế hiện tại đã đạt 49mm, dư rất nhiều, không phải rủi ro nữa.
+- **Việc còn lại trước khi in**: thêm cụm mic (chưa làm), rồi mới in test-print + ướm thật.

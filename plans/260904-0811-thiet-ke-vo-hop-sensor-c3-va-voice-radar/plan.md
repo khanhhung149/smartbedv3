@@ -1,5 +1,5 @@
 ---
-status: pending
+status: in-progress
 priority: P3
 scope: project
 blockedBy: []
