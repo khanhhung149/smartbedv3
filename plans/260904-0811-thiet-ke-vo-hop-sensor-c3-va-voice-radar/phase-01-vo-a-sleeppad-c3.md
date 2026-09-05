@@ -46,7 +46,8 @@ Xem `plan.md` mục "Kiến trúc chung". Cụ thể thay đổi so với `vo-ho
 - [x] Render `openscad` sạch (`Simple: yes`) cho cả `assembly`/`base`/`lid`/`test-c3`/`test-usba`.
 - [x] CGAL kiểm va chạm thật: phát hiện + sửa 1 lỗi thật (trụ góc đụng mép board do `inner_w` hụt 0.5mm) — không phải suy đoán, bắt bằng `base() ∩ ghosts()` cho facet 20→4 sau khi sửa.
 - [x] Cửa USB-C và USB-A đều verify thông thật (`probe ∩ base()` rỗng ở cả 2 vị trí).
-- [ ] STL test-print **chưa in thật** — cần bạn in `test-c3`/`test-usba` để ướm trước khi in cả hộp (không phải phần Claude tự làm được).
+- [x] `test-c3` đã in thật, C3 Super Mini lắp vừa gờ dẫn hướng (`c3_w`/`c3_l` đúng) — user xác nhận 04/09. Lưu ý: miếng này chỉ cắt từ `base()`, KHÔNG kiểm `c3_comp_h` (chiều cao linh kiện, vẫn là ước tính) vì không có `lid()` — chỉ lộ ra khi lắp thử với nắp.
+- [x] `test-usba` đã in thật (05/09) — kích thước tổng thể OK, chỉ phát hiện 1 vấn đề: khe thoát dây điện (`usba_wire_z`, vách chắn giữa khối USB-A và C3) đặt quá cao (11mm từ sàn), cản dây điện thật. User chỉ định hạ xuống còn cách sàn 2-3mm → đã sửa `usba_wire_z: 11 → 3`. CGAL re-verify `Simple: yes` cho cả 5 phần (`assembly`/`base`/`lid`/`test-c3`/`test-usba`). Đã xuất lại `stl/test-usba.stl` — **chờ user in lại lần 2 xác nhận khe mới đủ thấp, không cản dây**.
 
 ## Ghi chú bổ sung (không có trong dự tính ban đầu)
 - Đã đổi công thức `inner_w` từ `c3_w + margin(4)` sang `+margin(6)` sau khi kiểm CGAL phát hiện trụ góc chồng lấn — bài học giống hệt các lỗi "khoét hụt"/"trụ đâm chân" đã ghi trong `vo-hop-sleeppad.scad`/`vo-hop-modular.scad`: không tin tính toán tay, phải verify bằng CGAL thật.

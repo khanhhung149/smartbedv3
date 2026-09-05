@@ -81,7 +81,10 @@ usba_rib_t = 2.5;
 usba_rib_h = 16;
 usba_stop_t = 3;
 usba_wire_w = 10;
-usba_wire_z = 11;
+usba_wire_z = 3;                   // hạ từ 11 xuống 3 — user in ướm test-usba thật, thấy dây điện
+                                    // thật đi sát sàn hơn dự tính, khe cũ (bắt đầu ở 11mm) cản dây.
+                                    // User chỉ định "cách mặt sàn 2-3mm" (05/09), không đo tay lại
+                                    // toạ độ dây chính xác — chọn 3mm (đầu trên khoảng cho phép).
 usba_hold_gap = 0.5;
 usba_floor_min = 2;
 wire_gap = 6;                      // khoảng trống giữa vách chặn USB-A và mép trước board C3
