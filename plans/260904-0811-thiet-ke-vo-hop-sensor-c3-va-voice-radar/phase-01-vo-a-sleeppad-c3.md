@@ -47,7 +47,10 @@ Xem `plan.md` mục "Kiến trúc chung". Cụ thể thay đổi so với `vo-ho
 - [x] CGAL kiểm va chạm thật: phát hiện + sửa 1 lỗi thật (trụ góc đụng mép board do `inner_w` hụt 0.5mm) — không phải suy đoán, bắt bằng `base() ∩ ghosts()` cho facet 20→4 sau khi sửa.
 - [x] Cửa USB-C và USB-A đều verify thông thật (`probe ∩ base()` rỗng ở cả 2 vị trí).
 - [x] `test-c3` đã in thật, C3 Super Mini lắp vừa gờ dẫn hướng (`c3_w`/`c3_l` đúng) — user xác nhận 04/09. Lưu ý: miếng này chỉ cắt từ `base()`, KHÔNG kiểm `c3_comp_h` (chiều cao linh kiện, vẫn là ước tính) vì không có `lid()` — chỉ lộ ra khi lắp thử với nắp.
-- [x] `test-usba` đã in thật (05/09) — kích thước tổng thể OK, chỉ phát hiện 1 vấn đề: khe thoát dây điện (`usba_wire_z`, vách chắn giữa khối USB-A và C3) đặt quá cao (11mm từ sàn), cản dây điện thật. User chỉ định hạ xuống còn cách sàn 2-3mm → đã sửa `usba_wire_z: 11 → 3`. CGAL re-verify `Simple: yes` cho cả 5 phần (`assembly`/`base`/`lid`/`test-c3`/`test-usba`). Đã xuất lại `stl/test-usba.stl` — **chờ user in lại lần 2 xác nhận khe mới đủ thấp, không cản dây**.
+- [x] `test-usba` đã in thật lần 1 (05/09) — kích thước tổng thể OK, phát hiện 2 vấn đề:
+      1. Khe thoát dây điện (`usba_wire_z`) đặt quá cao (11mm từ sàn), cản dây điện thật → sửa `usba_wire_z: 11 → 3`.
+      2. Ảnh in ướm thật (05/09, cầm tay) cho thấy 2 thanh chắn (rib) 2 bên khối USB-A bó sát quá, cần rộng thêm 1-2mm; và tổng chiều dài vỏ cần dài thêm 2-3mm về hướng USB-A → sửa `usba_fit: 0.4 → 1.9` (+1.5mm độ hở 2 bên, nằm giữa khoảng yêu cầu) + `wire_gap: 6 → 7` (+1mm, cộng dồn với usba_fit qua chuỗi `usba_back→c3_y→out_l` cho tổng `out_l` +2.5mm, nằm giữa khoảng 2-3mm yêu cầu).
+      CGAL re-verify `Simple: yes` cho cả 5 phần sau CẢ 2 lần sửa. Đã xuất lại `stl/test-usba.stl` + `stl/base.stl` + `stl/lid.stl` (máy in lỗi phần cứng "Build plate not detected" trước khi kịp in lớp nào ở lần in production đầu — chưa lãng phí vật liệu, file cũ coi như chưa in) — **chờ user in lại xác nhận cả khe thoát dây lẫn độ rộng thanh chắn/chiều dài vỏ đã đúng**.
 
 ## Ghi chú bổ sung (không có trong dự tính ban đầu)
 - Đã đổi công thức `inner_w` từ `c3_w + margin(4)` sang `+margin(6)` sau khi kiểm CGAL phát hiện trụ góc chồng lấn — bài học giống hệt các lỗi "khoét hụt"/"trụ đâm chân" đã ghi trong `vo-hop-sleeppad.scad`/`vo-hop-modular.scad`: không tin tính toán tay, phải verify bằng CGAL thật.

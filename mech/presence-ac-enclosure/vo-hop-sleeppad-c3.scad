@@ -73,7 +73,13 @@ c3_hold_gap = 0.5;                 // hở giữa đáy gờ và nóc PCB
 usba_l = 32;
 usba_w = 16;
 usba_h = 20;
-usba_fit = 0.4;
+usba_fit = 1.9;                    // nới từ 0.4 lên 1.9 (+1.5mm) — user in ướm test-usba thật
+                                    // (05/09), thấy 2 thanh chắn 2 bên bó sát quá, cần rộng thêm
+                                    // 1-2mm. usba_fit đối xứng nên +1.5mm tổng độ hở nằm giữa
+                                    // khoảng yêu cầu. LƯU Ý: biến này cũng cộng vào usba_back (xem
+                                    // dưới) nên tự động góp +1.5mm vào out_l luôn, không phải side
+                                    // effect ngoài ý muốn — user cũng yêu cầu vỏ dài thêm (xem
+                                    // wire_gap bên dưới cho phần còn lại).
 usba_axis_z = 5;
 usba_plug_w = 18;  usba_plug_h = 9;  usba_plug_len = 20;
 usba_plug_clear = 1.5;
@@ -87,7 +93,10 @@ usba_wire_z = 3;                   // hạ từ 11 xuống 3 — user in ướm 
                                     // toạ độ dây chính xác — chọn 3mm (đầu trên khoảng cho phép).
 usba_hold_gap = 0.5;
 usba_floor_min = 2;
-wire_gap = 6;                      // khoảng trống giữa vách chặn USB-A và mép trước board C3
+wire_gap = 7;                      // nới từ 6 lên 7 (+1mm) — cộng với +1.5mm từ usba_fit ở trên,
+                                    // tổng out_l dài thêm +2.5mm về hướng USB-A (nằm giữa khoảng
+                                    // 2-3mm user yêu cầu 05/09). khoảng trống giữa vách chặn USB-A
+                                    // và mép trước board C3
 
 /* ================= Khung ================= */
 // inner_w do C3 (18mm) quyết định, không phải khối USB-A (16mm) — C3 rộng hơn 2mm.
