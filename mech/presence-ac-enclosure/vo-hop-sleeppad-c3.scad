@@ -73,13 +73,15 @@ c3_hold_gap = 0.5;                 // hở giữa đáy gờ và nóc PCB
 usba_l = 32;
 usba_w = 16;
 usba_h = 20;
-usba_fit = 1.9;                    // nới từ 0.4 lên 1.9 (+1.5mm) — user in ướm test-usba thật
-                                    // (05/09), thấy 2 thanh chắn 2 bên bó sát quá, cần rộng thêm
-                                    // 1-2mm. usba_fit đối xứng nên +1.5mm tổng độ hở nằm giữa
-                                    // khoảng yêu cầu. LƯU Ý: biến này cũng cộng vào usba_back (xem
-                                    // dưới) nên tự động góp +1.5mm vào out_l luôn, không phải side
-                                    // effect ngoài ý muốn — user cũng yêu cầu vỏ dài thêm (xem
-                                    // wire_gap bên dưới cho phần còn lại).
+usba_fit = 1.9;                    // CHỈ dùng cho chiều DÀI hốc (usba_back/usba_pocket_l, cộng
+                                    // dồn vào out_l) — 1.9 chốt từ lần sửa 05/09 đầu (+1.5mm từ
+                                    // 0.4 gốc), out_l coi như đã đủ dài, KHÔNG đổi số này nữa trừ
+                                    // khi user báo cần dài thêm.
+usba_fit_w = 3.9;                  // TÁCH RIÊNG (05/09, lần sửa 2) — chỉ dùng cho độ HỞ 2 BÊN
+                                    // khe (usba_x0/usba_x1). Lần 1 dùng chung usba_fit=1.9 (+1.5mm)
+                                    // vẫn CHƯA ĐỦ theo user ướm thật lần 2 → tăng thêm +2mm =
+                                    // 3.9mm. Tách khỏi usba_fit để tăng bề rộng không còn kéo dài
+                                    // thêm out_l ngoài ý muốn (bài học từ lần sửa 1, xem git log).
 usba_axis_z = 5;
 usba_plug_w = 18;  usba_plug_h = 9;  usba_plug_len = 20;
 usba_plug_clear = 1.5;
@@ -157,8 +159,8 @@ c3_x       = box_cx - c3_w/2;                          // = 7.5
 
 usba_open_w = usba_plug_w + 2*usba_plug_clear;   // = 21
 usba_open_h = usba_plug_h + 2*usba_plug_clear;   // = 12
-usba_x0    = box_cx - (usba_w + usba_fit)/2;
-usba_x1    = usba_x0 + usba_w + usba_fit;
+usba_x0    = box_cx - (usba_w + usba_fit_w)/2;
+usba_x1    = usba_x0 + usba_w + usba_fit_w;
 usba_pocket_l = usba_l + usba_fit;
 usba_open_z0  = max(usba_floor_min, floor_t + usba_axis_z - usba_open_h/2);
 usba_hold_h   = deck_h - usba_h - usba_hold_gap;
@@ -310,7 +312,7 @@ module lid() {
             if (!vit_on) go_bam();
 
             translate([usba_x0, usba_y, -usba_hold_h])
-                cube([usba_w + usba_fit, usba_pocket_l, usba_hold_h]);
+                cube([usba_w + usba_fit_w, usba_pocket_l, usba_hold_h]);
 
             // Gờ CHẶN NHẤC C3 — đè lên 2 mép dài, thay vít (board không có lỗ)
             if (c3_hold_on)
