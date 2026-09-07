@@ -2,6 +2,9 @@
 #include <WiFi.h>
 #include "config.h"
 #include "nvs-config.h"
+#if __has_include("dev-config.h")
+#include "dev-config.h"
+#endif
 #include "ble-provisioning.h"
 #include "mqtt-client.h"
 #include "uart-parser.h"
@@ -58,21 +61,56 @@ static void sp_send_taos(const char* cmd) {
     SLEEPPAD_UART.flush();
 }
 
-static void start_monitor_mode() {
-    Serial.println("[CMD] TAOSG — bat che do phat 66 byte/giay");
+#include "sleep-pad-frame.h"
+
+static unsigned long last_0x85_frame_ms = 0;
+static bool fallback_taosg = false;
+
+static void send_time_sync_0x0B() {
+    time_t now = time(nullptr);
+    uint32_t t = (uint32_t)now;
+    uint8_t content[4];
+    content[0] = t & 0xFF;
+    content[1] = (t >> 8) & 0xFF;
+    content[2] = (t >> 16) & 0xFF;
+    content[3] = (t >> 24) & 0xFF;
+    sp_send_frame(0x0B, content, 4);
+    Serial.println("[Mode] Đã gửi 0x0B hiệu chỉnh đồng hồ");
+}
+
+static void do_fallback_taosg() {
+    if (fallback_taosg) return;
+    fallback_taosg = true;
+    Serial.println("[Mode] lùi về TAOSG — bat che do phat 66 byte/giay");
     sp_send_taos("TAOSG");
+}
+
+static void start_monitor_mode() {
+    fallback_taosg = false;
+    last_0x85_frame_ms = millis(); // Reset timeout
+    Serial.println("[Mode] Yêu cầu chuyển sang chế độ giám sát 0x20 (frame)...");
+    sp_send_frame(0x07, nullptr, 0); // Hỏi trạng thái
 }
 
 // Không có lệnh heartbeat riêng trong bộ lệnh TAOS. Phát lại TAOSG vừa giữ nhịp
 // vừa tự khôi phục nếu pad đã rơi về chế độ chờ.
 static void send_heartbeat() {
-    sp_send_taos("TAOSG");
+    if (fallback_taosg) {
+        sp_send_taos("TAOSG");
+    } else {
+        // Trong chế độ frame 0x20, không thấy hãng nói cần heartbeat.
+        // Có thể gửi 0x07 để giữ kết nối nếu cần.
+        sp_send_frame(0x07, nullptr, 0);
+    }
 }
 
 // --- Parser callbacks (forward declarations) ---
 
 static void on_sec_data(const SleepPadSecData& d) {
-    Serial.printf("[0x85] ts=%u status=%u hr=%u rr=%.1f sdata=%u pdata=%u\n",
+    if (d.timestamp != 0) {
+        last_0x85_frame_ms = millis();
+    }
+    Serial.printf("[0x85/TAOSG] ts=%u status=%u hr=%u rr=%.1f sdata=%u pdata=%u\n",
                   d.timestamp, d.status, d.heart_rate, d.resp_rate, d.sdata, d.pdata);
     mqtt_publish_sec(d);
 }
@@ -84,10 +122,27 @@ static void on_min_data(const SleepPadMinData& d) {
     mqtt_publish_min(d);
 }
 
-static void on_idle() {
-    // 0x87 frame: device entered standby, requesting commands — restart monitor mode
-    Serial.println("[UART] 0x87 idle — restarting monitor mode");
-    start_monitor_mode();
+static void on_mode_confirmed(uint8_t mode) {
+    if (fallback_taosg) return;
+    if (mode == 0x20 || mode == 0x21) {
+        Serial.printf("[Mode] 0x20 monitoring - OK (mode 0x%02X)\n", mode);
+        send_time_sync_0x0B();
+    } else {
+        Serial.printf("[Mode] pad báo lỗi (mode 0x%02X), lùi về TAOSG\n", mode);
+        do_fallback_taosg();
+    }
+}
+
+static void on_status_query(uint8_t mode) {
+    if (fallback_taosg) return;
+    if (mode == 0x20) {
+        Serial.println("[Mode] Pad đã ở chế độ 0x20 monitoring");
+        send_time_sync_0x0B();
+    } else {
+        Serial.printf("[Mode] Đang ở mode 0x%02X, gửi 0x04 0x20 để vào chế độ giám sát...\n", mode);
+        uint8_t content = 0x20;
+        sp_send_frame(0x04, &content, 1);
+    }
 }
 
 // --- SNTP time sync ---
@@ -178,6 +233,12 @@ static void run_ble_provisioning() {
 
 void setup() {
     Serial.begin(115200);
+    // USB CDC: ghi KHÔNG chặn khi không có host đọc cổng.
+    // Mặc định Serial.write() chờ tới 100ms mỗi lần buffer đầy. Node này in một dòng
+    // mỗi khung pad (1Hz), nên chạy độc lập không cắm máy tính thì buffer đầy rồi
+    // loop() treo — quan sát được là MQTT chết và sec_data ngừng tăng ĐÚNG lúc đóng
+    // cổng serial, còn mở serial ra đo thì mọi thứ chạy. Đặt 0 để log chỉ là log.
+    Serial.setTxTimeoutMs(0);
     delay(500);
     derive_device_id();   // populate DEVICE_ID before any subsystem reads it
     Serial.printf("\n[Boot] Sleep Pad ESP32 — device_id=%s\n", DEVICE_ID);
@@ -189,13 +250,44 @@ void setup() {
 
     parser.onSecData = on_sec_data;
     parser.onMinData = on_min_data;
-    parser.onIdle    = on_idle;
+    parser.onModeConfirmed = on_mode_confirmed;
+    parser.onStatusQuery = on_status_query;
 
     if (!nvs_init()) {
         Serial.println("[Boot] NVS init failed — continuing anyway");
     }
 
     NvsConfig cfg = nvs_load();
+
+    // Cấu hình dựng sẵn lúc biên dịch: có include/dev-config.h thì node bỏ qua BLE
+    // provisioning và dùng thẳng giá trị trong file. Không có file thì toàn bộ khối này
+    // biến mất và luồng BLE giữ nguyên.
+    //
+    // Điều kiện là "khác NVS", KHÔNG phải "NVS trống". Bản trước chỉ nạp khi NVS trống,
+    // nên một board đã ghép mạng cũ sẽ lờ đi file này mãi mãi: sửa SSID rồi nạp lại vẫn
+    // nối vào mạng cũ, không lỗi biên dịch, không log, chỉ im lặng không lên MQTT. Đã mất
+    // một vòng nạp vì đúng cái bẫy đó. File có mặt = file là nguồn sự thật.
+#if __has_include("dev-config.h")
+    if (cfg.wifi_ssid != DEV_WIFI_SSID || cfg.wifi_pass != DEV_WIFI_PASS ||
+        cfg.mqtt_host != DEV_MQTT_HOST || cfg.mqtt_scheme != DEV_MQTT_SCHEME ||
+        cfg.mqtt_user != DEV_MQTT_USER || cfg.mqtt_pass != DEV_MQTT_PASS) {
+        cfg.wifi_ssid   = DEV_WIFI_SSID;
+        cfg.wifi_pass   = DEV_WIFI_PASS;
+        cfg.mqtt_host   = DEV_MQTT_HOST;
+        cfg.mqtt_scheme = DEV_MQTT_SCHEME;
+        cfg.mqtt_user   = DEV_MQTT_USER;
+        cfg.mqtt_pass   = DEV_MQTT_PASS;
+        nvs_set(NVS_KEY_SSID,   cfg.wifi_ssid);
+        nvs_set(NVS_KEY_PASS,   cfg.wifi_pass);
+        nvs_set(NVS_KEY_HOST,   cfg.mqtt_host);
+        nvs_set(NVS_KEY_SCHEME, cfg.mqtt_scheme);
+        nvs_set(NVS_KEY_USER,   cfg.mqtt_user);
+        nvs_set(NVS_KEY_MPASS,  cfg.mqtt_pass);
+        Serial.printf("[Boot] Nạp cấu hình dựng sẵn từ dev-config.h — ssid=\"%s\" broker=%s://%s\n",
+                      cfg.wifi_ssid.c_str(), cfg.mqtt_scheme.c_str(), cfg.mqtt_host.c_str());
+    }
+#endif
+
     const bool fresh_provisioning = !cfg.has_wifi_creds();
 
     if (fresh_provisioning) {
@@ -352,6 +444,12 @@ void loop() {
         if (now - last_heartbeat_ms >= 60000UL) {
             last_heartbeat_ms = now;
             send_heartbeat();
+        }
+
+        // Lưới an toàn: Nếu không thấy khung 0x85 trong 15s, lùi về TAOSG
+        if (!fallback_taosg && now - last_0x85_frame_ms > 15000UL) {
+            Serial.println("[Mode] Timeout 15s không nhận được khung 0x85");
+            do_fallback_taosg();
         }
     }
 

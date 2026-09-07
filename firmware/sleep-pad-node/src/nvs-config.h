@@ -1,7 +1,9 @@
 #pragma once
-#include <Arduino.h>
+#include <stdbool.h>
 
-// NVS namespace and key names — must match protocol doc
+// NVS namespace and key names — must match protocol doc (giữ nguyên bản Arduino cũ,
+// app Flutter + backend không đọc trực tiếp NVS nên đây không phải contract byte-for-byte,
+// nhưng đổi tên vẫn phải đồng bộ với ble-provisioning.c dùng cùng key).
 #define NVS_NAMESPACE  "sleeppad"
 #define NVS_KEY_SSID   "wifi_ssid"
 #define NVS_KEY_PASS   "wifi_pass"
@@ -10,28 +12,32 @@
 #define NVS_KEY_USER   "mqtt_user"
 #define NVS_KEY_MPASS  "mqtt_pass"
 
-struct NvsConfig {
-    String wifi_ssid;
-    String wifi_pass;
-    String mqtt_host;    // host[:port], no scheme
-    String mqtt_scheme;  // "tcp" | "ws" | "wss"
-    String mqtt_user;    // may be empty
-    String mqtt_pass;    // may be empty
+// Độ dài buffer đủ cho SSID (32) / password (64) / host (64, có thể mang ":port") /
+// scheme ("wss" ...) / mqtt user-pass. 96 dư an toàn cho mọi trường, tránh cấp phát động.
+#define NVS_STR_CAP 96
 
-    bool has_wifi_creds() const { return wifi_ssid.length() > 0; }
-};
+typedef struct {
+    char wifi_ssid[NVS_STR_CAP];
+    char wifi_pass[NVS_STR_CAP];
+    char mqtt_host[NVS_STR_CAP];    // host[:port], no scheme
+    char mqtt_scheme[NVS_STR_CAP];  // "tcp" | "ws" | "wss"
+    char mqtt_user[NVS_STR_CAP];    // may be empty
+    char mqtt_pass[NVS_STR_CAP];    // may be empty
+} NvsConfig;
 
-// Initialize NVS flash partition. Call once in setup().
+static inline bool nvs_config_has_wifi_creds(const NvsConfig* cfg) {
+    return cfg->wifi_ssid[0] != '\0';
+}
+
+// Initialize NVS flash partition. Call once in app_main().
 // Returns false if NVS was erased due to corruption.
-bool nvs_init();
+bool nvs_init(void);
 
 // Load all config keys from NVS. Missing keys yield empty strings.
-NvsConfig nvs_load();
+NvsConfig nvs_load(void);
 
 // Persist a single key. Returns false on write error.
-bool nvs_set(const char* key, const String& value);
+bool nvs_set(const char* key, const char* value);
 
 // Erase all keys in the sleeppad namespace (factory reset).
-// Renamed from `nvs_erase_all` to avoid shadowing the ESP-IDF C API
-// `nvs_erase_all(nvs_handle_t)` declared in <nvs.h>.
-void nvs_config_erase_all();
+void nvs_config_erase_all(void);

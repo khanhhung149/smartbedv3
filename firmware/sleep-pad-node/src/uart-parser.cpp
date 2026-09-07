@@ -2,7 +2,7 @@
 #include <string.h>
 
 SleepPadParser::SleepPadParser()
-    : onSecData(nullptr), onMinData(nullptr), onIdle(nullptr),
+    : onSecData(nullptr), onMinData(nullptr), onModeConfirmed(nullptr), onStatusQuery(nullptr),
       _state(ParserState::WAIT_HEADER), _len(0), _histLen(0) {}
 
 void SleepPadParser::feed(uint8_t byte) {
@@ -64,6 +64,13 @@ void SleepPadParser::processFrame() {
 
     uint8_t frame_type = _buf[1];
 
+    // Lưu ID thật của pad (byte 4-13) nếu nó khác "UNCONFIGED"
+    if (strncmp((const char*)&_buf[4], "UNCONFIGED", 10) != 0) {
+        extern char pad_device_id[11];
+        memcpy(pad_device_id, &_buf[4], 10);
+        pad_device_id[10] = '\0';
+    }
+
     // Content starts at byte index 14 (header+type+length(2)+id(10)) and ends before 0x0D
     const uint8_t* content     = &_buf[14];
     size_t         content_len = _len - 14 - 1; // subtract trailing 0x0D
@@ -72,10 +79,19 @@ void SleepPadParser::processFrame() {
         decode0x85(content, content_len);
     } else if (frame_type == 0x86) {
         decode0x86(content, content_len);
+    } else if (frame_type == 0x84) {
+        if (content_len >= 1) {
+            uint8_t mode = content[0];
+            if (onModeConfirmed) onModeConfirmed(mode);
+        }
     } else if (frame_type == 0x87) {
-        // Device idle — requesting server commands (time cal, work mode, etc.)
-        Serial.println("[Parser] 0x87 device idle, requesting commands");
-        if (onIdle) onIdle();
+        if (content_len >= 6) {
+            uint8_t mode = content[0];
+            if (onStatusQuery) onStatusQuery(mode);
+        } else {
+            // Trường hợp frame 0x87 cũ (không đủ 6 byte nội dung)
+            if (onStatusQuery) onStatusQuery(0xFF);
+        }
     } else {
         Serial.printf("[Parser] Frame type: 0x%02X\n", frame_type);
     }
