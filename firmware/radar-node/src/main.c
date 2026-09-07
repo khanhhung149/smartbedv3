@@ -30,6 +30,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "mqtt_client.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 
 #include "config.h"
@@ -41,9 +42,20 @@ static const char *TAG = "radar";
 
 // ---- Phần cứng ----
 #define PIN_PRESENCE  GPIO_NUM_16   // LD2410 OUT (presence digital)
-#define PIN_RADAR_RX  33            // LD2410 TX -> chân này (S2 nhận)
+#define PIN_RADAR_RX  35            // LD2410 TX -> chân này (S2 nhận). Đổi từ GPIO33 sang GPIO35
+                                    // (2026-08-25): GPIO33 hỏng vật lý (dây/module/code đều xác
+                                    // nhận tốt qua đo thông mạch + test HLK-LD2410 BLE độc lập,
+                                    // chỉ đổi chân là raw_bytes/2s từ 0 lên 460 ngay).
 #define PIN_RADAR_TX  18            // LD2410 RX <- chân này (S2 gửi lệnh)
-#define RADAR_BAUD    256000        // baud mặc định của LD2410
+// 115200, KHÔNG PHẢI 256000 mặc định theo datasheet. Chẩn đoán thật 24/08 (uart_ok mãi false):
+// (1) GND giữa LD2410 và S2 bị lỏng/đứt trước — raw_bytes/2s=0 tuyệt đối dù OUT pin/BLE app
+//     vẫn báo bình thường (BLE không cần đường GND chung, UART thì cần — xem
+//     docs/presence-ac/system-wiring.md Hazard #1). Nối lại GND: bắt đầu có byte, nhưng vẫn
+//     0 khung hợp lệ.
+// (2) Sau khi có byte, đo lại baud thật bằng app HLK-LD2410 (BLE, đọc trực tiếp từ module):
+//     115200, không phải 256000. Đổi RADAR_BAUD khớp giá trị đo được → uart_ok=true,
+//     moving_dist_cm/energy có số thật. Cả 2 lỗi cùng tồn tại độc lập, phải sửa cả hai.
+#define RADAR_BAUD    115200
 #define RADAR_UART    UART_NUM_1
 
 // ---- MQTT topic ----
@@ -149,9 +161,12 @@ static void publish_motion(void) {
 //
 // home/room/sample  {"t":<epoch_ms MCU>,"presence":bool,"hr_bpm":0,"resp_amplitude":0,
 //   "motion":0|1,"weight_kg":0,"spo2":0,"temp_c":0,"humidity":0,
-//   "moving_dist_cm":u,"moving_energy":u,"still_dist_cm":u,"still_energy":u,"uart_ok":bool}
+//   "moving_dist_cm":u,"moving_energy":u,"still_dist_cm":u,"still_energy":u,"uart_ok":bool,
+//   "seq":u32,"boot":u32}
 //
 // - t gắn tại MCU (net_epoch_ms) — KHÔNG gắn ở Linux.
+// - seq/boot cho phép truy NGUYÊN NHÂN mất mẫu, không chỉ tỷ lệ. Xem chú thích ở khai báo
+//   sample_seq bên dưới.
 // - Kênh radar không đo được (nhịp tim, hơi thở, cân nặng, SpO2, nhiệt độ, độ ẩm) ghi 0
 //   kèm cờ uart_ok; KHÔNG bịa số. presence vẫn đáng tin từ chân OUT dù UART chết.
 // - Ring buffer: mẫu bị nhốt khi MQTT chưa nối/bận được xếp hàng, đẩy lại khi thông
@@ -159,7 +174,11 @@ static void publish_motion(void) {
 #define SAMPLE_TOPIC    TOPIC_SAMPLE
 #define SAMPLE_TICK_MS  100        // 10Hz cố định, không jitter
 #define SAMPLE_RB_CAP   64         // ~6.4s khi MQTT nghẽn; đầy thì drop cũ nhất (giữ mẫu mới)
-#define SAMPLE_RB_LEN   256        // mỗi payload ~200B
+// Payload xấu nhất (mọi trường ở giá trị dài nhất, energy là uint8 trần 100, dist là uint16):
+//   224B  +  ,"seq":4294967295 (17B)  +  ,"boot":4294967295 (18B)  =  259B, cộng NUL là 260.
+// Vượt 256 thì snprintf cắt cụt IM LẶNG -> JSON hỏng -> backend drop mẫu, và triệu chứng là
+// "mất mẫu ngẫu nhiên khi giá trị radar lớn" — đúng loại lỗi bộ đếm này sinh ra để diệt.
+#define SAMPLE_RB_LEN   288
 
 typedef struct {
   char  buf[SAMPLE_RB_CAP][SAMPLE_RB_LEN];
@@ -169,6 +188,33 @@ typedef struct {
 
 static sample_rb_t sample_rb;
 static uint32_t last_sample_ms;
+
+// seq tăng 1 mỗi mẫu ĐƯỢC DỰNG; boot tăng 1 mỗi lần khởi động (lưu NVS).
+// Chỉ có seq là không đủ: MCU reset làm seq quay về 0 và sinh số trùng, không phân biệt
+// được reset với mất mẫu. Có cả hai thì ba nguyên nhân tách bạch hẳn:
+//   seq thủng lỗ + t liền mạch  -> mất trên đường (WiFi/MQTT/broker)
+//   seq liền     + t nhảy quãng -> MCU trượt nhịp (vòng lặp, UART radar)
+//   boot tăng                   -> MCU reset (nguồn, brownout, watchdog)
+static uint32_t sample_seq;
+static uint32_t boot_count;
+
+// boot_count_bump đọc bộ đếm khởi động từ NVS, tăng 1, ghi lại. Gọi ĐÚNG MỘT LẦN lúc boot —
+// ghi trong vòng lặp sẽ mòn flash. Khoá chưa tồn tại thì bắt đầu từ 0.
+static uint32_t boot_count_bump(void) {
+  nvs_handle_t h;
+  if (nvs_open("radar", NVS_READWRITE, &h) != ESP_OK) {
+    ESP_LOGW(TAG, "NVS mở lỗi — boot_count không đếm được, sẽ luôn báo 0");
+    return 0;
+  }
+  uint32_t n = 0;
+  nvs_get_u32(h, "boot_count", &n);  // không tìm thấy -> n giữ 0
+  n++;
+  if (nvs_set_u32(h, "boot_count", n) != ESP_OK || nvs_commit(h) != ESP_OK) {
+    ESP_LOGW(TAG, "NVS ghi boot_count lỗi — lần khởi động sau sẽ lặp lại số %" PRIu32, n);
+  }
+  nvs_close(h);
+  return n;
+}
 
 static bool sample_rb_full(const sample_rb_t *rb) { return rb->count == SAMPLE_RB_CAP; }
 
@@ -203,13 +249,15 @@ static void build_sample_json(char *buf, size_t n, const ld2410_data_t *d) {
            ",\"weight_kg\":0,\"spo2\":0,\"temp_c\":0,\"humidity\":0"
            ",\"moving_dist_cm\":%u,\"moving_energy\":%u"
            ",\"still_dist_cm\":%u,\"still_energy\":%u"
-           ",\"uart_ok\":%s}",
+           ",\"uart_ok\":%s"
+           ",\"seq\":%" PRIu32 ",\"boot\":%" PRIu32 "}",
            net_epoch_ms(),
            present ? "true" : "false",
            d->moving ? 1 : 0,
            (unsigned)d->moving_dist_cm, (unsigned)d->moving_energy,
            (unsigned)d->still_dist_cm, (unsigned)d->still_energy,
-           d->uart_ok ? "true" : "false");
+           d->uart_ok ? "true" : "false",
+           sample_seq++, boot_count);
 }
 
 // Đẩy 1 mẫu: nối được thì publish, chưa nối thì xếp hàng (ring buffer).
@@ -342,9 +390,11 @@ void app_main(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
   }
 
+  boot_count = boot_count_bump();
+
   // S2 dùng USB CDC gốc: chờ host mở cổng một nhịp để không mất log boot.
   vTaskDelay(pdMS_TO_TICKS(500));
-  ESP_LOGI(TAG, "[boot] radar-node (S2 Mini + LD2410C) start");
+  ESP_LOGI(TAG, "[boot] radar-node (S2 Mini + LD2410C) start, boot_count=%" PRIu32, boot_count);
 
   // Pulldown: radar hở/chết thì chân OUT thả nổi nhặt nhiễu -> với ngưỡng nhạy 300ms dễ đẻ
   // presence GIẢ. Pulldown ghì về 0 khi radar không driving; OUT là push-pull nên khi phát hiện

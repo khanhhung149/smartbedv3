@@ -6,6 +6,14 @@
 #define WIFI_PASS       "mat-khau-wifi"
 
 // MQTT broker (LAN).
+//
+// ⚠️ Địa chỉ này COMPILE VÀO FIRMWARE. Broker đổi chỗ (đổi máy chạy stack, hoặc DHCP cấp lại
+// IP khác) là phải flash lại từng node — OTA cũng không cứu được vì node mất đường tới broker.
+// Đặt DHCP reservation cho máy chạy broker rồi điền IP đã reserve vào đây. Làm vậy thì sau này
+// chuyển stack từ laptop sang Jetson chỉ cần gán đúng IP đó cho Jetson, firmware không đụng.
+// Xem docs/runbook-dem-do-8-tieng.md mục "Địa chỉ máy host".
+//
+// Chạy đủ hết node thì có HAI broker trên cùng máy — chọn đúng cổng của broker phục vụ node này.
 #define MQTT_HOST       "192.168.1.95"
 #define MQTT_PORT       1883
 #define MQTT_USER       "user"
