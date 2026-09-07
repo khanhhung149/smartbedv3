@@ -1,4 +1,4 @@
-// Package mqttclient bọc paho MQTT: connect, subscribe motion+presence, publish ac_cmd/ac_learn.
+// Package mqttclient bọc paho MQTT: connect, subscribe room sensors, publish ac_cmd/ac_learn.
 package mqttclient
 
 import (
@@ -15,6 +15,7 @@ import (
 const (
 	topicMotion   = "home/door/motion"
 	topicPresence = "home/room/presence"
+	topicSnore    = "home/room/snore_event"
 	topicSample   = "home/room/sample"
 	topicACCmd    = "home/room/ac_cmd"
 	topicACLearn  = "home/room/ac_learn"
@@ -24,6 +25,8 @@ const (
 type Handlers struct {
 	OnMotion   func(events.Motion)
 	OnPresence func(events.Presence)
+	// OnSnore — voice-node báo ngáy đã xác nhận. Tùy chọn: nil thì không subscribe.
+	OnSnore func(events.SnoreEvent)
 	// OnSample — mẫu 10Hz (schema CSV take-home + kênh raw radar). Tùy chọn: nil thì không subscribe.
 	OnSample func(events.Sample)
 	// OnACCmd — mọi lệnh AC đi qua bus, BẤT KỂ ai phát (app, voice, hay ESP32 sau này).
@@ -67,6 +70,16 @@ func New(host string, port int, user, pass, clientID string, h Handlers) *Client
 			}
 			h.OnPresence(p)
 		})
+		if h.OnSnore != nil {
+			c.Subscribe(topicSnore, 1, func(_ mqtt.Client, msg mqtt.Message) {
+				var s events.SnoreEvent
+				if err := json.Unmarshal(msg.Payload(), &s); err != nil {
+					slog.Warn("payload snore sai", "err", err, "raw", string(msg.Payload()))
+					return
+				}
+				h.OnSnore(s)
+			})
+		}
 		if h.OnSample != nil {
 			c.Subscribe(topicSample, 1, func(_ mqtt.Client, msg mqtt.Message) {
 				var sm events.Sample
