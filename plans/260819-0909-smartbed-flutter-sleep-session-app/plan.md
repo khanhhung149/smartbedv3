@@ -8,7 +8,7 @@ branch: master
 brainstorm: plans/reports/brainstorm-to-planner-260819-0909-smartbed-flutter-sleep-session-app-report.md
 repos: [smartbedv3, sleep_pad_AI]
 blockedBy: []
-blocks: []
+blocks: [260821-0943-port-tang-so-lieu-ai-sleep-features-score]
 ---
 
 # App Flutter SmartBed — vòng 1: báo cáo giấc ngủ

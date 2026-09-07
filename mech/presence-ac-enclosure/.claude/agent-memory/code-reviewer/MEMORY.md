@@ -1,0 +1,1 @@
+- [SCAD review conventions](project_scad_review_conventions.md) — vo-hop-*.scad verification workflow, permanent echo() is expected, watch for duplicated cutout-dimension literals.

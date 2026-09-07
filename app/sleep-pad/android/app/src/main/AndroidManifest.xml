@@ -17,8 +17,12 @@
          Required by flutter_local_notifications and firebase_messaging in production.
          No-op in dev (Firebase not configured). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Bản release không được Flutter tự thêm INTERNET như bản debug/profile, nên phải khai ở
+         đây; thiếu nó thì mọi lời gọi API/WebSocket im lặng thất bại. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="Sleep Tech"
+        android:usesCleartextTraffic="true"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

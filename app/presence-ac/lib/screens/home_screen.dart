@@ -294,9 +294,13 @@ class _AcCard extends ConsumerStatefulWidget {
 
 class _AcCardState extends ConsumerState<_AcCard> {
   bool _busy = false;
+  bool? _optimisticOn;
 
   Future<void> _send(bool on) async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _optimisticOn = on; // Optimistic update
+    });
     try {
       await ref.read(apiProvider).setAc(on);
       if (mounted) {
@@ -306,18 +310,23 @@ class _AcCardState extends ConsumerState<_AcCard> {
       }
     } on ApiException catch (e) {
       if (mounted) {
+        setState(() => _optimisticOn = null); // revert on error
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$e'), backgroundColor: AppTheme.red),
         );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+      // Giữ giao diện lạc quan thêm 1.5 giây chờ WebSocket cập nhật để chống giật (snap-back)
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) setState(() => _optimisticOn = null);
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final on = widget.snap.acDesired;
+    final on = _optimisticOn ?? widget.snap.acDesired;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -31,4 +31,5 @@ Xác nhận hardware sleep-pad thật có bao giờ phát `status==7` (SNORE) ho
 
 ## Risk Assessment
 - Risk: nếu status=7/8 không bao giờ xuất hiện, tín hiệu A vô dụng vĩnh viễn trên hardware này — chấp nhận, thiết kế OR-fusion đã tính, chỉ còn tín hiệu B hoạt động.
-- (Điền sau khi test) Kết quả verify status 7/8: _chưa test_.
+- **Kết quả verify status 7/8 (2026-08-26, ~07:56-07:59 UTC)**: CHỈ thấy status 0/1/2 trong suốt bài test (nằm yên, đè chân, nín thở). KHÔNG bao giờ thấy 7 (SNORE)/8 (WEAK_BREATHING) → **tín hiệu A xác nhận không hoạt động trên hardware này**, giống vụ min_data/0x20 đã gặp trước đó. Chỉ còn tín hiệu B (resp_rate==0 && heart_rate>0) khả dụng.
+- **Vấn đề mới phát hiện khi test tín hiệu B**: lúc nín thở, cơ thể gồng/cử động khiến `status` nhảy 0→2 (MOVEMENT)→1 (GET_OUT_OF_BED) dao động ~15s thay vì giữ yên — `heart_rate`/`resp_rate` về 0 do pad hiểu là rời giường (đúng theo protocol), KHÔNG phải "tim đập nhưng thở không đo được". Tín hiệu B chưa trigger đúng ý trong lần test này. **Cần test lại: nằm thật yên, không gồng người, khi nín thở** để giữ `status==0` ổn định trong lúc `resp_rate` về 0 — đây mới đúng điều kiện tín hiệu B thiết kế.

@@ -1,5 +1,5 @@
 ---
-blockedBy: [260814-1237-esp32cam-stream-mediapipe-poc]
+blockedBy: [260814-1237-esp32cam-stream-mediapipe-poc, 260820-0900-do-8-tieng-seq-counter-va-do-ben-sqlite]
 ---
 
 # SmartBed v3 — Implementation Plan (MVP → nâng cấp dần)

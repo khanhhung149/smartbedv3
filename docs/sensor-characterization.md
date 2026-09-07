@@ -84,9 +84,92 @@ Note on that 3.0 s: OpenCV's FFMPEG backend defaults to a **30 second** read tim
 
 ---
 
+## Presence radar (LD2410C) — reliability
+
+- **Firmware:** [`firmware/radar-node/`](../firmware/radar-node/) (Wemos S2 Mini + LD2410C, ESP-IDF thuần)
+- **Measured:** 2026-08-25/26, sau khi chuyển stack sang Jetson (192.168.1.125)
+
+### Sự cố phần cứng đã tìm ra và fix
+
+`uart_ok` báo `false` tuyệt đối (`raw_bytes/2s=0`) dù dây GND/TX/RX đo thông mạch tốt và module LD2410C xác nhận sống qua app HLK-LD2410 (BLE độc lập, không qua ESP32). Cách loại trừ từng bước:
+
+1. Đo thông mạch GND giữa board và cảm biến khi **có điện** → báo `OL` (hở mạch) — SAI: đo continuity khi mạch có điện luôn cho kết quả sai. Tắt nguồn đo lại → thông mạch thật.
+2. Đo tiếp TX/RX (tắt nguồn) → thông mạch tốt.
+3. Test module độc lập qua app HLK-LD2410 (BLE) → module sống, đọc được số liệu thật.
+4. Đổi thử chân nhận UART từ GPIO33 sang GPIO35 (giữ nguyên baud 115200, dây, code logic) → `raw_bytes/2s` từ 0 lên 460 ngay lập tức, `uart_ok:true`.
+
+**Kết luận: GPIO33 trên board S2 Mini hỏng vật lý** (không phải GND/baud/code/module) — khả năng do va đập/chập khi thao tác USB nhiều lần. Đã đổi vĩnh viễn sang **GPIO35** (`firmware/radar-node/src/main.c:PIN_RADAR_RX`, `platformio.ini`).
+
+### Độ ổn định kết nối (đo trên Jetson)
+
+| Điều kiện | Kết quả |
+|---|---|
+| Kết nối liên tục, không rớt | **13.3 phút** (từ lúc connect tới lúc verify cuối), 0 sự kiện disconnect trong log broker |
+| Nhịp `seq` | Tăng đều 1 đơn vị/mẫu, không thủng, khớp đúng 10Hz (~100ms/mẫu) trong mọi lần lấy mẫu |
+| `boot` counter | Ổn định trong suốt cửa sổ theo dõi (không tự reset ngoài ý muốn) |
+| **Chưa đo** | Chạy liên tục 8 tiếng (tiêu chí Phase 01 #1) — chưa thực hiện, xem `plans/reports/` cho kế hoạch |
+
+### Đặc thù USB CDC gốc (ESP32-S2, không liên quan cảm biến)
+
+Board dùng USB CDC gốc (`CONFIG_ESP_CONSOLE_USB_CDC=y`), không có chip UART-USB rời. Nhấn nút RESET thường (soft reset) thường **không** khiến Windows re-enumerate lại COM port; phải rút/cắm lại cáp USB vật lý. Giữ BOOT+RESET (vào bootloader) luôn re-enumerate sạch. Không ảnh hưởng hoạt động WiFi/MQTT của board — chỉ ảnh hưởng khả năng xem log qua cổng USB.
+
+---
+
+## Voice node (ESP32-S3, wakeword + snore, mic INMP441)
+
+- **Firmware:** [`firmware/voice-node/`](../firmware/voice-node/)
+- **Measured:** wakeword benchmark trước 2026-08-25 (xem `docs/deployment-guide.md`); snore threshold logic đo lại 2026-08-25/26 sau khi chuyển Jetson
+
+### Wakeword ("Vừng ơi")
+
+| | |
+|---|---|
+| True-positive rate | 73.3% |
+| False-trigger | ~2.48 lần/giờ ở threshold 0.80 |
+| Infer time | 6-11ms/lần (đo qua log `[wakeword] infer=`) |
+
+### Snore detection — 5 phiên bản logic đã thử, chỉ 1 phiên bản hoạt động
+
+Model: [`alek6kun/snore-recognition`](https://github.com/alek6kun/snore-recognition) (Apache-2.0), threshold `SNORE_SCORE_THRESHOLD=0.45`. Train trên dataset Khan 2019 (ngáy thu gần, phòng thu sạch) — khác điều kiện mic INMP441 thật của node, nên confidence "ngáy" và "nhiễu" **chồng lấn hoàn toàn** (đo 24/08: ngáy 0.461-0.871, nhiễu 0.461-0.98 — không ngưỡng nào tách được).
+
+Đặc điểm quan trọng của tín hiệu ngáy thật đo được: **score dao động hit-miss-hit-miss mỗi giây** (không liên tục), do ngáy tự ngắt theo nhịp thở.
+
+| Bản | Cơ chế event | Kết quả verify thật |
+|---|---|---|
+| v1 (hiện tại, production) | 3 hit rời rạc trong 15s (không cần liên tục) | **Bắn được** 2 sự kiện ngáy thật (confidence 0.852, 0.938) ngay lần test đầu |
+| v2 | Đợt liên tục ≥3s, không chịu ngắt | 0 sự kiện — burst thật tối đa chỉ đạt 2s rồi reset |
+| v3 | Đợt ≥3s, chịu ngắt tối đa 1s | 0 sự kiện sau 85s test |
+| v4 | Đợt ≥3s, chịu ngắt tối đa 2s | 0 sự kiện sau 60s test |
+| v5 | Đợt ≥2s, chịu ngắt tối đa 2s | Gần đạt nhất (`bursts_in_window` tối đa 2/3) nhưng không ổn định qua 180s test, vẫn 0 sự kiện |
+
+**Bài học:** với tín hiệu ngáy dao động hit-miss mỗi giây, yêu cầu "đợt liên tục" luôn kém nhạy hơn "đếm hit rời rạc trong cùng cửa sổ thời gian" — vì đợt đòi hỏi nhiều sự kiện tách biệt tự kéo dài vài giây, gói gọn trong cùng 1 khung, là điều kiện tổ hợp chặt hơn nhiều. Đã revert về v1, dừng thử biến thể đợt.
+
+| | |
+|---|---|
+| Infer time (snore) | 75-95ms/lần, giữ mutex dùng chung với wakeword (~105ms tối đa quan sát được) |
+| Heap/PSRAM | Ổn định qua các cửa sổ test (không rò rỉ quan sát được): `heapFree≈83xxx B`, `psramFree=8014528 B` không đổi |
+| **Chưa đo** | Confidence trên tập ngáy thật lớn hơn (n hiện tại quá nhỏ để kết luận % chính xác thật) |
+
+---
+
+## Sleep pad node (Legact V2, BLE provisioning)
+
+- **Firmware:** [`firmware/sleep-pad-node/`](../firmware/sleep-pad-node/) (ESP32-C3 Super Mini)
+- **Measured:** 2026-08-25, pairing qua nRF Connect (BLE thủ công) sau khi chuyển Jetson
+
+| | |
+|---|---|
+| Provisioning | BLE GATT, quảng bá tên `SleepPad-{6 ký tự cuối MAC}`, 6 characteristic WRITE (WiFi SSID/pass, MQTT host/user/pass/scheme) + 1 STATUS (READ/NOTIFY) + 1 DEVICE_ID (READ) |
+| Trạng thái sau ghi đủ 6 WRITE | `waiting → wifi_connecting → wifi_connected → mqtt_connecting → connected`, verify qua Status characteristic |
+| **Bẫy đã gặp:** file `dev-config.h` (gitignored, dùng cho bài đo tại chỗ) tự nạp lại WiFi/MQTT cứng vào NVS mỗi khi NVS trống — khiến `erase_flash` một mình không đủ để ép vào lại chế độ BLE provisioning | Phải xoá hẳn file `dev-config.h` khỏi build, không chỉ sửa IP trong đó |
+| Pairing tài khoản | **Tách biệt** khỏi BLE provisioning — cần gọi API `/devices/pair` (JWT) riêng để ghi vào bảng `devices`, nếu không MQTT connect được nhưng mọi frame vẫn bị FastAPI drop im lặng (`subscriber.py:107`) |
+| **Chưa đo** | Pairing qua app `sleep-pad` thật (đã dùng workaround SQL insert user test để verify pipeline, chưa qua UI thật) |
+
+---
+
 ## Other Phase 01 clusters
 
-Not characterized yet: LD2510B radar, piezoelectric pad, SHT10/31, omnidirectional mic, CO₂ sensor.
+Not characterized yet: LD2510B radar (đang dùng LD2410C thay thế), piezoelectric pad, SHT10/31, CO₂ sensor.
 
 Add one section per cluster using the shape above: configuration, measured throughput, reliability, conditions during measurement, and an explicit list of what remains unmeasured.
 

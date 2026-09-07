@@ -98,12 +98,14 @@ WROOM-32 used GPIO26/25/34 — all forbidden on S3. Pins 5/6/7 are safe across a
 | LD2410C Pin | → S2 GPIO | Notes |
 |---|---|---|
 | **OUT** (presence digital) | **GPIO16** | HIGH when target detected (INPUT_PULLDOWN in firmware) |
-| **TX** (data transmit) | **GPIO33** | Radar sends data at 256000 baud (connect to S2 RX) |
-| **RX** (command input) | **GPIO18** | S2 sends config commands at 256000 baud (S2 TX → this pin) |
+| **TX** (data transmit) | **GPIO35** | Radar sends data at 115200 baud (connect to S2 RX). Was GPIO33 until 2026-08-25 — that pin failed physically on this board, moved to GPIO35. |
+| **RX** (command input) | **GPIO18** | S2 sends config commands at 115200 baud (S2 TX → this pin) |
 | **VCC** (power) | **5V** (VBUS) | Radar requires 5V for full range |
 | **GND** | **GND** | **MUST share common GND with S2** (see hazards) |
 
-**UART Baud**: 256000 (firmware config matches sensor default)
+**UART Baud**: 115200 — verified 2026-08-24 via the official HLK-LD2410 BLE config app on this
+exact module. NOT the 256000 datasheet default; this unit's firmware/config differs (previously
+documented as 256000, wrong for this board — see Hazard #8 below).
 
 **Protocol**:
 - On boot, firmware opens the UART read-only — it never sends config commands (radar keeps its own settings)
@@ -218,6 +220,37 @@ When powering one board from another board's 5V rail (old topology, no longer us
 **Incident**: Soldering radar module directly over the USB-C port caused electrical short to 5V rail.
 
 **Rule**: Allocate at least 5mm clearance between radar module and any USB connector. Use board layout or flexible wiring to keep the module away from the port.
+
+### 8. LD2410 UART Silently Dead — GND Loose AND Wrong Baud, Independently
+
+**Date**: 2026-08-24
+**Symptom**: `home/room/sample` MQTT always `"uart_ok":false`, `moving_dist_cm`/`motion` stuck at
+0. `presence` (OUT pin, GPIO16) kept working fine. HLK-LD2410 BLE app showed the module detecting
+motion normally. App's "Chuyển động" (motion) card showed `—` forever.
+
+**Root cause — two independent faults found in sequence, both required fixing**:
+1. GND between the radar module and S2 had gone loose (continuity check confirmed open, not
+   just high-resistance). A temporary raw-byte counter added to `ld2410_task()` showed
+   `raw_bytes/2s=0` — literally zero bytes reaching the UART, worse than the "garbage data"
+   symptom in Hazard #1 above. Re-seating/re-soldering GND brought bytes in, but frames still
+   didn't decode (`uart_ok` stayed false).
+2. Firmware had `RADAR_BAUD` hardcoded to 256000 (the datasheet default), but this specific
+   module's actual configured baud — read directly off the module via the official HLK-LD2410
+   BLE app (Bluetooth link, independent of the S2's UART) — was 115200. Changing `RADAR_BAUD` to
+   match fixed decoding immediately (`uart_ok:true`, real `moving_dist_cm`/`moving_energy`
+   values).
+
+**Diagnostic method that worked**: added a temporary `ESP_LOGI` in `ld2410_task()` logging raw
+byte count + last-valid-frame age every 2s. This separates "wire/GND dead" (0 bytes) from
+"wire fine but baud/frame mismatch" (bytes arrive, 0 valid frames) — don't guess between these,
+instrument and read the real number. Removed after diagnosis; don't leave debug logs in
+production `ld2410.c`.
+
+**Lesson**: BLE-based radar apps (HLK-LD2410 config tool) validate the sensor chip itself, NOT
+the UART link to your host board — they use a completely separate radio path. A working BLE app
+reading does not rule out a dead/misconfigured UART. Check the UART baud directly against the
+module (BLE app config screen), don't trust the datasheet default once a module has been
+field-configured or is a different revision.
 
 ---
 

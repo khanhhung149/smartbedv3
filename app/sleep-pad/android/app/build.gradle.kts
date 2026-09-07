@@ -6,7 +6,9 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
+    // TẠM TẮT: thiếu google-services.json thật trên máy này, chỉ để build APK test kết nối
+    // Jetson. Bật lại khi có file thật (mất push notification ở build tạm này).
+    // id("com.google.gms.google-services")
 }
 
 val keystoreProperties = Properties()
