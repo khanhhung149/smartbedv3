@@ -26,6 +26,11 @@ services:
       # sống qua recreate container — chính lúc đổi cấu hình để thu lại là lúc container bị tạo
       # lại. Chỉ ghi khi VOICE_RECORD_DIR được set (mặc định tắt).
       - voice-records:/records
+    networks:
+      - default
+      # Broker nằm ở stack cloud/mqtt. Nối chung network để gọi bằng tên `home-mqtt`
+      # thay vì host.docker.internal (xem chú thích trong cloud/mqtt/docker-compose.yml).
+      - smartbed-mqtt
     depends_on:
       - asr
 
@@ -47,6 +52,13 @@ services:
       # Mẫu WAV để chấm điểm model. Named volume chứ KHÔNG bind mount: bộ mẫu phải sống qua
       # recreate container, vì chính lúc đổi ASR_MODEL để so sánh là lúc container bị tạo lại.
       - asr-samples:/samples
+
+networks:
+  default:
+  # Do cloud/mqtt tạo. Phải `docker compose up -d` ở cloud/mqtt TRƯỚC.
+  smartbed-mqtt:
+    name: smartbed-mqtt
+    external: true
 
 volumes:
   asr-model-cache:

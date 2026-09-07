@@ -114,3 +114,10 @@ backend/
 
 `.gitignore` excludes `.env.dev`, `.env.prod`, `secrets/`, `mosquitto/passwords`. Double-check before `git add`.
 # CI/CD smoke test marker — 2026-05-05 01:48
+
+## Chạy Test
+Các test cases nằm trong thư mục `tests`. Để chạy test cho ứng dụng, thực thi các lệnh sau từ máy host:
+```bash
+docker compose exec fastapi pip install -q -r /requirements-dev.txt
+docker compose exec -w /app fastapi python -m pytest /tests -q
+```

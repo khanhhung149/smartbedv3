@@ -19,3 +19,12 @@ services:
 volumes:
   mosquitto-data:
   mosquitto-log:
+
+# Network có TÊN CỐ ĐỊNH để stack backend (cloud/presence-ac) nối vào được.
+# Trước đây backend trỏ broker qua host.docker.internal. Đo 20/08: trên Docker Desktop đường đó
+# KHÔNG tới nơi — proxy cổng accept rồi treo ở SYN_SENT, nên `nc`/`netstat` vẫn báo cổng mở trong
+# khi broker không hề nhận được kết nối nào. Container gọi nhau thẳng qua network chung thì không
+# đi qua proxy đó, và cũng không phụ thuộc IP máy host.
+networks:
+  default:
+    name: smartbed-mqtt

@@ -18,7 +18,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Mount cả thư mục, không chỉ init.sql: các file DDL còn lại
+      # (samples.sql, sleep_sessions.sql, smart_watch_data.sql) trước đây phải
+      # chạy tay, và bảng samples đã bị bỏ sót — subscriber ném lỗi mỗi giây.
+      # Postgres chạy các file trong thư mục này theo thứ tự tên, init.sql đứng đầu.
+      - ./postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s

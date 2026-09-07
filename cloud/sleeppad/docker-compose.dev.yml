@@ -33,8 +33,8 @@ services:
     ports:
       - "${FASTAPI_HOST_PORT:-8000}:8000"
     volumes:
-      - ./app:/app                              # hot-reload source code
-      # Seed/maintenance scripts run in here rather than on the host: the image
-      # already has asyncpg and DATABASE_URL, so no host venv is needed.
+      - ./app:/app
       - ./scripts:/app/scripts:ro
+      - ./tests:/tests:ro
+      - ./requirements-dev.txt:/requirements-dev.txt:ro
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

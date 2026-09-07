@@ -6,7 +6,7 @@ Broker: **Mosquitto 2** chạy qua Docker. LAN nội bộ, chưa dùng TLS.
 ## Cài đặt lần đầu
 
 ```bash
-cd firmware/mqtt
+cd cloud/mqtt
 
 # 1. Tạo user + password (tạo file ./passwd). Đổi <user> theo ý bạn.
 #    Cần mosquitto-clients trên host, HOẶC chạy qua image:
