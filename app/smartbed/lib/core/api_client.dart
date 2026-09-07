@@ -60,6 +60,11 @@ class ApiClient {
     int limit = 30,
   }) async {
     final res = await _get('/sessions', {'device_id': deviceId, 'limit': limit});
+    // Thiết bị chưa có phiên nào là chuyện bình thường, không phải lỗi — backend
+    // đã sửa để trả `[]`, nhưng client không nên nổ nếu gặp `null`. Ép thẳng sang
+    // List từng làm app văng "type 'Null' is not a subtype of type 'List<dynamic>'"
+    // ngay khi trỏ vào một pad mới chưa qua đêm nào.
+    if (res == null) return const [];
     return (res as List).cast<Map<String, dynamic>>();
   }
 

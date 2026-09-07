@@ -194,7 +194,7 @@ class _HeroCard extends ConsumerWidget {
               Expanded(
                   child: _MiniStat(
                       icon: Icons.ac_unit_rounded,
-                      value: snap.acDesired ? 'Bật' : 'Tắt',
+                      value: snap.acEffectiveOn ? 'Bật' : 'Tắt',
                       label: 'Điều hoà')),
               const SizedBox(width: 10),
               Expanded(
@@ -317,7 +317,7 @@ class _AcCardState extends ConsumerState<_AcCard> {
 
   @override
   Widget build(BuildContext context) {
-    final on = widget.snap.acDesired;
+    final on = widget.snap.acEffectiveOn;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

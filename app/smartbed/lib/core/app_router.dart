@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/realtime/realtime_screen.dart';
 import '../features/radar/radar_root_screen.dart';
 import '../features/radar/screens/settings_screen.dart';
 import '../features/session_detail/session_detail_screen.dart';
@@ -30,6 +31,14 @@ GoRouter buildRouter() => GoRouter(
                       builder: (context, state) => const SettingsScreen(),
                     ),
                   ],
+                ),
+              ],
+            ),
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/realtime',
+                  builder: (context, state) => const RealtimeScreen(),
                 ),
               ],
             ),
@@ -73,6 +82,11 @@ class _AppShell extends StatelessWidget {
             icon: Icon(Icons.bedtime_outlined),
             selectedIcon: Icon(Icons.bedtime),
             label: 'Giấc ngủ',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.monitor_heart_outlined),
+            selectedIcon: Icon(Icons.monitor_heart),
+            label: 'Trực tiếp',
           ),
           NavigationDestination(
             icon: Icon(Icons.sensors_outlined),

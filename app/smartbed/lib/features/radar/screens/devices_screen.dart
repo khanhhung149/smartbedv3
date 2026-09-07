@@ -17,6 +17,15 @@ class DevicesScreen extends ConsumerWidget {
     final devices = ref.watch(radarDevicesProvider);
     final states = ref.watch(radarDeviceStatesProvider).value ?? const {};
     final connected = ref.watch(radarMqttConnectedProvider).value ?? false;
+    // Thiết bị tự dò thấy qua MQTT (tele/stat/+/#) hiện luôn kèm số liệu, chưa cần
+    // bấm "Thêm thiết bị". Topic lấy thẳng từ tin nhắn thật — khỏi nhập tay.
+    final discovered = ref.watch(radarDiscoveredTopicsProvider).value ?? const [];
+    final added = devices.map((d) => d.topic).toSet();
+    final auto = [
+      for (final t in discovered)
+        if (!added.contains(t)) MqttDevice(topic: t, name: t),
+    ];
+    final visible = [...devices, ...auto];
 
     return SafeArea(
       bottom: false,
@@ -49,12 +58,15 @@ class DevicesScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           _ConnBanner(connected: connected),
           const SizedBox(height: 16),
-          if (devices.isEmpty)
+          if (visible.isEmpty)
             const _EmptyState()
           else
-            ...devices.map((d) => Padding(
+            ...visible.map((d) => Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: _DeviceCard(device: d, state: states[d.topic]),
+                  child: _DeviceCard(
+                      device: d,
+                      state: states[d.topic],
+                      auto: !added.contains(d.topic)),
                 )),
           const SizedBox(height: 6),
           FilledButton.icon(
@@ -137,7 +149,9 @@ class _EmptyState extends StatelessWidget {
 class _DeviceCard extends ConsumerWidget {
   final MqttDevice device;
   final DeviceState? state;
-  const _DeviceCard({required this.device, required this.state});
+  final bool auto; // tự dò thấy qua MQTT, chưa được thêm/lưu vào danh sách
+  const _DeviceCard(
+      {required this.device, required this.state, this.auto = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -201,19 +215,28 @@ class _DeviceCard extends ConsumerWidget {
                 ),
               ),
               _OnlineDot(online: online),
-              PopupMenuButton<String>(
-                onSelected: (v) {
-                  if (v == 'remove') {
-                    ref.read(radarDevicesProvider.notifier).remove(device.topic);
-                  } else if (v == 'rename') {
-                    _rename(context, ref);
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
-                  PopupMenuItem(value: 'remove', child: Text('Xoá')),
-                ],
-              ),
+              if (auto)
+                TextButton.icon(
+                  onPressed: () => ref
+                      .read(radarDevicesProvider.notifier)
+                      .add(MqttDevice(topic: device.topic, name: device.topic)),
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                  label: const Text('Lưu'),
+                )
+              else
+                PopupMenuButton<String>(
+                  onSelected: (v) {
+                    if (v == 'remove') {
+                      ref.read(radarDevicesProvider.notifier).remove(device.topic);
+                    } else if (v == 'rename') {
+                      _rename(context, ref);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'rename', child: Text('Đổi tên')),
+                    PopupMenuItem(value: 'remove', child: Text('Xoá')),
+                  ],
+                ),
             ],
           ),
           const SizedBox(height: 14),

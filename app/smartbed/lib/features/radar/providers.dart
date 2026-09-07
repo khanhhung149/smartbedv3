@@ -16,7 +16,7 @@ import 'services/ws_client.dart';
 /// test là chạy được ngay, không phải gõ tay IP trong Cài đặt. Không đặt thì giữ mặc định cũ.
 const kDefaultBaseUrl = String.fromEnvironment(
   'RADAR_BASE_URL',
-  defaultValue: 'http://192.168.1.120:8080',
+  defaultValue: 'http://192.168.1.125:8080',
 );
 const _prefsKeyBaseUrl = 'radar.base_url';
 
@@ -108,17 +108,28 @@ const _prefsMqttUser = 'radar.mqtt_user';
 const _prefsMqttPass = 'radar.mqtt_pass';
 const _prefsDevices = 'radar.devices';
 
-/// Broker mặc định = cùng máy chạy backend (192.168.1.120), cổng MQTT chuẩn.
+/// Broker mặc định = cùng máy chạy backend (192.168.1.125, Jetson), cổng MQTT chuẩn.
 /// User/pass để trống — user tự nhập ở Cài đặt (đây là bí mật, không nhúng sẵn).
+/// Nạp được từ `--dart-define` lúc build, cùng lý do như [kDefaultBaseUrl]: một bản APK phát
+/// cho người test là dùng được ngay. Không truyền thì giữ nguyên mặc định cũ, và user/pass vẫn
+/// rỗng nên không có bí mật nào nằm trong repo.
+const kDefaultMqttHost = String.fromEnvironment(
+  'RADAR_MQTT_HOST',
+  defaultValue: '192.168.1.125',
+);
+const kDefaultMqttPort = int.fromEnvironment('RADAR_MQTT_PORT', defaultValue: 1883);
+const kDefaultMqttUser = String.fromEnvironment('RADAR_MQTT_USER', defaultValue: '');
+const kDefaultMqttPass = String.fromEnvironment('RADAR_MQTT_PASS', defaultValue: '');
+
 class RadarMqttConfigNotifier extends Notifier<MqttConfig> {
   @override
   MqttConfig build() {
     final p = ref.watch(sharedPrefsProvider);
     return MqttConfig(
-      host: p.getString(_prefsMqttHost) ?? '192.168.1.120',
-      port: p.getInt(_prefsMqttPort) ?? 1883,
-      username: p.getString(_prefsMqttUser) ?? '',
-      password: p.getString(_prefsMqttPass) ?? '',
+      host: p.getString(_prefsMqttHost) ?? kDefaultMqttHost,
+      port: p.getInt(_prefsMqttPort) ?? kDefaultMqttPort,
+      username: p.getString(_prefsMqttUser) ?? kDefaultMqttUser,
+      password: p.getString(_prefsMqttPass) ?? kDefaultMqttPass,
     );
   }
 

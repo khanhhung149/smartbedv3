@@ -11,6 +11,18 @@ class Snapshot {
   /// Lệnh AC backend MUỐN (chưa chắc điều hoà đã nhận — chưa có phản hồi ngược).
   final bool acDesired;
 
+  /// Trạng thái voice-node TỰ BÁO qua home/room/ac_state sau mỗi lần bắn IR.
+  /// Khác `acDesired`: đây là thứ board nói nó vừa gửi đi, không phải lệnh của người dùng.
+  /// Auto (radar có người) KHÔNG đi qua ac_cmd nên chỉ `ac_reported_*` phản ánh được
+  /// trạng thái thật — nếu hiện acDesired thì switch app hiện sai khi radar tự bật/tắt.
+  final bool acStateKnown;
+  final bool acReportedOn;
+  final int acReportedTemp;
+
+  /// Giá trị DÙNG ĐỂ HIỂN THỊ: ưu tiên trạng thái thật do board báo, chưa biết thì
+  /// quay về acDesired (ý định mong muốn).
+  bool get acEffectiveOn => acStateKnown ? acReportedOn : acDesired;
+
   /// Epoch giây từ thiết bị. 0 = thiết bị publish trước khi NTP sync → KHÔNG có giờ thật.
   final int lastMotionTs;
   final int lastPresenceTs;
@@ -21,6 +33,9 @@ class Snapshot {
     required this.present,
     required this.occupied,
     required this.acDesired,
+    this.acStateKnown = false,
+    this.acReportedOn = false,
+    this.acReportedTemp = 0,
     required this.lastMotionTs,
     required this.lastPresenceTs,
     required this.lastAcCmd,
@@ -30,6 +45,9 @@ class Snapshot {
         present: j['present'] as bool? ?? false,
         occupied: j['occupied'] as bool? ?? false,
         acDesired: j['ac_desired'] as bool? ?? false,
+        acStateKnown: j['ac_state_known'] as bool? ?? false,
+        acReportedOn: j['ac_reported_on'] as bool? ?? false,
+        acReportedTemp: (j['ac_reported_temp'] as num?)?.toInt() ?? 0,
         lastMotionTs: (j['last_motion_ts'] as num?)?.toInt() ?? 0,
         lastPresenceTs: (j['last_presence_ts'] as num?)?.toInt() ?? 0,
         lastAcCmd: j['last_ac_cmd'] as String? ?? '',

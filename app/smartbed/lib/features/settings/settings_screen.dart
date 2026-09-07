@@ -55,8 +55,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 controller: _baseUrl,
                 decoration: const InputDecoration(
                   labelText: 'Địa chỉ backend',
-                  helperText: 'Emulator Android: http://10.0.2.2:8000 · '
-                      'Máy thật: http://<IP LAN của máy chủ>:8000',
+                  helperText: 'Backend Go, phải kết thúc bằng /api. '
+                      'Máy thật hoặc LDPlayer: http://<IP máy chủ>:8080/api',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.url,
@@ -69,17 +69,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _devToken,
-                decoration: const InputDecoration(
-                  labelText: 'Dev token (JWT)',
-                  helperText: 'Lấy bằng POST /auth/login. Hạn 30 ngày.',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
+              // Ô nhập Dev token bị ẩn: backend Go là dịch vụ chỉ-LAN và KHÔNG kiểm
+              // Authorization (xem docs/sleep-session-api-contract.md), nên để ô đó
+              // chỉ khiến người test tưởng phải đi lấy token mới dùng được app.
+              // Trường devToken trong AppConfig vẫn giữ — đích kiến trúc là cloud
+              // có auth ở phase-06, lúc đó chỉ cần hiện lại ô này.
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: () async {
