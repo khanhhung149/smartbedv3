@@ -139,3 +139,36 @@ def test_recent_silence_leaves_the_session_open():
     samples = run([(3600, True)])
     out = build_sessions(samples, now=samples[-1].t + timedelta(minutes=5))
     assert out[0].ended_at is None
+
+
+def test_jitter_duoi_nguong_khong_lam_hong_viec_mo_phien():
+    """Mẫu 1 Hz lệch vài chục mili-giây vẫn phải mở được phiên.
+
+    Cột `time` do backend đóng dấu lúc nhận, nên một luồng khoẻ vẫn cho ra
+    1,02s / 1,05s / 1,1s. Bản trước coi mọi khoảng > 1,0s là mất dữ liệu và xoá
+    chuỗi đang chờ, nên trên pad thật chuỗi liên tục dài nhất chỉ 4 giây và phiên
+    không bao giờ mở. Dựng lại đúng hình dạng đó ở đây.
+    """
+    samples = [
+        Sample(t=T0 + timedelta(milliseconds=int(i * 1050)), hr=60, rr=15.0, status=None)
+        for i in range(120)
+    ]
+    windows = build_sessions(samples, now=samples[-1].t)
+
+    assert len(windows) == 1, "jitter 1,05s/mẫu phải mở được đúng một phiên"
+    assert windows[0].started_at == samples[0].t
+    assert windows[0].ended_at is None, "vẫn đang nằm thì phiên phải còn mở"
+
+
+def test_mat_han_mot_mau_van_tinh_la_dut():
+    """Trên ngưỡng thì phải giữ nguyên hành vi cũ — nới jitter không được nới thật.
+
+    Một khoảng 5 giây là mất mẫu thật, phải cắt chuỗi đang chờ nên 20 giây trước
+    đó không cộng dồn vào 20 giây sau để thành 40 giây đủ mở phiên.
+    """
+    truoc = [Sample(t=T0 + timedelta(seconds=i), hr=60, rr=15.0, status=None) for i in range(20)]
+    sau = [Sample(t=T0 + timedelta(seconds=25 + i), hr=60, rr=15.0, status=None) for i in range(20)]
+
+    windows = build_sessions(truoc + sau, now=sau[-1].t)
+
+    assert windows == [], "khoảng đứt 5 giây phải chặn việc cộng dồn hai đoạn 20 giây"

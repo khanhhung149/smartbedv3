@@ -116,9 +116,13 @@ async def _handle_message(pool: asyncpg.Pool, rds: redis.Redis, msg) -> None:
         if payload is None or payload.device_id != device_id:
             return
         await _insert_sec(pool, now, payload)
-        await _insert_sample(pool, device_id, payload, _latest_motion(device_id), _latest_env(device_id))
+        # Cờ online và kênh realtime đi TRƯỚC bảng samples. Thứ tự cũ đặt
+        # _insert_sample lên trên, nên khi bảng samples chưa được tạo thì mỗi
+        # frame ném lỗi ngay tại đó: last_seen đứng im và màn hình realtime
+        # không nhận gì suốt cả đêm, dù sec_data vẫn ghi đủ.
         await _mark_online(pool, rds, device_id, now)
         await rds.publish(f"realtime:{device_id}", payload.model_dump_json())
+        await _insert_sample(pool, device_id, payload, _latest_motion(device_id), _latest_env(device_id))
     elif topic.endswith("/min"):
         payload = parse_min(msg.payload)
         if payload is None or payload.device_id != device_id:

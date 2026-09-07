@@ -26,6 +26,17 @@ SESSION_OPEN_SECONDS = 30
 SESSION_CLOSE_SECONDS = 1800
 SESSION_MAX_MINUTES = 1440
 
+# Khoảng cách giữa hai mẫu vượt ngưỡng này mới coi là mất dữ liệu.
+#
+# KHÔNG được đặt bằng 1.0. Cột `time` do backend đóng dấu lúc nhận, nên một luồng
+# 1 Hz hoàn toàn khoẻ vẫn cho ra 1,02s / 1,05s / 1,1s. Đo trên pad thật: 182/299
+# khoảng nằm trên 1,000s trong khi khoảng dài nhất chỉ 1,1s. Với ngưỡng 1.0, chuỗi
+# liên tục dài nhất là 4 giây — dưới xa mức 30 giây cần để mở phiên, nên phiên
+# không bao giờ mở và mọi báo cáo giấc ngủ đều rỗng.
+#
+# 2.0s = đã mất trọn một mẫu. Dưới mức đó là jitter đường truyền, không phải rời giường.
+SESSION_GAP_TOLERANCE_SECONDS = 2.0
+
 # Event codes from p.4 §2.4.1 that the summary counts.
 STATUS_SIT_UP = 0x03
 STATUS_AWAKE = 0x05
@@ -67,6 +78,7 @@ def build_sessions(
     open_seconds: int = SESSION_OPEN_SECONDS,
     close_seconds: int = SESSION_CLOSE_SECONDS,
     max_minutes: int = SESSION_MAX_MINUTES,
+    gap_tolerance_seconds: float = SESSION_GAP_TOLERANCE_SECONDS,
 ) -> list[SessionWindow]:
     """Turn an ordered run of per-second samples into session windows.
 
@@ -77,7 +89,9 @@ def build_sessions(
       every night by half an hour.
     * A hole in the data counts as time out of bed. The sensor publishes once a
       second while occupied, so a gap is absence of evidence of presence, and
-      inventing presence across it would be fabricating a reading.
+      inventing presence across it would be fabricating a reading. "Hole" means
+      longer than `gap_tolerance_seconds`, not longer than one second — see the
+      constant for why that distinction decides whether any session opens at all.
     * Hitting the 1440-minute cap ends the recording but not the occupancy —
       someone still in bed starts a fresh session at the cut.
 
@@ -120,7 +134,7 @@ def build_sessions(
     for s in samples:
         # A gap between consecutive rows is absence starting at the last known
         # second, so a dropout closes a session exactly like leaving the bed.
-        if prev_t is not None and (s.t - prev_t).total_seconds() > 1:
+        if prev_t is not None and (s.t - prev_t).total_seconds() > gap_tolerance_seconds:
             if started_at is not None:
                 if absent_since is None:
                     absent_since = prev_t

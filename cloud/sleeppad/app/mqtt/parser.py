@@ -7,9 +7,12 @@ Topics:
   sleeppad/{device_id}/status → online/offline LWT (raw string)
 """
 
+import logging
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class SecDataPayload(BaseModel):
@@ -71,19 +74,28 @@ def to_timestamptz(ts: int) -> datetime:
 def parse_sec(raw: bytes | str) -> SecDataPayload | None:
     try:
         return SecDataPayload.model_validate_json(raw)
-    except ValidationError:
+    except ValidationError as exc:
+        # Log chứ không nuốt: một frame sec sai bound mà im lặng thì
+        # không phân biệt được với việc thiết bị chưa gửi frame nào.
+        logger.warning("loại frame sec không hợp lệ: %s", exc)
         return None
 
 
 def parse_min(raw: bytes | str) -> MinDataPayload | None:
     try:
         return MinDataPayload.model_validate_json(raw)
-    except ValidationError:
+    except ValidationError as exc:
+        # Log chứ không nuốt: một frame min sai bound mà im lặng thì
+        # không phân biệt được với việc thiết bị chưa gửi frame nào.
+        logger.warning("loại frame min không hợp lệ: %s", exc)
         return None
 
 
 def parse_env(raw: bytes | str) -> EnvDataPayload | None:
     try:
         return EnvDataPayload.model_validate_json(raw)
-    except ValidationError:
+    except ValidationError as exc:
+        # Log chứ không nuốt: một frame temp sai bound mà im lặng thì
+        # không phân biệt được với việc thiết bị chưa gửi frame nào.
+        logger.warning("loại frame temp không hợp lệ: %s", exc)
         return None

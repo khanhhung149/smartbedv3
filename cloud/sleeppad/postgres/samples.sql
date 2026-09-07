@@ -49,4 +49,11 @@ CREATE INDEX IF NOT EXISTS idx_samples_device_time ON samples (device_id, t DESC
 SELECT add_retention_policy('samples', INTERVAL '30 days', if_not_exists => TRUE);
 
 -- Nén chunk cũ hơn 1 ngày (giảm dung lượng ổ đĩa + tăng tốc đọc lịch sử).
+-- Bật columnstore trước là bắt buộc: add_compression_policy trên bảng chưa bật
+-- sẽ báo "columnstore not enabled" và bỏ qua chính sách nén.
+ALTER TABLE samples SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device_id',
+  timescaledb.compress_orderby   = 't DESC'
+);
 SELECT add_compression_policy('samples', INTERVAL '1 day', if_not_exists => TRUE);

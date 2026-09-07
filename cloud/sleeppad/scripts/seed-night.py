@@ -103,7 +103,7 @@ async def main() -> None:
             args.device_id, owner, f"seed {args.device_id}",
         )
 
-        sec_rows, min_rows = [], []
+        sec_rows, min_rows, snore_voice_rows = [], [], []
         snore_from, snore_to = int(total_seconds * 0.35), int(total_seconds * 0.45)
 
         for i in range(total_seconds):
@@ -128,6 +128,8 @@ async def main() -> None:
                     status = 0x05                        # 05 = awake
                 elif snore_from <= i < snore_to and i % 37 == 0:
                     status = 0x07                        # 07 = snoring
+                    # Also insert voice node snore event
+                    snore_voice_rows.append((t, i * 1000, 0.85, 1200))
                 elif i % 900 == 0:
                     status = 0x02                        # 02 = movement
                 if args.zero_hr_half and i >= half:
@@ -152,6 +154,10 @@ async def main() -> None:
                 f"DELETE FROM {table} WHERE device_id = $1 AND time >= $2 AND time < $3",
                 args.device_id, start, stop,
             )
+        await conn.execute(
+            "DELETE FROM room_snore_events WHERE t >= $1 AND t < $2",
+            start, stop,
+        )
 
         await conn.copy_records_to_table(
             "sec_data", records=sec_rows,
@@ -164,6 +170,11 @@ async def main() -> None:
                      "movement", "snore_count", "resp_disorder", "pthd", "temp",
                      "received_at"],
         )
+        if snore_voice_rows:
+            await conn.copy_records_to_table(
+                "room_snore_events", records=snore_voice_rows,
+                columns=["t", "device_ms", "confidence", "duration_ms"],
+            )
         print(
             f"seeded {len(sec_rows)} sec + {len(min_rows)} min rows "
             f"for {args.device_id} from {start.isoformat()} to {stop.isoformat()}"

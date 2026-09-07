@@ -55,27 +55,101 @@ async def _load_samples(
 
 async def _summarize(
     pool: asyncpg.Pool, device_id: str, start: datetime, end: datetime
-) -> asyncpg.Record | None:
-    """Aggregate min_data over one session window.
+) -> dict:
+    """Aggregate one session window, taking each channel from where it exists.
+
+    Vitals come from sec_data, not min_data. The LSM-800-T pad speaks the TAOSG
+    protocol — a 66-byte block once a second — and emits no per-minute frame at
+    all, so min_data stays empty forever for it and a summary built on min_data
+    alone reports every vital as NULL. sec_data also carries heart rate and
+    respiration at 1 Hz, which is a finer average over the same window than the
+    per-minute frame ever was.
+
+    Movement, snoring and respiratory-disorder counts come from the per-second
+    event codes in sec_data.status (2 = movement, 7 = snoring, 8 = weak
+    breathing), counted as episodes rather than seconds. min_data carried the
+    same three channels as per-minute totals, but this pad never fills it.
 
     FILTER (WHERE ... > 0) is mandatory, not cosmetic: p.4 2.4.1 says the pad
     reports 0 when it cannot measure, so averaging those in would drag every
     night's heart rate toward zero in proportion to time spent out of bed.
     """
-    return await pool.fetchrow(
+    vitals = await pool.fetchrow(
         """
         SELECT (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr_avg,
-                MIN(heart_rate) FILTER (WHERE heart_rate > 0)         AS hr_min,
-                MAX(heart_rate) FILTER (WHERE heart_rate > 0)         AS hr_max,
-               (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real  AS rr_avg,
-               SUM(movement)::int                                        AS movement_total,
-               SUM(snore_count)::int                                     AS snore_total,
-               SUM(resp_disorder)::int                                   AS resp_disorder_total
-        FROM min_data
+                MIN(heart_rate) FILTER (WHERE heart_rate > 0)        AS hr_min,
+                MAX(heart_rate) FILTER (WHERE heart_rate > 0)        AS hr_max,
+               (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real AS rr_avg
+        FROM sec_data
         WHERE device_id = $1 AND time >= $2 AND time < $3
         """,
         device_id, start, end,
     )
+    # Đếm ĐỢT, không đếm giây: một lần trở mình kéo dài vài giây vẫn là một lần.
+    # Mỗi giây mang mã sự kiện của riêng nó (p.4 §2.4.1), nên một đợt = một giây
+    # có mã X mà giây liền trước không có mã X.
+    #
+    # Nguồn là sec_data chứ không phải min_data, cùng lý do như phần sinh hiệu ở
+    # trên: pad LSM-800-T không phát khung phút nên min_data rỗng vĩnh viễn, và
+    # ô "Trở mình" trong app hiện dấu gạch dù đêm 21/08 có 570 giây mang mã 2.
+    #
+    # snore_total — Sensor Fusion (Voice Node + Pad):
+    # Không còn dùng status=7 của đệm rung (kém nhạy). Thay vào đó:
+    # 1. Lấy sự kiện ngáy từ room_snore_events (Voice Node, AI).
+    # 2. Kẹp điều kiện: đệm phải đang báo heart_rate > 0 (có người nằm).
+    #    → Loại bỏ tiếng ồn phòng trống, tiếng ngáy người khác ở phòng bên cạnh.
+    # 3. Hệ số quy đổi: 1 event = 30s = 0.5 phút. CHƯA CALIBRATE bằng ngáy thật —
+    #    con số 0,5 chỉ suy từ thiết kế firmware (3 cửa sổ 1s liên tiếp mới xác
+    #    nhận một event). 80 sự kiện dùng để "kiểm" hôm 21/08 hoá ra là script
+    #    mosquitto_pub lặp mỗi 37s (77/78 khoảng cách bằng đúng 37,0s — không
+    #    cảm biến âm thanh thật nào đều vậy), nên KHÔNG phải bằng chứng calibration
+    #    thật. Phải đo lại bằng tiếng ngáy thật trước khi tin số phút này.
+    counters = await pool.fetchrow(
+        """
+        WITH s AS (
+            SELECT status, LAG(status) OVER (ORDER BY time) AS truoc
+            FROM sec_data
+            WHERE device_id = $1 AND time >= $2 AND time < $3
+        )
+        SELECT COUNT(*) FILTER (WHERE status = 2 AND truoc IS DISTINCT FROM 2)::int
+                   AS movement_total,
+               COUNT(*) FILTER (WHERE status = 8 AND truoc IS DISTINCT FROM 8)::int
+                   AS resp_disorder_total
+        FROM s
+        """,
+        device_id, start, end,
+    )
+
+    # Đếm số phút có người nằm trên đệm (dùng làm tập hợp để giao với snore events).
+    # Dùng date_trunc('minute') để gom theo phút — khớp với granularity của timeline.
+    occupied_minutes_rows = await pool.fetch(
+        """
+        SELECT DISTINCT date_trunc('minute', time) AS minute
+        FROM sec_data
+        WHERE device_id = $1 AND time >= $2 AND time < $3 AND heart_rate > 0
+        """,
+        device_id, start, end,
+    )
+    occupied_minutes = {r["minute"] for r in occupied_minutes_rows}
+
+    # Lấy tất cả sự kiện ngáy từ Voice Node trong khung giờ này.
+    snore_rows = await pool.fetch(
+        "SELECT t FROM room_snore_events WHERE t >= $1 AND t < $2",
+        start, end,
+    )
+    # Logic AND (Sensor Fusion): chỉ tính tiếng ngáy khi đệm đang có người nằm.
+    # 1 event = 0.5 phút ngáy — xem cảnh báo "CHƯA CALIBRATE" phía trên _summarize.
+    snore_events_on_bed = sum(
+        1 for r in snore_rows
+        if r["t"].replace(second=0, microsecond=0) in occupied_minutes
+    )
+    snore_total_minutes = round(snore_events_on_bed * 0.5)
+
+    return {
+        **dict(vitals or {}),
+        **dict(counters or {}),
+        "snore_total": snore_total_minutes,
+    }
 
 
 async def rebuild_device(pool: asyncpg.Pool, device_id: str, since: datetime) -> int:
@@ -126,13 +200,13 @@ async def rebuild_device(pool: asyncpg.Pool, device_id: str, since: datetime) ->
               computed_at         = now()
             """,
             device_id, w.started_at, w.ended_at, duration,
-            row["hr_avg"] if row else None,
-            row["hr_min"] if row else None,
-            row["hr_max"] if row else None,
-            row["rr_avg"] if row else None,
-            row["movement_total"] if row else None,
-            row["snore_total"] if row else None,
-            row["resp_disorder_total"] if row else None,
+            row.get("hr_avg"),
+            row.get("hr_min"),
+            row.get("hr_max"),
+            row.get("rr_avg"),
+            row.get("movement_total"),
+            row.get("snore_total"),
+            row.get("resp_disorder_total"),
             w.sit_up_count, w.wake_count,
         )
     return len(windows)
@@ -203,10 +277,7 @@ async def get_timeline(
     minute_rows = await pool.fetch(
         f"""
         SELECT time_bucket('{interval}', time) AS t,
-               (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr,
-               (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real AS rr,
                SUM(movement)::int      AS movement,
-               SUM(snore_count)::int   AS snore,
                SUM(resp_disorder)::int AS resp_disorder
         FROM min_data
         WHERE device_id = $1 AND time >= $2 AND time < $3
@@ -215,14 +286,17 @@ async def get_timeline(
         device_id, start, stop,
     )
 
-    # Occupancy and event codes live in sec_data, so they come from a second
-    # query bucketed the same way and are joined in Python — cheaper to read
-    # than a nested aggregate, and it keeps each query on its own index.
+    # Vitals, occupancy and event codes all come from sec_data, bucketed the
+    # same way and joined in Python — cheaper to read than a nested aggregate,
+    # and it keeps each query on its own index. min_data above contributes only
+    # the channels sec_data has no equivalent for.
     sec_rows = await pool.fetch(
         f"""
         SELECT time_bucket('{interval}', time) AS t,
                MAX(heart_rate)                    AS hr_max,
                MAX(resp_rate)                     AS rr_max,
+               (AVG(heart_rate) FILTER (WHERE heart_rate > 0))::real AS hr,
+               (AVG(resp_rate)  FILTER (WHERE resp_rate  > 0))::real AS rr,
                array_agg(DISTINCT status) FILTER (WHERE status IS NOT NULL) AS events
         FROM sec_data
         WHERE device_id = $1 AND time >= $2 AND time < $3
@@ -232,23 +306,53 @@ async def get_timeline(
     )
     sec_by_t = {r["t"]: r for r in sec_rows}
 
+    # Phase 02 — Sensor Fusion cho Timeline:
+    # Lấy tất cả sự kiện ngáy từ Voice Node trong khung giờ.
+    # Gom vào dict theo time_bucket (giống interval) trong Python — tránh JOIN chéo DB.
+    # Chỉ gài mã sự kiện 7 ("Ngáy") vào bucket nếu đệm đang báo on_bed (hr_max > 0).
+    snore_voice_rows = await pool.fetch(
+        f"""
+        SELECT time_bucket('{interval}', t) AS bucket,
+               COUNT(*)::int AS cnt
+        FROM room_snore_events
+        WHERE t >= $1 AND t < $2
+        GROUP BY bucket
+        """,
+        start, stop,
+    )
+    snore_by_bucket = {r["bucket"]: r["cnt"] for r in snore_voice_rows}
+
     points: list[dict] = []
-    for t in sorted({*(r["t"] for r in minute_rows), *sec_by_t}):
+    for t in sorted({*(r["t"] for r in minute_rows), *sec_by_t, *snore_by_bucket}):
         m = next((r for r in minute_rows if r["t"] == t), None)
         s = sec_by_t.get(t)
         # bed_state comes from the same hr/rr rule the session builder uses, not
         # from `status` — no status code means "currently in bed" (p.4 2.4.1).
         on_bed = bool(s) and is_on_bed(s["hr_max"], s["rr_max"])
+
+        # Mã sự kiện 7 ("Ngáy") từ Voice Node: chỉ gài vào nếu đệm on_bed.
+        # Không thêm 7 vào khi phòng trống để tránh nhiễu môi trường.
+        base_events = sorted(s["events"]) if s and s["events"] else []
+        voice_snore_count = snore_by_bucket.get(t, 0)
+        if on_bed and voice_snore_count > 0 and 7 not in base_events:
+            base_events = sorted(base_events + [7])
+
         points.append(
             {
                 "t": t,
-                "hr": m["hr"] if m else None,
-                "rr": m["rr"] if m else None,
+                # hr/rr từ sec_data (1 Hz) chứ không phải min_data: pad LSM-800-T
+                # nói giao thức TAOSG, không phát khung phút, nên min_data rỗng
+                # vĩnh viễn và biểu đồ nhịp tim của một đêm sẽ trống trơn.
+                "hr": s["hr"] if s else None,
+                "rr": s["rr"] if s else None,
                 "movement": m["movement"] if m else None,
-                "snore": m["snore"] if m else None,
+                # snore: số sự kiện Voice Node trong bucket (thay thế min_data.snore_count
+                # vốn luôn rỗng với LSM-800-T). Chỉ tính khi on_bed.
+                "snore": voice_snore_count if on_bed else 0,
                 "resp_disorder": m["resp_disorder"] if m else None,
                 "bed_state": "on_bed" if on_bed else "off_bed",
-                "events": sorted(s["events"]) if s and s["events"] else [],
+                "events": base_events,
             }
         )
     return points
+
