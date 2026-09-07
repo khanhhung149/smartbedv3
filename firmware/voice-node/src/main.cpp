@@ -110,11 +110,12 @@ static const uint32_t EXIT_TIMEOUT_MS = 60000;  // vắng 60s mới tắt (khớ
 // trong app bấm liên tục, và fusion occupancy. Nhịp này là chốt cuối cho MỌI nguồn đó.
 static const uint32_t IR_MIN_GAP_MS = 1500;
 
-// Sau khi có lệnh tay (giọng nói / app), fusion occupancy KHÔNG được tự ghi đè trong khoảng này.
-// Nếu không có: user nói "tắt điều hòa" trong lúc phòng vẫn có người, rồi presence chớp một nhịp
-// là fusion bắn lại "bật" và phủ quyết ý người dùng. Backend statemachine đã có bảo vệ tương đương
-// (xem prevOccupied trong internal/statemachine/machine.go); firmware trước đây thiếu.
-static const uint32_t MANUAL_OVERRIDE_MS = 300000;  // 5 phút
+// Lệnh tay TẮT (giọng nói / app) khoá auto-on cho tới khi phòng trống HẲN một lần
+// (holdOffUntilEmpty). KHÔNG dùng cửa sổ thời gian cố định (trước đây 5 phút): user nói
+// "tắt điều hòa", ngồi trong phòng >5 phút rồi radar chớp một nhịp là fusion bắn lại "bật"
+// và phủ quyết ý người dùng. Với latch, phải thật sự ra khỏi phòng (occupied->false) rồi
+// vào lại hệ mới tự quản lý. Lệnh tay BẬT xoá latch. Backend statemachine có bảo vệ tương
+// đương (xem prevOccupied trong internal/statemachine/machine.go); firmware trước đây thiếu.
 static const uint32_t STATUS_HEARTBEAT_MS = 2000;
 
 static const i2s_port_t I2S_PORT     = I2S_NUM_0;
@@ -374,7 +375,7 @@ float    acTemp         = AC_DEFAULT_TEMP;
 bool     acPowerOn      = false;
 bool     acStateDirty   = true;   // cần publish ac_state (true lúc boot để báo trạng thái đầu)
 uint32_t lastIrSendMs   = 0;      // lần bắn IR cuối, để ép IR_MIN_GAP_MS
-uint32_t lastManualMs   = 0;      // lần lệnh tay cuối (0 = chưa có), để fusion tôn trọng ý user
+bool     holdOffUntilEmpty = false;  // lệnh tay TẮT gần nhất còn hiệu lực: cấm auto-on tới khi phòng trống
 
 uint32_t lastHeartbeatMs = 0;
 
@@ -437,13 +438,47 @@ TaskHandle_t snoreTaskHandle = nullptr;
 // gần đúng ngưỡng 128/255≈0.502 mà recognize_commands.cc repo gốc dùng (họ so trực tiếp uint8 thô,
 // ngầm định zero_point=0/scale=1/255). Số khởi điểm để test kiến trúc — tinh chỉnh khi test tay
 // với âm thanh ngáy thật (xem plans/260812-1401-...-snore-model-integration/phase-02-*.md).
-static const float    SNORE_SCORE_THRESHOLD       = 0.5f;
-static const uint8_t  SNORE_CONSECUTIVE_WINDOWS   = 3;        // ~3s liên tục mới confirm — tránh 1
-                                                               // tiếng động ngắn kích hoạt (temporal
-                                                               // filtering, xem docs mục 6.3/13)
+// Hạ nhẹ xuống 0.45 để bớt bỏ sót lúc test thực địa. Không đòi hit liên tiếp: tiếng ngáy thật
+// thường rời nhịp theo hơi thở, nên dùng hit trong 4 cửa sổ gần nhất (~4s) thay vì liên tục.
+//
+// Tinh chỉnh 24/08 dựa trên dữ liệu thật (n=7 ngáy thật, n=3 nhiễu môi trường, xem
+// plans/260821-1023-.../plan.md Session 4-5): confidence của hai nhóm CHỒNG LẤN HOÀN TOÀN
+// (ngáy 0,461-0,871; nhiễu 0,461-0,98) — không ngưỡng SNORE_SCORE_THRESHOLD nào tách được,
+// nên giữ nguyên 0.45.
+//
+// ĐÃ THỬ 2→3 và REVERT lại 2 (cùng ngày 24/08, Session 6). Giả thuyết "3/4 loại nhiễu ngắn mà
+// không cần biết confidence" SAI khi đo bằng ngáy thật: 90 giây ngáy thật liên tục với 3/4,
+// hit cao nhất quan sát được chỉ 1/3 — 0 sự kiện. Ngưỡng 3 giết luôn khả năng bắt ngáy thật,
+// không có bằng chứng nó lọc nhiễu tốt hơn (phòng yên tĩnh vốn đã gần 0 sự kiện ở ngưỡng 2).
+// Đừng thử lại số 3 mà không có dữ liệu ngáy thật mới support nó trước.
+//
+// Đổi 2026-08-25/26 (5 phiên bản, xem lịch sử đầy đủ trong journal/plan — tóm tắt):
+// v1: 3 hit rời rạc/15s — verify THẬT bắt được 2 sự kiện ngáy (confidence 0.852, 0.938).
+// v2-v5: đủ kiểu "đợt liên tục" (không ngắt / chịu ngắt 1s / chịu ngắt 2s / hạ min xuống 2s) —
+//     TẤT CẢ đều verify thật KHÔNG bắn được ổn định (tối đa 2/3 cửa sổ 1 lần, phần lớn 0-1/3) sau
+//     tổng cộng >4 phút test tay liên tục. Nguyên nhân gốc: "đợt" đòi hỏi 3 SỰ KIỆN TÁCH BIỆT mỗi
+//     cái tự kéo dài vài giây, gói gọn trong cùng 1 cửa sổ 15s — chặt hơn nhiều về tổ hợp so với
+//     "3 giây có tín hiệu nằm rải rác bất kỳ đâu trong 15s" (v1), với đúng kiểu tín hiệu ngáy dao
+//     động hit-miss mỗi giây đã đo được. Không phải do chọn sai số — do chính cấu trúc "đếm đợt"
+//     kém nhạy hơn "đếm hit" cho loại tín hiệu này. KẾT LUẬN: quay lại v1, dừng thử biến thể đợt.
+static const float    SNORE_SCORE_THRESHOLD       = 0.45f;
+static const uint8_t  SNORE_REQUIRED_HITS         = 3;    // cần 3 giây có hit...
+static const uint8_t  SNORE_HISTORY_WINDOWS       = 15;   // ...rải rác bất kỳ đâu trong 15 cửa sổ
+                                                            // (15 cửa sổ × 1s/cửa sổ = 15s)
 static const uint32_t SNORE_COOLDOWN_MS           = 5000;     // khác WAKEWORD_COOLDOWN_MS (1200) vì
                                                                // snore đặc trưng kéo dài hơn 1 utterance
-uint8_t  snoreConsecutiveCount = 0;
+
+// Cổng chặn nhiễu đột ngột (Session 7, 24/08) — độc lập với confidence/model, dựa trên `rms` mic
+// thô đã tính sẵn ở loop() cho VAD/wakeword. Dữ liệu thật cùng ngày: sự kiện nhiễu quan sát được
+// (quạt/USB lúc mới cắm) có RMS=6934,4 ngay lúc kích hoạt; hai sự kiện ngáy thật có RMS=247,1 và
+// 36,3 — chênh 28-190 lần. Ngáy thật "nhỏ và đều", nhiễu môi trường là đỉnh âm lượng đột ngột.
+// CHỈ n=1 sự kiện nhiễu có đủ dữ liệu RMS đối chiếu — chênh lệch lớn nhưng mẫu nhỏ, phải đo lại
+// bằng ngáy thật + phòng yên tĩnh sau khi nạp, không coi đây là đã xác nhận trước khi đo.
+static const float    SNORE_RMS_CEILING           = 1500.0f;
+static float          lastSnoreGateRms            = 0.0f;  // cập nhật ở loop() mỗi vòng, đọc lúc
+                                                             // xét publish — xem hai chỗ dùng bên dưới
+uint16_t snoreHitHistory       = 0;        // bit history 15 cửa sổ gần nhất (uint8_t tràn bit vì
+                                            // SNORE_HISTORY_WINDOWS=15>8), LSB = cửa sổ mới nhất
 uint32_t snoreCooldownUntilMs  = 0;
 
 // Hàng rào giữa snoreTask (core 0, producer) và loop() (core 1, consumer/publisher) — KHÔNG gọi
@@ -461,6 +496,11 @@ uint32_t snoreCooldownUntilMs  = 0;
 std::atomic<bool>  snoreEventPending{false};
 std::atomic<float> snoreEventConfidence{0.0f};
 static const char *TOPIC_SNORE_EVENT = "home/room/snore_event";
+// Topic chẩn đoán riêng (không phải contract chính) — cho event bị cổng RMS chặn. Tách khỏi
+// TOPIC_SNORE_EVENT để không làm bẩn dữ liệu "ngáy thật" trong DB với event chưa chắc đúng;
+// vẫn publish để downstream (mosquitto_sub, dashboard debug) thấy được thay vì mất tích im lặng
+// (xem code-review 2026-08-26: cổng RMS trước đây chỉ log Serial, không ai ngoài board thấy được).
+static const char *TOPIC_SNORE_EVENT_GATED = "home/room/snore_event_gated";
 
 // Chỉ MỘT interpreter TFLite được chạy tại một thời điểm, dù có 2 core.
 //
@@ -581,7 +621,10 @@ void sendAC(bool on, float temp) {
 // requestAC — điểm vào DUY NHẤT để đổi trạng thái điều hoà. Không bắn IR ngay: chỉ ghi vào ô chờ,
 // loop() gửi có nhịp. manual=true cho lệnh người dùng (giọng nói / app), false cho fusion tự động.
 void requestAC(bool on, bool manual) {
-  if (manual) lastManualMs = millis();
+  if (manual) {
+    // Lệnh tay: TẮT thì khoá auto-on tới khi phòng trống hẳn, BẬT thì bỏ khoá.
+    holdOffUntilEmpty = !on;
+  }
   irPendingOn   = on;
   irPendingTemp = acTemp;   // giữ nguyên nhiệt độ đang đặt, chỉ đổi nguồn
   irHasPending  = true;
@@ -609,8 +652,7 @@ int docSteps(const String &payload) {
 // Ô chờ mang theo CẢ nhiệt độ (irPendingTemp) chứ không chỉ irPendingOn. Thiếu điều đó thì một
 // lệnh bật/tắt tới ngay sau sẽ ghi đè ô chờ và lệnh nhiệt độ biến mất — không lỗi, không log, chỉ
 // là thỉnh thoảng không ăn.
-void requestACTemp(int steps, bool manual) {
-  if (manual) lastManualMs = millis();
+void requestACTemp(int steps) {
 
   // Cộng dồn lên ô chờ nếu có lệnh nhiệt độ chưa kịp bắn, để "tăng 1 độ" nói hai lần liên tiếp ra
   // đúng 2 bậc thay vì 1.
@@ -644,9 +686,9 @@ void onMqtt(String &topic, String &payload) {
     // Kiểm temp_up/temp_down TRƯỚC "on": chuỗi "temp_up" không chứa "\"on\"" nên thực ra không
     // đụng nhau, nhưng thứ tự này khiến ý định rõ ràng khi đọc lại.
     if (payload.indexOf("temp_up") >= 0) {
-      requestACTemp(+docSteps(payload), true);
+      requestACTemp(+docSteps(payload));
     } else if (payload.indexOf("temp_down") >= 0) {
-      requestACTemp(-docSteps(payload), true);
+      requestACTemp(-docSteps(payload));
     } else if (payload.indexOf("\"on\"") >= 0) {
       requestAC(true, true);    // lệnh tay: vào ô chờ, và khoá fusion khỏi ghi đè
     } else if (payload.indexOf("\"off\"") >= 0) {
@@ -772,22 +814,26 @@ void snoreTask(void *) {
     Serial.printf("[snore] score=%.3f infer=%lums core=%d\n", score, (unsigned long)inferMs,
                   xPortGetCoreID());
 
-    // Event Manager (giữ nguyên 100% kiến trúc scaffold trước) — chỉ đổi biến đầu vào từ rms
-    // placeholder sang score model thật: N cửa sổ liên tiếp vượt ngưỡng mới confirm (temporal
-    // filtering), rồi cooldown trước khi confirm event kế tiếp — cùng nguyên tắc WAKEWORD_COOLDOWN_MS.
+    // Event Manager (v1, revert 2026-08-26): đếm hit rời rạc trong cửa sổ trượt 15s. Tiếng ngáy
+    // thật thường là các nhịp rời theo hơi thở, nên "3 hit trong 15s" phù hợp hơn đòi liên tục.
     uint32_t now = millis();
-    if (score > SNORE_SCORE_THRESHOLD) {
-      if (snoreConsecutiveCount < 255) snoreConsecutiveCount++;
-    } else {
-      snoreConsecutiveCount = 0;
+    snoreHitHistory =
+        ((snoreHitHistory << 1) | (score > SNORE_SCORE_THRESHOLD ? 1 : 0)) &
+        ((1u << SNORE_HISTORY_WINDOWS) - 1u);
+    uint8_t snoreRecentHits = 0;
+    for (uint8_t i = 0; i < SNORE_HISTORY_WINDOWS; i++) {
+      snoreRecentHits += (snoreHitHistory >> i) & 1u;
     }
+    Serial.printf("[snore] hit=%u/%u window=%u cooldown=%s\n", (unsigned)snoreRecentHits,
+                  (unsigned)SNORE_REQUIRED_HITS, (unsigned)SNORE_HISTORY_WINDOWS,
+                  now < snoreCooldownUntilMs ? "yes" : "no");
 
-    if (snoreConsecutiveCount >= SNORE_CONSECUTIVE_WINDOWS && now >= snoreCooldownUntilMs) {
+    if (snoreRecentHits >= SNORE_REQUIRED_HITS && now >= snoreCooldownUntilMs) {
       // release: ghi confidence PHẢI thấy được trên core 1 TRƯỚC KHI core 1 thấy pending=true bên dưới.
       snoreEventConfidence.store(score, std::memory_order_relaxed);
       snoreEventPending.store(true, std::memory_order_release);
       snoreCooldownUntilMs = now + SNORE_COOLDOWN_MS;
-      snoreConsecutiveCount = 0;
+      snoreHitHistory = 0;
       Serial.printf("[snore] EVENT confidence=%.3f -> chờ loop() publish\n", score);
     }
   }
@@ -980,13 +1026,20 @@ void updateFusion(uint32_t now) {
 
   if (occupied != before) {
     Serial.printf("[fusion] occupied -> %d\n", occupied);
-    // Tôn trọng lệnh tay: người dùng vừa bảo tắt thì presence chớp một nhịp cũng không được bật lại.
-    // Trạng thái occupied vẫn cập nhật (heartbeat/app đọc đúng), chỉ bỏ phần tự bắn IR.
-    if (lastManualMs != 0 && now - lastManualMs < MANUAL_OVERRIDE_MS) {
-      Serial.printf("[fusion] bỏ auto-send: có lệnh tay %lus trước\n",
-                    (unsigned long)((now - lastManualMs) / 1000));
+    if (occupied) {
+      // Auto BẬT: tôn trọng lệnh tay. holdOffUntilEmpty (user vừa bảo TẮT) cấm tự bật
+      // cho tới khi phòng trống hẳn một lần — phòng đang có người là không được phủ quyết.
+      // occupied vẫn cập nhật (heartbeat/app đọc đúng), chỉ bỏ phần tự bắn IR.
+      if (holdOffUntilEmpty) {
+        Serial.printf("[fusion] bỏ auto-on: user đã tắt, đợi phòng trống\n");
+      } else {
+        requestAC(true, false);
+      }
     } else {
-      requestAC(occupied, false);
+      // Auto TẮT luôn chạy. Phòng vừa trống hẳn -> xoá khoá lệnh tay, lần vào sau
+      // hệ tự quản lý lại bình thường.
+      holdOffUntilEmpty = false;
+      requestAC(false, false);
     }
   }
 }
@@ -1023,15 +1076,32 @@ void loop() {
   if (snoreEventPending.load(std::memory_order_acquire)) {
     snoreEventPending.store(false, std::memory_order_relaxed);  // xoá cờ TRƯỚC khi publish — event kế
                                  // tiếp từ snoreTask không bị mất dù publish() bên dưới có chặn một lúc.
-    char payload[96];
-    // ts = millis() (uptime), KHÔNG phải unix epoch — voice-node chưa có NTP sync. Khác "ts=0 chưa
-    // sync" của các node khác (giá trị đó CÓ epoch thật khi sync xong); ở đây millis() luôn có ý nghĩa
-    // tương đối (thứ tự/khoảng cách giữa các event), ts=0 cứng sẽ không phân biệt được event nào.
-    snprintf(payload, sizeof(payload), "{\"ts\":%lu,\"confidence\":%.3f,\"duration_ms\":%u}",
-             (unsigned long)millis(), snoreEventConfidence.load(std::memory_order_relaxed),
-             (unsigned)SNORE_CONSECUTIVE_WINDOWS * 1000);
-    bool ok = mqtt.publish(TOPIC_SNORE_EVENT, payload, false, 1);
-    Serial.printf("[snore] publish %s -> %s\n", payload, ok ? "OK" : "LỖI");
+    // Cổng RMS (xem SNORE_RMS_CEILING phía trên): lastSnoreGateRms là giá trị mic thô mới nhất,
+    // KHÔNG phải cùng khung 1s đã trigger model (model chạy trên core 0, việc này ở core 1/loop()) —
+    // độ trễ vài chục ms giữa hai bên là chấp nhận được vì mục tiêu chỉ là bắt đỉnh âm lượng còn
+    // đang diễn ra, không cần đồng bộ mẫu-đối-mẫu.
+    if (lastSnoreGateRms > SNORE_RMS_CEILING) {
+      Serial.printf("[snore] EVENT bị chặn — RMS=%.1f vượt trần %.0f (nghi nhiễu đột ngột)\n",
+                    lastSnoreGateRms, SNORE_RMS_CEILING);
+      // Không im lặng mất luôn: publish sang topic chẩn đoán riêng để downstream biết đây là
+      // "phát hiện nhưng bị chặn", khác hẳn "không phát hiện gì" — không lẫn vào DB ngáy thật.
+      char gatedPayload[112];
+      snprintf(gatedPayload, sizeof(gatedPayload),
+               "{\"ts\":%lu,\"confidence\":%.3f,\"rms\":%.1f,\"rms_ceiling\":%.0f}",
+               (unsigned long)millis(), snoreEventConfidence.load(std::memory_order_relaxed),
+               lastSnoreGateRms, SNORE_RMS_CEILING);
+      mqtt.publish(TOPIC_SNORE_EVENT_GATED, gatedPayload, false, 1);
+    } else {
+      char payload[96];
+      // ts = millis() (uptime), KHÔNG phải unix epoch — voice-node chưa có NTP sync. Khác "ts=0 chưa
+      // sync" của các node khác (giá trị đó CÓ epoch thật khi sync xong); ở đây millis() luôn có ý nghĩa
+      // tương đối (thứ tự/khoảng cách giữa các event), ts=0 cứng sẽ không phân biệt được event nào.
+      snprintf(payload, sizeof(payload), "{\"ts\":%lu,\"confidence\":%.3f,\"duration_ms\":%u}",
+               (unsigned long)millis(), snoreEventConfidence.load(std::memory_order_relaxed),
+               (unsigned)SNORE_HISTORY_WINDOWS * 1000);
+      bool ok = mqtt.publish(TOPIC_SNORE_EVENT, payload, false, 1);
+      Serial.printf("[snore] publish %s -> %s\n", payload, ok ? "OK" : "LỖI");
+    }
   }
 
   updateFusion(now);
@@ -1111,6 +1181,7 @@ void loop() {
   }
 
   float rms = computeRms(pcmBuf, samples);
+  lastSnoreGateRms = rms;  // cho cổng RMS ở khối publish snore phía trên đọc vòng lặp kế tiếp
   if (noiseFloor <= 0.0f) noiseFloor = rms;  // seed, khỏi chờ EMA bò lên từ 0 mất mấy giây
 
   // Ngưỡng tính TRƯỚC khi cập nhật nền, để một frame to không tự nâng ngưỡng của chính nó.

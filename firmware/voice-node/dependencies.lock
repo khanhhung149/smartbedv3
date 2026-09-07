@@ -94,7 +94,7 @@ dependencies:
   espressif/esp-tflite-micro:
     dependencies: []
     source:
-      path: /mnt/d/esp32-presence-ac/firmware/voice-node/components/espressif__esp-tflite-micro
+      path: /mnt/d/smartbedv3/firmware/voice-node/components/espressif__esp-tflite-micro
       type: local
     version: 1.3.7
   espressif/esp-zboss-lib:
