@@ -39,6 +39,15 @@ jobs:
       - name: Install CocoaPods dependencies
         run: pod install --project-directory=ios
 
+      - name: Create dev Firebase plist placeholder
+        # The Xcode project includes this resource, while the real Firebase
+        # plist is intentionally gitignored. Dev FCM is disabled at runtime;
+        # this placeholder only lets unsigned CI builds link and copy resources.
+        run: |
+          if [ ! -f ios/Runner/GoogleService-Info.plist ]; then
+            plutil -create xml1 ios/Runner/GoogleService-Info.plist
+          fi
+
       - name: Build iOS app (unsigned)
         run: >-
           flutter build ios --debug --no-codesign --no-pub
